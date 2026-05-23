@@ -124,9 +124,11 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJI...
 
 ## 🎨 Personalização
 
-- **Cores e identidade**: edita `src/styles/tokens.css`
-- **Logo/marca**: substitui o texto "Lapidare" em `src/app/auth/Login.jsx` e `src/components/NutriLayout.jsx`
-- **Templates de check-in padrão**: edita `src/lib/checkinDefault.js`
+**Sem mexer em código:**
+- Tela **Personalização** dentro do próprio app (menu lateral). Muda logo, marca, cores primária/secundária e tipografia.
+
+**Pra mudanças além do visual (adicionar páginas, campos, integrações):**
+- Veja [`CUSTOMIZAR.md`](CUSTOMIZAR.md) — guia completo de como usar o **Claude Code** pra modificar o app conversando em português. Sem precisar saber programar.
 
 ---
 
