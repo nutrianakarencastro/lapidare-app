@@ -69,8 +69,8 @@ isolado e zero custo recorrente.
 
 1. **Project Settings** (ícone de engrenagem) → **API**
 2. Copia:
-   - **Project URL** (algo como `https://xyzabcd.supabase.co`)
-   - **anon / public key** (chave longa)
+   - **Project ID** (em **Settings → General**): use pra montar a URL como `https://<PROJECT_ID>.supabase.co`
+   - **Publishable key** (em **Settings → API Keys**): chave começando com `sb_publishable_...`
 
 ### 4. Fork deste repositório no GitHub
 

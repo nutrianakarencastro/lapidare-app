@@ -174,6 +174,21 @@ create index if not exists gastos_nutri_idx on public.gastos(nutri_id, data_gast
 create index if not exists gastos_recorrente_idx on public.gastos(nutri_id, recorrente, ativo);
 
 
+-- 2.8.6 Serviços (esteira de produtos da nutri) ------------------
+-- IMPORTANTE: precisa vir antes de "vendas" porque vendas tem FK pra servicos.
+create table if not exists public.servicos (
+  id                  uuid primary key default gen_random_uuid(),
+  nutri_id            uuid not null references public.nutris(id) on delete cascade,
+  nome                text not null,
+  nivel               text not null default 'intermediario' check (nivel in ('entrada', 'intermediario', 'premium', 'avulso')),
+  ticket              numeric(10,2) not null,
+  descricao           text,
+  ativo               boolean not null default true,
+  vendas_planejadas   integer not null default 0,
+  created_at          timestamptz not null default now()
+);
+create index if not exists servicos_nutri_idx on public.servicos(nutri_id, ativo);
+
 -- 2.9 Vendas (financeiro) ------------------------------------------
 create table if not exists public.vendas (
   id            uuid primary key default gen_random_uuid(),
@@ -206,20 +221,6 @@ create table if not exists public.parcelas (
 );
 create index if not exists parcelas_nutri_id_idx on public.parcelas(nutri_id, vencimento);
 create index if not exists parcelas_venda_id_idx on public.parcelas(venda_id);
-
--- 2.11.5 Serviços (esteira de produtos da nutri) ------------------
-create table if not exists public.servicos (
-  id                  uuid primary key default gen_random_uuid(),
-  nutri_id            uuid not null references public.nutris(id) on delete cascade,
-  nome                text not null,
-  nivel               text not null default 'intermediario' check (nivel in ('entrada', 'intermediario', 'premium', 'avulso')),
-  ticket              numeric(10,2) not null,
-  descricao           text,
-  ativo               boolean not null default true,
-  vendas_planejadas   integer not null default 0,
-  created_at          timestamptz not null default now()
-);
-create index if not exists servicos_nutri_idx on public.servicos(nutri_id, ativo);
 
 -- 2.11.8 Fotos de evolução da paciente (antes/depois) ------------
 -- Nutri tira foto no consultório OU paciente envia do app dela.

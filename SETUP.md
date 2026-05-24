@@ -60,11 +60,19 @@ Importante pra teste e pra evitar limite de email.
 4. Clica em **Save changes**
 
 ### 1.5 Pegar credenciais
+Você vai precisar de 2 valores. Estão em lugares diferentes do Supabase:
+
+**Project URL:**
 1. Ícone de engrenagem (canto inferior esquerdo) → **Project Settings**
-2. Menu lateral → **API**
-3. Copia e guarda em um arquivo de texto:
-   - **Project URL**: `https://xyzabcd.supabase.co`
-   - **anon public**: chave longa começando com `eyJ...`
+2. Menu lateral → **General**
+3. Copia o **Project ID** (ex: `ihlsexyjbbcdjdddmiym`)
+4. Monta a URL: `https://<PROJECT_ID>.supabase.co`
+
+**Publishable key (API key):**
+1. Ainda em Project Settings → **API Keys**
+2. Copia a chave que começa com `sb_publishable_...`
+
+Guarda os 2 valores num arquivo de texto/Notion privado pra usar no Netlify.
 
 ---
 
@@ -108,8 +116,8 @@ Pronto. Agora você tem o seu próprio repositório com o código do app.
 
 | Nome | Valor |
 |------|-------|
-| `VITE_SUPABASE_URL` | (a Project URL que você copiou do Supabase) |
-| `VITE_SUPABASE_ANON_KEY` | (a anon key que você copiou) |
+| `VITE_SUPABASE_URL` | (a Project URL montada com o Project ID) |
+| `VITE_SUPABASE_ANON_KEY` | (a **Publishable key** que começa com `sb_publishable_...`) |
 
 3. Clica em **Deploy site**
 4. Aguarda ~2-3 min — vai mostrar "Site is live" em verde
