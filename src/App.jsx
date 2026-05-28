@@ -39,6 +39,7 @@ import Checkin from './app/paciente/Checkin.jsx';
 import EbooksPaciente from './app/paciente/Ebooks.jsx';
 import SuplementosPaciente from './app/paciente/Suplementos.jsx';
 import HabitosPaciente from './app/paciente/Habitos.jsx';
+import CicloPaciente from './app/paciente/Ciclo.jsx';
 
 export default function App() {
   return (
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="/paciente/suplementos" element={<SuplementosPaciente />} />
             <Route path="/paciente/habitos" element={<HabitosPaciente />} />
             <Route path="/paciente/checkin/:envioId" element={<Checkin />} />
+            <Route path="/paciente/ciclo" element={<CicloPaciente />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
