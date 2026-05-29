@@ -333,7 +333,7 @@ function Box({ children }) {
 function Brand() {
   return (
     <div style={{ fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>
-      Lapidare
+      Útera
     </div>
   );
 }

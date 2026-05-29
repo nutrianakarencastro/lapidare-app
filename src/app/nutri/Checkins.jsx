@@ -577,7 +577,7 @@ function TemplatesTab({ templates, pacientes, nutriId, onRecarregar, mostraToast
       is_padrao: true,
     });
     if (error) return mostraToast('Erro: ' + error.message);
-    mostraToast('Template padrão Lapidare criado');
+    mostraToast('Template padrão Útera criado');
     onRecarregar();
   }
 
@@ -610,7 +610,7 @@ function TemplatesTab({ templates, pacientes, nutriId, onRecarregar, mostraToast
           <i className="ti ti-clipboard-text empty-icon" aria-hidden="true"></i>
           <div className="empty-title">Sem templates ainda</div>
           <div className="empty-sub">
-            Comece com o <strong>template Lapidare</strong> (14 perguntas — bem-estar, alimentação,
+            Comece com o <strong>template Útera</strong> (14 perguntas — bem-estar, alimentação,
             hábitos, ciclo, intestino e espaço livre) ou crie um do zero / importe JSON.
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginTop: 6 }}>
@@ -621,7 +621,7 @@ function TemplatesTab({ templates, pacientes, nutriId, onRecarregar, mostraToast
               <i className="ti ti-plus" aria-hidden="true"></i> Em branco
             </button>
             <button className="btn" onClick={criarPadraoLapidare}>
-              <i className="ti ti-sparkles" aria-hidden="true"></i> Usar template Lapidare
+              <i className="ti ti-sparkles" aria-hidden="true"></i> Usar template Útera
             </button>
           </div>
         </div>
@@ -1054,7 +1054,7 @@ function RespostasModal({ envio, onClose }) {
   </div>
   ${linhas}
   <div style="margin-top: 30px; font-size: 10px; color: #aaa; text-align: center;">
-    Gerado pela Lapidare
+    Gerado pela Útera
   </div>
   <script>window.onload = () => setTimeout(() => window.print(), 400);</script>
 </body>

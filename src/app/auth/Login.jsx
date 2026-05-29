@@ -114,7 +114,7 @@ export default function Login() {
           {tema.logo_url ? (
             <img
               src={tema.logo_url}
-              alt={tema.marca_nome ?? 'Lapidare'}
+              alt={tema.marca_nome ?? 'Útera'}
               style={{ maxHeight: 48, maxWidth: 200, margin: '0 auto 8px', display: 'block' }}
             />
           ) : (
@@ -122,7 +122,7 @@ export default function Login() {
               fontSize: 10, letterSpacing: '.22em', textTransform: 'uppercase',
               color: 'var(--muted)', marginBottom: 4
             }}>
-              {tema.marca_nome ?? 'Lapidare'}
+              {tema.marca_nome ?? 'Útera'}
             </div>
           )}
           <h1 style={{

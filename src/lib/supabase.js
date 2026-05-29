@@ -5,7 +5,7 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!url || !anonKey) {
   console.warn(
-    '[Lapidare] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY ausentes. ' +
+    '[Útera] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY ausentes. ' +
     'Preencha o arquivo .env (veja .env.example).'
   );
 }

@@ -14,8 +14,8 @@
  */
 
 export const ANAMNESE_LAPIDARE = {
-  nome: 'Anamnese Clínica Lapidare',
-  descricao: 'Modelo completo padrão Lapidare',
+  nome: 'Anamnese Clínica Útera',
+  descricao: 'Modelo completo padrão Útera',
   estrutura: {
     secoes: [
       {

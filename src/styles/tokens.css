@@ -1,5 +1,5 @@
 /* ============================================================
-   LAPIDARE · Design Tokens
+   ÚTERA · Design Tokens
    ============================================================
    Para mudar a identidade visual do app, edite apenas este arquivo.
    Cole no Claude.ai junto com o pedido (ex: "muda para verde e branco")
@@ -7,7 +7,7 @@
    ============================================================ */
 
 :root {
-  /* Cores — base bege/dourado Lapidare */
+  /* Cores — base bege/dourado Útera */
   --bg: #f0ebe3;
   --bg-soft: #f5f2ec;
   --bg-deep: #e8e2d6;

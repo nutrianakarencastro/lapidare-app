@@ -6,7 +6,7 @@ import { useSession } from './session.jsx';
  * ThemeContext expõe a personalização ATIVA:
  *  - Pra nutri logada: usa o profile dela
  *  - Pra paciente logada: busca via RPC os dados da nutri dela
- *  - Pra anônimo (Login, signup, etc.): valores default Lapidare
+ *  - Pra anônimo (Login, signup, etc.): valores default Útera
  *
  * Aplica automaticamente:
  *  - CSS variables --gold-deep e --amber
@@ -15,7 +15,7 @@ import { useSession } from './session.jsx';
  */
 
 const DEFAULT_TEMA = {
-  marca_nome: 'Lapidare',
+  marca_nome: 'Útera',
   marca_subtitulo: null,
   logo_url: null,
   cor_primaria: '#a08456',
@@ -42,7 +42,7 @@ export function ThemeProvider({ children }) {
         if (!active) return;
         setTema({
           ...DEFAULT_TEMA,
-          marca_nome:        profile.marca_nome      ?? 'Lapidare',
+          marca_nome:        profile.marca_nome      ?? 'Útera',
           marca_subtitulo:   profile.marca_subtitulo ?? null,
           logo_url:          profile.logo_url        ?? null,
           cor_primaria:      profile.cor_primaria    ?? DEFAULT_TEMA.cor_primaria,
@@ -67,7 +67,7 @@ export function ThemeProvider({ children }) {
       }
       // Anônimo (Login, signup, etc): busca a marca da "dona" do deploy
       // (a primeira/única nutri cadastrada), pra personalizar a tela de Login.
-      // Se ainda não tem nutri criada (primeiro acesso), cai no fallback Lapidare.
+      // Se ainda não tem nutri criada (primeiro acesso), cai no fallback Útera.
       try {
         const { data } = await supabase.rpc('buscar_marca_principal');
         if (!active) return;

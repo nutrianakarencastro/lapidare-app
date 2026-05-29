@@ -105,7 +105,7 @@ export default function Anamnese({ pacienteId, nutriId, pacienteNome }) {
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               <button className="btn" onClick={novaDoLapidare}>
-                <i className="ti ti-clipboard-text" aria-hidden="true"></i> Anamnese Lapidare
+                <i className="ti ti-clipboard-text" aria-hidden="true"></i> Anamnese Útera
               </button>
               <button className="btn" onClick={novaDoQFA}>
                 <i className="ti ti-list-check" aria-hidden="true"></i> QFA — Freq. Alimentar
@@ -160,7 +160,7 @@ export default function Anamnese({ pacienteId, nutriId, pacienteNome }) {
               <i className="ti ti-clipboard-text empty-icon" aria-hidden="true"></i>
               <div className="empty-title">Nenhuma anamnese ainda</div>
               <div className="empty-sub">
-                Escolha um modelo pronto acima (Anamnese Lapidare ou QFA) ou comece do zero.
+                Escolha um modelo pronto acima (Anamnese Útera ou QFA) ou comece do zero.
               </div>
             </div>
           ) : (
@@ -456,7 +456,7 @@ function ModalVer({ a, pacienteNome, onClose }) {
   </div>
   ${secoesHtml}
   <div style="margin-top: 30px; font-size: 10px; color: #aaa; text-align: center;">
-    Gerado pela Lapidare
+    Gerado pela Útera
   </div>
   <script>window.onload = () => setTimeout(() => window.print(), 400);</script>
 </body>
