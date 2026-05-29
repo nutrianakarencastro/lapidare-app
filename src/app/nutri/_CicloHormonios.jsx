@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import {
   FASES, EIXOS,
-  calcularFaseDoCiclo, calcularScoresHormonais, gerarAlertas,
+  calcularFaseDoCiclo, calcularScoresHormonais, gerarAlertas, detectarCorrelacoes,
   duracaoMediaCiclo, diasDoMes, isoHoje, dataBR, dataBRCurta,
 } from '../../lib/cicloUtils.js';
 
@@ -64,6 +64,55 @@ function CardAlerta({ icon, titulo, descricao, textoNutricionista, sugestao, con
           {conscienciaCorporal && (
             <div style={{ fontStyle: 'italic', color: 'var(--text3)' }}>
               {conscienciaCorporal}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Card de correlação funcional ─────────────────────────────────────────────
+
+function CardCorrelacao({ nome, eixos, interpretacao, racionalFisiologico, correlacaoForte }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <div style={{ background: 'var(--blue-bg)', border: '0.5px solid var(--blue)', borderRadius: 10 }}>
+      <button onClick={() => setAberto(a => !a)}
+        style={{
+          width: '100%', padding: '11px 13px', background: 'none', border: 'none',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+          fontFamily: 'var(--font-sans)', textAlign: 'left',
+        }}>
+        <i className="ti ti-arrows-join" style={{ fontSize: 16, color: 'var(--blue)', flexShrink: 0 }} aria-hidden="true" />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--dark)' }}>{nome}</div>
+          <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 1, lineHeight: 1.4 }}>{interpretacao}</div>
+        </div>
+        <i className={`ti ti-chevron-${aberto ? 'up' : 'down'}`} style={{ fontSize: 13, color: 'var(--text3)', flexShrink: 0 }} aria-hidden="true" />
+      </button>
+      {aberto && (
+        <div style={{
+          padding: '0 13px 12px 39px', fontSize: 11, color: 'var(--text2)', lineHeight: 1.6,
+          borderTop: '0.5px solid var(--border)',
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div>
+            <strong style={{ color: 'var(--dark)', display: 'block', marginBottom: 3 }}>Racional fisiológico:</strong>
+            {racionalFisiologico}
+          </div>
+          {correlacaoForte?.length > 0 && (
+            <div>
+              <strong style={{ color: 'var(--dark)', display: 'block', marginBottom: 5 }}>Sinais associados:</strong>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {correlacaoForte.map(s => (
+                  <span key={s} style={{
+                    fontSize: 10, padding: '2px 8px', borderRadius: 20, fontWeight: 500,
+                    background: 'rgba(255,255,255,.55)', color: 'var(--blue)',
+                    border: '0.5px solid var(--blue)',
+                  }}>{s}</span>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -420,7 +469,8 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
       }
     }
 
-    const alertas = gerarAlertas(scoresMedias);
+    const alertas      = gerarAlertas(scoresMedias);
+    const correlacoes  = detectarCorrelacoes(scoresMedias);
 
     // Alertas de ciclo
     const alertasCiclo = [];
@@ -434,7 +484,7 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
       alertasCiclo.push({ icon: 'droplet', tipo: 'aviso', titulo: 'Fluxo prolongado (sem fim registrado)', descricao: 'Múltiplos períodos sem data de fim marcada.', sugestao: 'Solicitar hemograma + ferritina. Avaliar causas de sangramento prolongado.' });
     }
 
-    return { infoHoje, media, mediaSang, regularidade, scoresMedias, alertas, alertasCiclo };
+    return { infoHoje, media, mediaSang, regularidade, scoresMedias, alertas, alertasCiclo, correlacoes };
   }, [periodos, sintomas]);
 
   if (periodos === null) {
@@ -452,7 +502,7 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
     );
   }
 
-  const { infoHoje, media, mediaSang, regularidade, scoresMedias, alertas, alertasCiclo } = metricas;
+  const { infoHoje, media, mediaSang, regularidade, scoresMedias, alertas, alertasCiclo, correlacoes } = metricas;
   const faseHoje = FASES[infoHoje?.fase ?? 'desconhecida'] ?? FASES.desconhecida;
   const todosAlertas = [...alertasCiclo, ...alertas];
 
@@ -531,6 +581,27 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
             {todosAlertas.map((a, i) => (
               <CardAlerta key={i} {...a} score={a.score} />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Correlações funcionais */}
+      {correlacoes.length > 0 && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Correlações funcionais</div>
+              <div className="card-sub">Padrões que se potencializam mutuamente — Biblioteca Clínica Útera</div>
+            </div>
+            <span style={{
+              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+              background: 'var(--blue-bg)', color: 'var(--blue)',
+              fontSize: 11, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>{correlacoes.length}</span>
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {correlacoes.map(c => <CardCorrelacao key={c.id} {...c} />)}
           </div>
         </div>
       )}

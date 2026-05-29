@@ -1,5 +1,6 @@
 import { EIXOS as EIXOS_CLINICOS } from './clinical/eixos.js';
 import { ALERTAS_PROBLEMA } from './clinical/alertas.js';
+import { CORRELACOES } from './clinical/correlacoes.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FASES DO CICLO
@@ -238,6 +239,77 @@ export function gerarAlertas(scores) {
   }
 
   return resultado;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CORRELAÇÕES FUNCIONAIS — Biblioteca Clínica Útera (Etapa 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LIMIAR_CORR_SIMPLES = 55; // eixo único
+const LIMIAR_CORR_MULTI   = 45; // todos os eixos do padrão
+
+// IDs excluídos desta fase (aguardam implementação futura)
+const CORRELACOES_EXCLUIDAS = new Set(['perimenopausa']);
+
+// Regras especiais por id — sobrescrevem a lógica genérica de eixos
+// form pode ser null quando chamado da view da nutri (médias de 30 dias)
+const REGRAS_ESPECIAIS = {
+
+  // Cortisol + Sono: além do score adrenal, exige sinal de sono comprometido
+  // Com form: sono ≤ 2 (ruim/péssimo) ou suor noturno
+  // Sem form: adrenal >= 60 (threshold elevado compensa falta de especificidade)
+  cortisol_sono: (scores, form) => {
+    if ((scores.adrenal ?? 0) < LIMIAR_CORR_SIMPLES) return false;
+    if (form) return (form.sono ?? 5) <= 2 || form.suor_noturno === true;
+    return (scores.adrenal ?? 0) >= 60;
+  },
+
+  cortisol_despertar_noturno: (scores, form) => {
+    if ((scores.adrenal ?? 0) < LIMIAR_CORR_SIMPLES) return false;
+    if (form) return (form.sono ?? 5) <= 2 || form.suor_noturno === true;
+    return (scores.adrenal ?? 0) >= 60;
+  },
+
+  // Estrogênio + Retenção/Inflamação: score duplo OU score estrogênico + sinais específicos
+  // Sinais: edema/retenção, enxaqueca, cólica intensa, acne inflamatória
+  // (dor articular não existe no formulário atual — fica para fase futura)
+  estrogenio_retencao_inflamacao: (scores, form) => {
+    const scoreOk = (scores.estrogenico ?? 0) >= LIMIAR_CORR_MULTI
+                 && (scores.inflamatorio ?? 0) >= LIMIAR_CORR_MULTI;
+    if (!form) return scoreOk;
+    if ((scores.estrogenico ?? 0) < LIMIAR_CORR_MULTI) return false;
+    const sinaisEspecificos = [
+      (form.retencao   ?? 0) >= 1,
+      form.enxaqueca   === true,
+      (form.dor_pelvica ?? 0) >= 2,
+      (form.acne       ?? 0) >= 2,
+    ].filter(Boolean).length;
+    return scoreOk || sinaisEspecificos >= 2;
+  },
+};
+
+// Lógica genérica para correlações sem regra especial
+function disparaGenerica(c, scores) {
+  if (c.eixos.length === 1) return (scores[c.eixos[0]] ?? 0) >= LIMIAR_CORR_SIMPLES;
+  return c.eixos.every(e => (scores[e] ?? 0) >= LIMIAR_CORR_MULTI);
+}
+
+// form é opcional: presente na view da paciente (formulário do dia),
+// ausente na view da nutri (médias de 30 dias)
+export function detectarCorrelacoes(scores, form = null) {
+  if (!scores) return [];
+
+  return CORRELACOES
+    .filter(c => !CORRELACOES_EXCLUIDAS.has(c.id))
+    .filter(c => {
+      const regra = REGRAS_ESPECIAIS[c.id];
+      return regra ? regra(scores, form) : disparaGenerica(c, scores);
+    })
+    .sort((a, b) => a.prioridade - b.prioridade)
+    .map(c => ({
+      ...c,
+      scoreMax: Math.max(...c.eixos.map(e => scores[e] ?? 0)),
+    }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

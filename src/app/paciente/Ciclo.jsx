@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import {
   FASES, EIXOS,
-  calcularFaseDoCiclo, calcularScoresHormonais, gerarAlertas,
+  calcularFaseDoCiclo, calcularScoresHormonais, gerarAlertas, detectarCorrelacoes,
   isDiaPeriodo, diasDoMes, formatMesAno, isoHoje, dataBR, dataBRCurta,
   duracaoMediaCiclo,
 } from '../../lib/cicloUtils.js';
@@ -483,8 +483,9 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
   const tog = k => setForm(f => ({ ...f, [k]: !f[k] }));
 
   const { fase } = calcularFaseDoCiclo(periodos, dia);
-  const scores  = calcularScoresHormonais(form, fase);
-  const alertas = gerarAlertas(scores);
+  const scores      = calcularScoresHormonais(form, fase);
+  const alertas     = gerarAlertas(scores);
+  const correlacoes = detectarCorrelacoes(scores, form);
 
   async function salvar() {
     setErro(null);
@@ -629,6 +630,24 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* correlações — versão simplificada para a paciente */}
+      {correlacoes.length > 0 && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {correlacoes.map(c => (
+            <div key={c.id} style={{
+              padding: '9px 12px', borderRadius: 11,
+              background: 'var(--blue-soft)', border: '0.5px solid var(--blue)',
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
+                <i className="ti ti-arrows-join" style={{ marginRight: 5, color: 'var(--blue)' }} aria-hidden="true" />
+                {c.nome}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--ink-soft)', lineHeight: 1.5 }}>{c.interpretacao}</div>
+            </div>
+          ))}
         </div>
       )}
 
