@@ -1,3 +1,6 @@
+import { EIXOS as EIXOS_CLINICOS } from './clinical/eixos.js';
+import { ALERTAS_PROBLEMA } from './clinical/alertas.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // FASES DO CICLO
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,18 +74,37 @@ export function isDiaPeriodo(periodos, dataIso) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCORES HORMONAIS (0–100)
+// EIXOS — metadados de UI + dados clínicos da Biblioteca Clínica Útera
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const EIXOS = {
-  glicemico:    { label: 'Glicêmico',               icon: 'chart-bar',       cor: '#c4a882' },
-  adrenal:      { label: 'Adrenal / Cortisol',      icon: 'bolt',            cor: '#d4956a' },
-  estrogenico:  { label: 'Dominância estrogênica',  icon: 'wave-sine',       cor: '#c4616e' },
-  progesterona: { label: 'Progesterona baixa',       icon: 'moon',            cor: '#9b8b7a' },
-  androgenismo: { label: 'Hiperandrogenismo',        icon: 'flame',           cor: '#a08456' },
-  intestinal:   { label: 'Intestinal / Estroboloma', icon: 'leaf',            cor: '#7ea85a' },
-  inflamatorio: { label: 'Inflamatório',             icon: 'alert-triangle',  cor: '#993556' },
+// Ícones e labels são UI-specific (não existem na biblioteca clínica)
+const EIXO_UI = {
+  glicemico:    { label: 'Glicêmico',               icon: 'chart-bar'      },
+  adrenal:      { label: 'Adrenal / Cortisol',       icon: 'bolt'           },
+  estrogenico:  { label: 'Dominância estrogênica',   icon: 'wave-sine'      },
+  progesterona: { label: 'Progesterona baixa',        icon: 'moon'           },
+  androgenico:  { label: 'Hiperandrogenismo',         icon: 'flame'          },
+  intestinal:   { label: 'Intestinal / Estroboloma',  icon: 'leaf'           },
+  inflamatorio: { label: 'Inflamatório',              icon: 'alert-triangle' },
 };
+
+// EIXOS exportado combina metadados de UI com dados clínicos da biblioteca
+export const EIXOS = Object.fromEntries(
+  Object.entries(EIXO_UI).map(([k, ui]) => {
+    const clinico = EIXOS_CLINICOS[k] ?? {};
+    return [k, {
+      ...ui,
+      subtitulo:      clinico.subtitulo      ?? null,
+      cor:            clinico.cor            ?? '#888',
+      corSoft:        clinico.corSoft        ?? '#f5f5f5',
+      criterioAlerta: clinico.criterioAlerta ?? 4,
+    }];
+  })
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCORES HORMONAIS (0–100)
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function calcularScoresHormonais(s, fase = 'desconhecida') {
   if (!s) return null;
@@ -122,7 +144,7 @@ export function calcularScoresHormonais(s, fase = 'desconhecida') {
     (naLutea && (s.compulsao ?? 0) >= 2 ? 15 : 0)
   );
 
-  const androgenismo = clamp(
+  const androgenico = clamp(
     ((s.acne ?? 0) >= 2 ? 35 : (s.acne ?? 0) >= 1 ? 15 : 0) +
     ((s.oleosidade ?? 0) >= 2 ? 35 : (s.oleosidade ?? 0) >= 1 ? 15 : 0) +
     ((s.libido !== null && s.libido !== undefined && (s.libido <= 1 || s.libido >= 5)) ? 15 : 0) +
@@ -145,66 +167,77 @@ export function calcularScoresHormonais(s, fase = 'desconhecida') {
     ((s.inchaco ?? 0) >= 2 ? 10 : 0)
   );
 
-  return { glicemico, adrenal, estrogenico, progesterona, androgenismo, intestinal, inflamatorio };
+  return { glicemico, adrenal, estrogenico, progesterona, androgenico, intestinal, inflamatorio };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ALERTAS CLÍNICOS E SUGESTÕES NUTRICIONAIS
+// ALERTAS CLÍNICOS — Biblioteca Clínica Útera (Etapa 4)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const LIMITE = 55;
+const LIMIAR = 55; // score mínimo para disparar alerta (mantém comportamento anterior)
 
-const SUGESTOES_MAP = {
-  glicemico: {
-    titulo: 'Desequilíbrio glicêmico',
-    descricao: 'Compulsão, irritabilidade e energia baixa sugerem instabilidade glicêmica.',
-    sugestao: 'Priorize proteína + gordura boa em todas as refeições. Considere cromo, magnésio bisglicinato e berberina. Reduza ultraprocessados.',
-    icon: 'chart-bar', tipo: 'aviso',
-  },
-  adrenal: {
-    titulo: 'Sobrecarga adrenal',
-    descricao: 'Ansiedade, sono ruim e sintomas vasomotores indicam eixo HPA sob pressão.',
-    sugestao: 'Adaptógenos (ashwagandha, rhodiola). Magnésio, B5 e vitamina C. Sono como prioridade clínica — não negociável.',
-    icon: 'bolt', tipo: 'aviso',
-  },
-  estrogenico: {
-    titulo: 'Sinais de dominância estrogênica',
-    descricao: 'Retenção, dor nas mamas e inchaço podem indicar excesso relativo de estrogênio.',
-    sugestao: 'Crucíferas diárias (brócolis, couve, repolho). DIM ou indol-3-carbinol. Suporte hepático e intestinal para metabolização do estrogênio.',
-    icon: 'wave-sine', tipo: 'alerta',
-  },
-  progesterona: {
-    titulo: 'Sinais de progesterona baixa',
-    descricao: 'Irritabilidade, choro e ansiedade intensos na fase lútea são marcadores clássicos.',
-    sugestao: 'Vitamina B6, magnésio bisglicinato, zinco e chasteberry (vitex) com orientação. Reduzir estresse é insubstituível.',
-    icon: 'moon', tipo: 'aviso',
-  },
-  androgenismo: {
-    titulo: 'Perfil androgênico elevado',
-    descricao: 'Acne e oleosidade persistentes sugerem excesso androgênico — considerar rastrear SOP.',
-    sugestao: 'Ômega-3 em dose terapêutica, zinco e selênio. Reduzir carga glicêmica total. Spearmint e mio-inositol podem auxiliar.',
-    icon: 'flame', tipo: 'alerta',
-  },
-  intestinal: {
-    titulo: 'Estroboloma comprometido',
-    descricao: 'Alterações intestinais afetam diretamente o metabolismo e reabsorção de estrogênios.',
-    sugestao: 'Probióticos (L. reuteri, L. rhamnosus). Prebióticos, fibras solúveis e glutamina. Investigar SIBO se persistente.',
-    icon: 'leaf', tipo: 'info',
-  },
-  inflamatorio: {
-    titulo: 'Carga inflamatória elevada',
-    descricao: 'Dores pélvicas, enxaqueca e retenção são marcadores inflamatórios cíclicos.',
-    sugestao: 'Ômega-3 EPA/DHA (2–4 g/dia). Cúrcuma + piperina. Reduzir óleos vegetais refinados. Investigar endometriose ou adenomiose.',
-    icon: 'alert-triangle', tipo: 'alerta',
-  },
+function scoreParaIntensidade(score) {
+  if (score >= 85) return 'atencao_clinica';
+  if (score >= 70) return 'importante';
+  return 'moderado';
+}
+
+const INTENSIDADE_TIPO = {
+  moderado:        'aviso',
+  importante:      'alerta',
+  atencao_clinica: 'alerta',
 };
 
 export function gerarAlertas(scores) {
   if (!scores) return [];
-  return Object.entries(scores)
-    .filter(([, v]) => v >= LIMITE)
-    .sort(([, a], [, b]) => b - a)
-    .map(([key]) => ({ ...SUGESTOES_MAP[key], eixo: key, score: scores[key] }));
+
+  // Eixos acima do limiar, ordenados por score descendente
+  const ativos = Object.entries(scores)
+    .filter(([, v]) => v >= LIMIAR)
+    .sort(([, a], [, b]) => b - a);
+
+  if (!ativos.length) return [];
+
+  const eixosAtivosSet = new Set(ativos.map(([k]) => k));
+  const alertasUsados  = new Set();
+  const resultado      = [];
+
+  for (const [eixo, score] of ativos) {
+    // Candidatos na biblioteca: alertas que referenciam este eixo
+    const candidatos = ALERTAS_PROBLEMA
+      .filter(a => !alertasUsados.has(a.id) && a.eixos.includes(eixo))
+      .map(a => ({
+        alerta: a,
+        // Fit: quantos eixos do alerta estão ativos (favorece alertas multi-eixo)
+        fit: a.eixos.filter(e => eixosAtivosSet.has(e)).length,
+      }))
+      .sort((a, b) => b.fit - a.fit || a.alerta.numero - b.alerta.numero);
+
+    if (!candidatos.length) continue;
+
+    const { alerta } = candidatos[0];
+    alertasUsados.add(alerta.id);
+
+    const intensidade = scoreParaIntensidade(score);
+
+    resultado.push({
+      // Campos compatíveis com o formato atual da UI
+      icon:     EIXOS[eixo]?.icon ?? 'alert-circle',
+      titulo:   alerta.nome,
+      descricao: alerta.textoPaciente,
+      sugestao:  alerta.microconduta ?? alerta.conscienciaCorporal ?? null,
+      tipo:      INTENSIDADE_TIPO[intensidade],
+      score,
+      eixo,
+      // Campos novos da Biblioteca Clínica Útera
+      textoNutricionista:  alerta.textoNutricionista,
+      conscienciaCorporal: alerta.conscienciaCorporal ?? null,
+      intensidade,
+      alertaId: alerta.id,
+    });
+  }
+
+  return resultado;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -610,18 +610,25 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
       {/* alertas prévia */}
       {alertas.length > 0 && (
         <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {alertas.map((a, i) => (
-            <div key={i} style={{
-              padding: '10px 13px', borderRadius: 11,
-              background: a.tipo === 'alerta' ? 'var(--red-soft)' : a.tipo === 'aviso' ? 'var(--orange-soft)' : 'var(--blue-soft)',
-              border: `0.5px solid ${a.tipo === 'alerta' ? 'var(--red)' : a.tipo === 'aviso' ? 'var(--orange)' : 'var(--blue)'}`,
-            }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
-                <i className={`ti ti-${a.icon}`} style={{ marginRight: 5 }} aria-hidden="true" />{a.titulo}
+          {alertas.map((a, i) => {
+            const corBg     = a.tipo === 'alerta' ? 'var(--red-soft)'    : a.tipo === 'aviso' ? 'var(--orange-soft)' : 'var(--blue-soft)';
+            const corBorder = a.tipo === 'alerta' ? 'var(--red)'         : a.tipo === 'aviso' ? 'var(--orange)'      : 'var(--blue)';
+            // textoPaciente (em descricao) é acolhedor; microconduta (em sugestao) é prático
+            const corpo = a.sugestao || a.descricao;
+            return (
+              <div key={i} style={{
+                padding: '10px 13px', borderRadius: 11,
+                background: corBg, border: `0.5px solid ${corBorder}`,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', marginBottom: 2 }}>
+                  <i className={`ti ti-${a.icon}`} style={{ marginRight: 5 }} aria-hidden="true" />{a.titulo}
+                </div>
+                {corpo && (
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', lineHeight: 1.5 }}>{corpo}</div>
+                )}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--ink-soft)', lineHeight: 1.5 }}>{a.sugestao}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

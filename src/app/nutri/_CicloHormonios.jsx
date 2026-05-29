@@ -15,24 +15,29 @@ function diasEntre(a, b) {
 
 // ─── Cards de alerta ──────────────────────────────────────────────────────────
 
-function CardAlerta({ icon, titulo, descricao, sugestao, tipo = 'aviso', score }) {
+function CardAlerta({ icon, titulo, descricao, textoNutricionista, sugestao, conscienciaCorporal, tipo = 'aviso', score, intensidade }) {
   const [aberto, setAberto] = useState(false);
   const cor = tipo === 'alerta' ? { bg: 'var(--red-bg)', border: 'var(--red)', text: 'var(--red)' }
     : tipo === 'info' ? { bg: 'var(--blue-bg)', border: 'var(--blue)', text: 'var(--blue)' }
     : { bg: 'var(--orange-bg)', border: 'var(--orange)', text: 'var(--orange)' };
 
+  // Nutri vê texto clínico; paciente veria textoPaciente (em descricao)
+  const textoHeader = textoNutricionista || descricao;
+  const temExpandido = sugestao || conscienciaCorporal;
+
   return (
     <div style={{ background: cor.bg, border: `0.5px solid ${cor.border}`, borderRadius: 10 }}>
-      <button onClick={() => setAberto(a => !a)}
+      <button onClick={() => temExpandido && setAberto(a => !a)}
         style={{
           width: '100%', padding: '11px 13px', background: 'none', border: 'none',
-          cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+          cursor: temExpandido ? 'pointer' : 'default',
+          display: 'flex', alignItems: 'center', gap: 10,
           fontFamily: 'var(--font-sans)', textAlign: 'left',
         }}>
         <i className={`ti ti-${icon}`} style={{ fontSize: 16, color: cor.text, flexShrink: 0 }} aria-hidden="true" />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--dark)' }}>{titulo}</div>
-          <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 1 }}>{descricao}</div>
+          <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 1, lineHeight: 1.4 }}>{textoHeader}</div>
         </div>
         {score !== undefined && (
           <span style={{
@@ -40,15 +45,27 @@ function CardAlerta({ icon, titulo, descricao, sugestao, tipo = 'aviso', score }
             background: 'rgba(255,255,255,.5)', padding: '2px 8px', borderRadius: 20,
           }}>{score}%</span>
         )}
-        <i className={`ti ti-chevron-${aberto ? 'up' : 'down'}`} style={{ fontSize: 13, color: 'var(--text3)', flexShrink: 0 }} aria-hidden="true" />
+        {temExpandido && (
+          <i className={`ti ti-chevron-${aberto ? 'up' : 'down'}`} style={{ fontSize: 13, color: 'var(--text3)', flexShrink: 0 }} aria-hidden="true" />
+        )}
       </button>
-      {aberto && sugestao && (
+      {aberto && (
         <div style={{
           padding: '0 13px 12px 39px', fontSize: 11, color: 'var(--text2)', lineHeight: 1.6,
           borderTop: `0.5px solid ${cor.border}30`,
+          display: 'flex', flexDirection: 'column', gap: 6,
         }}>
-          <strong style={{ color: 'var(--dark)', display: 'block', marginBottom: 3 }}>Sugestão nutricional:</strong>
-          {sugestao}
+          {sugestao && (
+            <div>
+              <strong style={{ color: 'var(--dark)', display: 'block', marginBottom: 2 }}>Conduta sugerida:</strong>
+              {sugestao}
+            </div>
+          )}
+          {conscienciaCorporal && (
+            <div style={{ fontStyle: 'italic', color: 'var(--text3)' }}>
+              {conscienciaCorporal}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -387,7 +404,7 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
 
     // Scores médios dos últimos 30 dias
     const ultimos30 = sintomas.slice(0, 30);
-    const scoresMedias = { glicemico: 0, adrenal: 0, estrogenico: 0, progesterona: 0, androgenismo: 0, intestinal: 0, inflamatorio: 0 };
+    const scoresMedias = { glicemico: 0, adrenal: 0, estrogenico: 0, progesterona: 0, androgenico: 0, intestinal: 0, inflamatorio: 0 };
     if (ultimos30.length > 0) {
       for (const s of ultimos30) {
         const { fase } = calcularFaseDoCiclo(periodos, s.data);
