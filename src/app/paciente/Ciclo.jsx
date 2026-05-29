@@ -4,6 +4,7 @@ import { useSession } from '../../lib/session.jsx';
 import {
   FASES, EIXOS,
   calcularFaseDoCiclo, calcularScoresHormonais, gerarAlertas, detectarCorrelacoes,
+  classificarEstagioPeri,
   isDiaPeriodo, diasDoMes, formatMesAno, isoHoje, dataBR, dataBRCurta,
   duracaoMediaCiclo,
 } from '../../lib/cicloUtils.js';
@@ -453,6 +454,8 @@ function novoSintoma() {
     intestino: '', compulsao: 0,
     ansiedade: 0, irritabilidade: 0, choro: false,
     calorons: false, suor_noturno: false,
+    despertar_noturno: false, dor_articular: false,
+    fluxo_muito_maior: false, fluxo_muito_menor: false,
     muco_cervical: '',
     notas: '',
   };
@@ -482,8 +485,9 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
   const sv = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const tog = k => setForm(f => ({ ...f, [k]: !f[k] }));
 
-  const { fase } = calcularFaseDoCiclo(periodos, dia);
-  const scores      = calcularScoresHormonais(form, fase);
+  const { fase }    = calcularFaseDoCiclo(periodos, dia);
+  const estagioPeri = classificarEstagioPeri(periodos);
+  const scores      = calcularScoresHormonais(form, fase, estagioPeri);
   const alertas     = gerarAlertas(scores);
   const correlacoes = detectarCorrelacoes(scores, form);
 
@@ -552,10 +556,18 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
         <FL>Oleosidade da pele</FL>
         <Escala3 valor={form.oleosidade} onChange={v => sv('oleosidade', v)} />
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-          <BtnToggle ativo={form.enxaqueca}    onClick={() => tog('enxaqueca')}    label="Enxaqueca"    icon="brain" />
-          <BtnToggle ativo={form.calorons}     onClick={() => tog('calorons')}     label="Calorões"     icon="flame" />
-          <BtnToggle ativo={form.suor_noturno} onClick={() => tog('suor_noturno')} label="Suor noturno" icon="moon" />
-          <BtnToggle ativo={form.choro}        onClick={() => tog('choro')}        label="Choro fácil"  icon="droplet" />
+          <BtnToggle ativo={form.enxaqueca} onClick={() => tog('enxaqueca')} label="Enxaqueca"   icon="brain"   />
+          <BtnToggle ativo={form.choro}     onClick={() => tog('choro')}     label="Choro fácil" icon="droplet" />
+        </div>
+
+        <SL>Transição hormonal</SL>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <BtnToggle ativo={form.calorons}          onClick={() => tog('calorons')}          label="Calorões"         icon="flame"        />
+          <BtnToggle ativo={form.suor_noturno}      onClick={() => tog('suor_noturno')}      label="Suor noturno"     icon="moon"         />
+          <BtnToggle ativo={form.despertar_noturno} onClick={() => tog('despertar_noturno')} label="Despertar noturno" icon="moon-off"    />
+          <BtnToggle ativo={form.dor_articular}     onClick={() => tog('dor_articular')}     label="Dor articular"    icon="bone"         />
+          <BtnToggle ativo={form.fluxo_muito_maior} onClick={() => tog('fluxo_muito_maior')} label="Fluxo muito maior" icon="droplets"    />
+          <BtnToggle ativo={form.fluxo_muito_menor} onClick={() => tog('fluxo_muito_menor')} label="Fluxo muito menor" icon="droplet-half" />
         </div>
 
         <SL>Digestivo &amp; emocional</SL>
@@ -591,7 +603,10 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
           <div style={{ background: 'var(--paper)', border: '0.5px solid var(--hair)', borderRadius: 14, padding: '12px 14px' }}>
             {Object.entries(EIXOS).map(([k, e]) => {
               const v = scores[k] ?? 0;
-              const cor = v >= 70 ? '#993556' : v >= 55 ? '#854f0b' : '#7ea85a';
+              const isPeri = k === 'perimenopausa';
+              const cor = isPeri
+                ? (v >= 70 ? '#854f0b' : v >= 55 ? '#c4a882' : '#7ea85a')
+                : (v >= 70 ? '#993556' : v >= 55 ? '#854f0b' : '#7ea85a');
               return (
                 <div key={k} style={{ marginBottom: 9 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>

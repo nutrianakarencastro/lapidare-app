@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase.js';
 import {
   FASES, EIXOS,
   calcularFaseDoCiclo, calcularScoresHormonais, gerarAlertas, detectarCorrelacoes,
+  classificarEstagioPeri,
   duracaoMediaCiclo, diasDoMes, isoHoje, dataBR, dataBRCurta,
 } from '../../lib/cicloUtils.js';
 
@@ -123,8 +124,10 @@ function CardCorrelacao({ nome, eixos, interpretacao, racionalFisiologico, corre
 
 // ─── Barra de score ───────────────────────────────────────────────────────────
 
-function BarraScore({ label, valor, cor }) {
-  const corFill = valor >= 70 ? 'var(--red)' : valor >= 55 ? 'var(--orange)' : valor >= 35 ? 'var(--amber)' : 'var(--green)';
+function BarraScore({ label, valor, suave }) {
+  const corFill = suave
+    ? (valor >= 70 ? 'var(--orange)' : valor >= 55 ? 'var(--amber)' : 'var(--green)')
+    : (valor >= 70 ? 'var(--red)' : valor >= 55 ? 'var(--orange)' : valor >= 35 ? 'var(--amber)' : 'var(--green)');
   return (
     <div style={{ marginBottom: 9 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
@@ -295,7 +298,14 @@ function HistoricoPeriodos({ periodos }) {
 
 // ─── Padrões e recorrências ───────────────────────────────────────────────────
 
-function PadroesRecorrencias({ periodos, sintomas }) {
+const ESTAGIO_PERI_INFO = {
+  inicial:       { label: 'Perimenopausa inicial',        desc: 'Variação no padrão menstrual. Sinais sugestivos de transição hormonal.' },
+  intermediaria: { label: 'Perimenopausa intermediária',  desc: 'Ciclos espaçando progressivamente. Padrão compatível com transição menopausal.' },
+  tardia:        { label: 'Perimenopausa tardia',         desc: 'Grande instabilidade hormonal. Suporte metabólico, ósseo e cardiovascular indicado.' },
+  menopausa:     { label: 'Menopausa provável',           desc: 'Padrão compatível com menopausa. Considerar avaliação de saúde óssea e cardiovascular.' },
+};
+
+function PadroesRecorrencias({ periodos, sintomas, estagioPeri }) {
   const padroes = useMemo(() => {
     if (sintomas.length < 10) return [];
     const total = sintomas.length;
@@ -337,41 +347,28 @@ function PadroesRecorrencias({ periodos, sintomas }) {
     return result.sort((a, b) => b.pct - a.pct).slice(0, 6);
   }, [periodos, sintomas]);
 
-  const sinaisPerimenopausa = useMemo(() => {
-    const sinais = [
-      sintomas.filter(s => s.calorons).length >= 3,
-      sintomas.filter(s => s.suor_noturno).length >= 3,
-      periodos.length >= 3 && (() => {
-        const sorted = [...periodos].sort((a, b) => new Date(b.inicio) - new Date(a.inicio)).slice(0, 4);
-        const durs = [];
-        for (let i = 1; i < sorted.length; i++) {
-          durs.push(diasEntre(sorted[i].inicio, sorted[i - 1].inicio));
-        }
-        return durs.some(d => d > 45) || durs.some(d => d < 18);
-      })(),
-    ];
-    return sinais.filter(Boolean).length;
-  }, [sintomas, periodos]);
-
   return (
     <>
-      {sinaisPerimenopausa >= 2 && (
-        <div style={{
-          padding: '11px 13px', borderRadius: 10, marginBottom: 10,
-          background: 'var(--blue-bg)', border: '0.5px solid var(--blue)',
-          display: 'flex', gap: 10, alignItems: 'flex-start',
-        }}>
-          <i className="ti ti-moon-stars" style={{ fontSize: 16, color: 'var(--blue)', flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--dark)', marginBottom: 2 }}>
-              Sinais de transição menopausal detectados
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.5 }}>
-              Calorões recorrentes, suor noturno e/ou irregularidade acentuada. Considerar suporte para saúde óssea, cardiovascular e composição corporal.
+      {estagioPeri && (() => {
+        const info = ESTAGIO_PERI_INFO[estagioPeri];
+        return (
+          <div style={{
+            padding: '11px 13px', borderRadius: 10, marginBottom: 10,
+            background: '#f0ecf5', border: '0.5px solid #7a6b84',
+            display: 'flex', gap: 10, alignItems: 'flex-start',
+          }}>
+            <i className="ti ti-moon-stars" style={{ fontSize: 16, color: '#7a6b84', flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--dark)', marginBottom: 2 }}>
+                {info.label}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.5 }}>
+                {info.desc}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {padroes.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -452,15 +449,16 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
       : null;
 
     // Scores médios dos últimos 30 dias
-    const ultimos30 = sintomas.slice(0, 30);
-    const scoresMedias = { glicemico: 0, adrenal: 0, estrogenico: 0, progesterona: 0, androgenico: 0, intestinal: 0, inflamatorio: 0 };
+    const ultimos30   = sintomas.slice(0, 30);
+    const estagioPeri = classificarEstagioPeri(periodos);
+    const scoresMedias = { glicemico: 0, adrenal: 0, estrogenico: 0, progesterona: 0, androgenico: 0, intestinal: 0, inflamatorio: 0, perimenopausa: 0 };
     if (ultimos30.length > 0) {
       for (const s of ultimos30) {
         const { fase } = calcularFaseDoCiclo(periodos, s.data);
-        const sc = calcularScoresHormonais(s, fase);
+        const sc = calcularScoresHormonais(s, fase, estagioPeri);
         if (sc) {
           for (const k of Object.keys(scoresMedias)) {
-            scoresMedias[k] += sc[k] / ultimos30.length;
+            scoresMedias[k] += (sc[k] ?? 0) / ultimos30.length;
           }
         }
       }
@@ -484,7 +482,7 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
       alertasCiclo.push({ icon: 'droplet', tipo: 'aviso', titulo: 'Fluxo prolongado (sem fim registrado)', descricao: 'Múltiplos períodos sem data de fim marcada.', sugestao: 'Solicitar hemograma + ferritina. Avaliar causas de sangramento prolongado.' });
     }
 
-    return { infoHoje, media, mediaSang, regularidade, scoresMedias, alertas, alertasCiclo, correlacoes };
+    return { infoHoje, media, mediaSang, regularidade, scoresMedias, alertas, alertasCiclo, correlacoes, estagioPeri };
   }, [periodos, sintomas]);
 
   if (periodos === null) {
@@ -502,7 +500,7 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
     );
   }
 
-  const { infoHoje, media, mediaSang, regularidade, scoresMedias, alertas, alertasCiclo, correlacoes } = metricas;
+  const { infoHoje, media, mediaSang, regularidade, scoresMedias, alertas, alertasCiclo, correlacoes, estagioPeri } = metricas;
   const faseHoje = FASES[infoHoje?.fase ?? 'desconhecida'] ?? FASES.desconhecida;
   const todosAlertas = [...alertasCiclo, ...alertas];
 
@@ -556,7 +554,7 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
           </div>
           <div className="card-body">
             {Object.entries(EIXOS).map(([k, e]) => (
-              <BarraScore key={k} label={e.label} valor={scoresMedias[k] ?? 0} />
+              <BarraScore key={k} label={e.label} valor={scoresMedias[k] ?? 0} suave={k === 'perimenopausa'} />
             ))}
           </div>
         </div>
@@ -638,7 +636,7 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
           </div>
         </div>
         <div className="card-body">
-          <PadroesRecorrencias periodos={periodos} sintomas={sintomas} />
+          <PadroesRecorrencias periodos={periodos} sintomas={sintomas} estagioPeri={estagioPeri} />
         </div>
       </div>
 

@@ -65,6 +65,45 @@ export function calcularFaseDoCiclo(periodos, dataAlvo = new Date()) {
   return { fase, diaDociclo, duracaoMedia: media, ovulacaoPrevista, proximoPeriodo };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CLASSIFICAÇÃO DO ESTÁGIO PERIMENOPÁUSICO
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function classificarEstagioPeri(periodos) {
+  if (!periodos || periodos.length < 2) return null;
+
+  const sorted = [...periodos]
+    .filter(p => p.inicio)
+    .sort((a, b) => new Date(b.inicio) - new Date(a.inicio));
+
+  if (sorted.length < 2) return null;
+
+  const diasSemMenstruar = Math.round(
+    (new Date() - new Date(sorted[0].inicio + 'T12:00:00')) / 86400000
+  );
+
+  if (diasSemMenstruar >= 365) return 'menopausa';
+  if (diasSemMenstruar >= 90)  return 'tardia';
+
+  // Intervalos entre ciclos consecutivos (do mais recente para o mais antigo)
+  const intervalos = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const d = Math.round(
+      (new Date(sorted[i].inicio + 'T12:00:00') - new Date(sorted[i + 1].inicio + 'T12:00:00')) / 86400000
+    );
+    if (d > 0) intervalos.push(d);
+  }
+
+  if (intervalos.some(d => d >= 45)) return 'intermediaria';
+
+  // Perimenopausa inicial: variação ≥ 7 dias entre ciclos consecutivos
+  for (let i = 0; i < intervalos.length - 1; i++) {
+    if (Math.abs(intervalos[i] - intervalos[i + 1]) >= 7) return 'inicial';
+  }
+
+  return null;
+}
+
 export function isDiaPeriodo(periodos, dataIso) {
   const alvo = new Date(dataIso + 'T12:00:00');
   return periodos.some(p => {
@@ -80,13 +119,14 @@ export function isDiaPeriodo(periodos, dataIso) {
 
 // Ícones e labels são UI-specific (não existem na biblioteca clínica)
 const EIXO_UI = {
-  glicemico:    { label: 'Glicêmico',               icon: 'chart-bar'      },
-  adrenal:      { label: 'Adrenal / Cortisol',       icon: 'bolt'           },
-  estrogenico:  { label: 'Dominância estrogênica',   icon: 'wave-sine'      },
-  progesterona: { label: 'Progesterona baixa',        icon: 'moon'           },
-  androgenico:  { label: 'Hiperandrogenismo',         icon: 'flame'          },
-  intestinal:   { label: 'Intestinal / Estroboloma',  icon: 'leaf'           },
-  inflamatorio: { label: 'Inflamatório',              icon: 'alert-triangle' },
+  glicemico:     { label: 'Glicêmico',                 icon: 'chart-bar'      },
+  adrenal:       { label: 'Adrenal / Cortisol',         icon: 'bolt'           },
+  estrogenico:   { label: 'Dominância estrogênica',     icon: 'wave-sine'      },
+  progesterona:  { label: 'Progesterona baixa',          icon: 'moon'           },
+  androgenico:   { label: 'Hiperandrogenismo',           icon: 'flame'          },
+  intestinal:    { label: 'Intestinal / Estroboloma',    icon: 'leaf'           },
+  inflamatorio:  { label: 'Inflamatório',                icon: 'alert-triangle' },
+  perimenopausa: { label: 'Perimenopausa / Transição',   icon: 'moon-stars'     },
 };
 
 // EIXOS exportado combina metadados de UI com dados clínicos da biblioteca
@@ -107,7 +147,35 @@ export const EIXOS = Object.fromEntries(
 // SCORES HORMONAIS (0–100)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function calcularScoresHormonais(s, fase = 'desconhecida') {
+// Pontuação do eixo perimenopausa.
+// Retorna 0 quando estagioPeri é null — exige padrão de ciclo confirmado.
+function calcularScorePerimenopausa(s, estagioPeri) {
+  if (!s || !estagioPeri) return 0;
+  const b     = v => (v ? 1 : 0);
+  const e5    = v => (v ? Math.max(0, 6 - v) : 0);
+  const clamp = v => Math.min(100, Math.max(0, v));
+
+  const ptEstagio = estagioPeri === 'menopausa'     ? 30
+    : estagioPeri === 'tardia'                       ? 25
+    : estagioPeri === 'intermediaria'                ? 20
+    : 10; // inicial
+
+  return clamp(
+    ptEstagio
+    + b(s.calorons)          * 20
+    + b(s.suor_noturno)      * 20
+    + b(s.despertar_noturno) * 15
+    + (b(s.fluxo_muito_maior) || b(s.fluxo_muito_menor)) * 10
+    + b(s.dor_articular)     * 10
+    + ((s.irritabilidade ?? 0) >= 2 ? 8 : 0)
+    + b(s.choro)              * 5
+    + (e5(s.humor) >= 4 ? 5 : 0)
+    + (e5(s.energia) >= 4 ? 7 : 0)
+  );
+}
+
+// estagioPeri: resultado de classificarEstagioPeri(periodos), pré-calculado pelo chamador
+export function calcularScoresHormonais(s, fase = 'desconhecida', estagioPeri = null) {
   if (!s) return null;
   const b  = v => (v ? 1 : 0);
   const e5 = v => (v ? Math.max(0, 6 - v) : 0); // 5→1, 1→5
@@ -168,14 +236,17 @@ export function calcularScoresHormonais(s, fase = 'desconhecida') {
     ((s.inchaco ?? 0) >= 2 ? 10 : 0)
   );
 
-  return { glicemico, adrenal, estrogenico, progesterona, androgenico, intestinal, inflamatorio };
+  const perimenopausa = calcularScorePerimenopausa(s, estagioPeri);
+
+  return { glicemico, adrenal, estrogenico, progesterona, androgenico, intestinal, inflamatorio, perimenopausa };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ALERTAS CLÍNICOS — Biblioteca Clínica Útera (Etapa 4)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const LIMIAR = 55; // score mínimo para disparar alerta (mantém comportamento anterior)
+const LIMIAR      = 55; // score mínimo para alertas dos eixos hormonais
+const LIMIAR_PERI = 65; // eixo contextualizador — limiar elevado para não dominar
 
 function scoreParaIntensidade(score) {
   if (score >= 85) return 'atencao_clinica';
@@ -193,8 +264,9 @@ export function gerarAlertas(scores) {
   if (!scores) return [];
 
   // Eixos acima do limiar, ordenados por score descendente
+  // Perimenopausa usa limiar próprio mais alto (eixo contextualizador)
   const ativos = Object.entries(scores)
-    .filter(([, v]) => v >= LIMIAR)
+    .filter(([k, v]) => v >= (k === 'perimenopausa' ? LIMIAR_PERI : LIMIAR))
     .sort(([, a], [, b]) => b - a);
 
   if (!ativos.length) return [];
@@ -223,7 +295,7 @@ export function gerarAlertas(scores) {
 
     resultado.push({
       // Campos compatíveis com o formato atual da UI
-      icon:     EIXOS[eixo]?.icon ?? 'alert-circle',
+      icon:     EIXOS[eixo]?.icon ?? (eixo === 'perimenopausa' ? 'moon-stars' : 'alert-circle'),
       titulo:   alerta.nome,
       descricao: alerta.textoPaciente,
       sugestao:  alerta.microconduta ?? alerta.conscienciaCorporal ?? null,
@@ -248,12 +320,19 @@ export function gerarAlertas(scores) {
 const LIMIAR_CORR_SIMPLES = 55; // eixo único
 const LIMIAR_CORR_MULTI   = 45; // todos os eixos do padrão
 
-// IDs excluídos desta fase (aguardam implementação futura)
-const CORRELACOES_EXCLUIDAS = new Set(['perimenopausa']);
+const CORRELACOES_EXCLUIDAS = new Set();
 
 // Regras especiais por id — sobrescrevem a lógica genérica de eixos
 // form pode ser null quando chamado da view da nutri (médias de 30 dias)
 const REGRAS_ESPECIAIS = {
+
+  // Perimenopausa: score já exige estagioPeri não-nulo (gated em calcularScorePerimenopausa).
+  // A correlação exige adicionalmente sinal vasomotor presente para evitar falsos positivos.
+  perimenopausa: (scores, form) => {
+    if ((scores.perimenopausa ?? 0) < LIMIAR_CORR_SIMPLES) return false;
+    if (form) return form.calorons === true || form.suor_noturno === true;
+    return (scores.perimenopausa ?? 0) >= 60;
+  },
 
   // Cortisol + Sono: além do score adrenal, exige sinal de sono comprometido
   // Com form: sono ≤ 2 (ruim/péssimo) ou suor noturno
