@@ -33,9 +33,15 @@ export default function Pacientes() {
   useEffect(() => { if (user) carregar(); }, [user]);
 
   async function copiarLinkSignup(p) {
-    const link = `${window.location.origin}/signup-paciente/${user.id}`;
-    await navigator.clipboard.writeText(link);
-    alert(`Link copiado! Envie pra ${p.nome.split(' ')[0]} por WhatsApp ou email.`);
+    const link = p.token
+      ? `${window.location.origin}/signup-paciente/${user.id}/${p.token}`
+      : `${window.location.origin}/signup-paciente/${user.id}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      alert(`Link copiado! Envie pra ${p.nome.split(' ')[0]} por WhatsApp ou email.`);
+    } catch {
+      prompt('Copie o link abaixo:', link);
+    }
     await supabase.from('pacientes_pendentes').update({ status: 'enviado' }).eq('id', p.id);
     carregar();
   }

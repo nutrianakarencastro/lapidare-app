@@ -25,6 +25,10 @@ export default function PacientePerfil() {
   const [editandoNasc, setEditandoNasc] = useState(false);
   const [novoNasc, setNovoNasc] = useState('');
   const [salvandoNasc, setSalvandoNasc] = useState(false);
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const [erroExclusao, setErroExclusao] = useState(null);
+  const [msgLink, setMsgLink] = useState(null);
 
   async function carregar() {
     const { data } = await supabase
@@ -52,6 +56,45 @@ export default function PacientePerfil() {
     if (error) { alert('Erro: ' + error.message); return; }
     setEditandoNasc(false);
     carregar();
+  }
+
+  async function excluirPaciente() {
+    setExcluindo(true);
+    setErroExclusao(null);
+    const { error } = await supabase.from('pacientes').delete().eq('id', id);
+    setExcluindo(false);
+    if (error) {
+      setErroExclusao('Não foi possível excluir: ' + error.message);
+      return;
+    }
+    navigate('/nutri/pacientes');
+  }
+
+  async function copiarLinkAcesso() {
+    const { data: pendente } = await supabase
+      .from('pacientes_pendentes')
+      .select('token, status')
+      .eq('email', paciente.email)
+      .eq('nutri_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const jaRegistrada = !pendente || pendente.status === 'ativado';
+    const link = jaRegistrada
+      ? `${window.location.origin}/login`
+      : `${window.location.origin}/signup-paciente/${user.id}/${pendente.token}`;
+    const msg = jaRegistrada
+      ? 'Link de acesso copiado! A paciente já possui conta — ela deve acessar pelo login.'
+      : 'Link de convite copiado! A paciente ainda não criou sua conta.';
+
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      prompt('Copie o link abaixo:', link);
+    }
+    setMsgLink(msg);
+    setTimeout(() => setMsgLink(null), 4000);
   }
 
   function calcularIdade(iso) {
@@ -86,12 +129,109 @@ export default function PacientePerfil() {
 
   return (
     <>
-      <button
-        onClick={() => navigate('/nutri/pacientes')}
-        style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 12, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer' }}
-      >
-        <i className="ti ti-arrow-left" aria-hidden="true"></i> Pacientes
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <button
+          onClick={() => navigate('/nutri/pacientes')}
+          style={{ fontSize: 13, color: 'var(--text3)', display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer' }}
+        >
+          <i className="ti ti-arrow-left" aria-hidden="true"></i> Pacientes
+        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={copiarLinkAcesso}
+            className="btn-outline"
+            style={{ fontSize: 12, padding: '4px 10px' }}
+            title="Copiar link de acesso da paciente"
+          >
+            <i className="ti ti-link" aria-hidden="true"></i> Copiar link
+          </button>
+          <button
+            onClick={() => { setConfirmandoExclusao(true); setErroExclusao(null); }}
+            style={{
+              fontSize: 12, padding: '4px 10px', borderRadius: 6,
+              background: 'none', border: '0.5px solid var(--red)',
+              color: 'var(--red)', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}
+            title="Excluir paciente"
+          >
+            <i className="ti ti-trash" aria-hidden="true"></i> Excluir
+          </button>
+        </div>
+      </div>
+
+      {msgLink && (
+        <div style={{
+          marginBottom: 12, padding: '9px 13px', borderRadius: 8, fontSize: 12,
+          background: 'var(--green-bg)', color: 'var(--green)',
+          display: 'flex', alignItems: 'center', gap: 7,
+        }}>
+          <i className="ti ti-check" aria-hidden="true"></i>
+          {msgLink}
+        </div>
+      )}
+
+      {confirmandoExclusao && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(28,23,18,.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 100, padding: 24,
+        }}>
+          <div style={{
+            background: 'var(--white)', borderRadius: 14, padding: 24,
+            maxWidth: 420, width: '100%',
+            border: '0.5px solid var(--border)',
+            boxShadow: '0 8px 32px rgba(28,23,18,.12)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 9,
+                background: 'var(--red-bg)', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <i className="ti ti-alert-triangle" style={{ fontSize: 18, color: 'var(--red)' }} aria-hidden="true"></i>
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--dark)' }}>Excluir paciente</div>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 8 }}>
+              Tem certeza que deseja excluir <strong>{paciente.nome}</strong>?
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5, marginBottom: 16 }}>
+              Todos os dados serão removidos permanentemente — planos, check-ins, prescrições, histórico de ciclo e mensagens. <strong>Esta ação não pode ser desfeita.</strong>
+            </p>
+            {erroExclusao && (
+              <div style={{
+                marginBottom: 14, padding: '8px 12px', borderRadius: 7, fontSize: 12,
+                background: 'var(--red-bg)', color: 'var(--red)',
+              }}>
+                {erroExclusao}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => { setConfirmandoExclusao(false); setErroExclusao(null); }}
+                className="btn-outline"
+                style={{ flex: 1, justifyContent: 'center' }}
+                disabled={excluindo}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={excluirPaciente}
+                disabled={excluindo}
+                style={{
+                  flex: 1, padding: '9px 0', borderRadius: 8,
+                  background: excluindo ? 'var(--text4)' : 'var(--red)',
+                  color: '#fff', border: 'none', cursor: excluindo ? 'default' : 'pointer',
+                  fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-sans)',
+                }}
+              >
+                {excluindo ? 'Excluindo…' : 'Sim, excluir permanentemente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
         <div style={{
