@@ -14,6 +14,7 @@ import Suplementacao from './_Suplementacao.jsx';
 import Habitos from './_Habitos.jsx';
 import Anamnese from './_Anamnese.jsx';
 import CicloHormonios from './_CicloHormonios.jsx';
+import Jornada from './_Jornada.jsx';
 import DicaJSON from '../../components/DicaJSON.jsx';
 
 export default function PacientePerfil() {
@@ -326,6 +327,7 @@ export default function PacientePerfil() {
           { id: 'avaliacao',   label: 'Avaliação',    icon: 'ruler-measure' },
           { id: 'checkin',     label: 'Check-in',     icon: 'clipboard-check' },
           { id: 'ciclo',       label: 'Ciclo & Hormônios', icon: 'moon' },
+          { id: 'jornada',     label: 'Jornada',           icon: 'route' },
         ].map(t => (
           <button
             key={t.id}
@@ -358,7 +360,8 @@ export default function PacientePerfil() {
       {tab === 'ebooks' && <EbooksDaPaciente pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'avaliacao' && <RegistrarAvaliacao pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'checkin' && <CheckinPersonalizado pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
-      {tab === 'ciclo' && <CicloHormonios pacienteId={paciente.id} pacienteNome={paciente.nome} />}
+      {tab === 'ciclo'    && <CicloHormonios pacienteId={paciente.id} pacienteNome={paciente.nome} />}
+      {tab === 'jornada'  && <Jornada pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
     </>
   );
 }

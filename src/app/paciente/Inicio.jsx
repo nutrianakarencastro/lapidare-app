@@ -18,6 +18,7 @@ export default function Inicio() {
   const [habitos, setHabitos] = useState([]);
   const [habitosLogs, setHabitosLogs] = useState({});  // { habito_id: valor }
   const [habitosStreak, setHabitosStreak] = useState(0);
+  const [jornada, setJornada] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -25,7 +26,7 @@ export default function Inicio() {
       if (!user) return;
       const agora = new Date().toISOString();
       const hoje  = new Date().toISOString().slice(0, 10);
-      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes] = await Promise.all([
+      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
@@ -43,6 +44,10 @@ export default function Inicio() {
         supabase.from('habitos_logs').select('habito_id, valor, data')
           .eq('paciente_id', user.id)
           .gte('data', new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)),
+        supabase.from('jornadas')
+          .select('fase, nome_fase, objetivo_fase, consulta_numero, data_inicio_fase, duracao_semanas_prevista, metas_semana, proximo_marco, data_proximo_marco, evolucao_resumida')
+          .eq('paciente_id', user.id)
+          .maybeSingle(),
       ]);
       if (!active) return;
       setPlano(planoRes.data?.dados ?? null);
@@ -58,6 +63,7 @@ export default function Inicio() {
       }
       setHabitos(habitosLista);
       setHabitosLogs(logsHoje);
+      setJornada(jornadaRes.data ?? null);
 
       // Calcula streak (dias seguidos com todos cumpridos)
       const todosLogs = logsHojeRes.data ?? [];
@@ -138,6 +144,21 @@ export default function Inicio() {
   }
 
   const habitosCumpridos = habitos.filter(h => cumpriuHabito(h, habitosLogs[h.id])).length;
+
+  function semanaAtualDe(dataInicio) {
+    if (!dataInicio) return 1;
+    const diff = Math.floor((new Date() - new Date(dataInicio + 'T12:00:00')) / 86400000);
+    return Math.max(1, Math.ceil((diff + 1) / 7));
+  }
+
+  async function toggleMetaInicio(metaId, concluida) {
+    if (!jornada) return;
+    const novas = (jornada.metas_semana ?? []).map(m =>
+      m.id === metaId ? { ...m, concluida } : m
+    );
+    setJornada(j => ({ ...j, metas_semana: novas }));
+    await supabase.rpc('paciente_marcar_meta', { p_metas: novas });
+  }
 
   return (
     <>
@@ -313,6 +334,102 @@ export default function Inicio() {
           </button>
         </div>
       )}
+
+      {/* Card de jornada — visível apenas se existir jornada ativa */}
+      {jornada && (() => {
+        const semana = semanaAtualDe(jornada.data_inicio_fase);
+        const total  = jornada.duracao_semanas_prevista ?? 4;
+        const pct    = Math.min(100, Math.round((semana / total) * 100));
+        const metas  = jornada.metas_semana ?? [];
+        const concluidas = metas.filter(m => m.concluida).length;
+        return (
+          <div style={{
+            margin: '0 16px 12px', padding: '14px 16px',
+            background: 'var(--white)', border: '0.5px solid var(--hair)',
+            borderRadius: 16,
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div>
+                <div style={{
+                  fontSize: 9, letterSpacing: '.2em', textTransform: 'uppercase',
+                  color: 'var(--gold-deep)', fontWeight: 600, marginBottom: 2,
+                }}>
+                  Fase {jornada.fase}{jornada.consulta_numero != null ? ` · Consulta ${jornada.consulta_numero}` : ''} · Semana {semana} de {total}
+                </div>
+                <div style={{ fontSize: 17, fontFamily: 'var(--font-serif)', color: 'var(--ink)', lineHeight: 1.1 }}>
+                  {jornada.nome_fase}
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/paciente/jornada')}
+                style={{
+                  background: 'none', border: '0.5px solid var(--hair)',
+                  borderRadius: 8, padding: '4px 10px', cursor: 'pointer',
+                  fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-sans)',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                Ver tudo <i className="ti ti-chevron-right" style={{ fontSize: 12 }} aria-hidden="true" />
+              </button>
+            </div>
+
+            {/* Barra de progresso */}
+            <div style={{ marginBottom: metas.length > 0 ? 12 : 0 }}>
+              <div style={{ height: 5, borderRadius: 3, background: 'var(--hair)' }}>
+                <div style={{
+                  height: '100%', borderRadius: 3,
+                  width: `${pct}%`, background: 'var(--gold-deep)',
+                  transition: 'width .4s ease',
+                }} />
+              </div>
+            </div>
+
+            {/* Metas */}
+            {metas.length > 0 && (
+              <div>
+                <div style={{
+                  fontSize: 10, letterSpacing: '.14em', textTransform: 'uppercase',
+                  color: 'var(--muted)', fontWeight: 500, marginBottom: 7,
+                }}>
+                  Metas · {concluidas}/{metas.length}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {metas.map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => toggleMetaInicio(m.id, !m.concluida)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 9,
+                        padding: '7px 9px', borderRadius: 8, cursor: 'pointer',
+                        background: m.concluida ? 'var(--green-soft, var(--bg-soft))' : 'var(--bg-soft)',
+                        border: `0.5px solid ${m.concluida ? 'var(--green, var(--hair))' : 'var(--hair)'}`,
+                        textAlign: 'left', width: '100%', fontFamily: 'var(--font-sans)',
+                      }}>
+                      <div style={{
+                        width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                        background: m.concluida ? 'var(--green, var(--gold-deep))' : 'var(--white)',
+                        border: `1.5px solid ${m.concluida ? 'var(--green, var(--gold-deep))' : 'var(--hair)'}`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {m.concluida && (
+                          <i className="ti ti-check" style={{ fontSize: 9, color: 'var(--white)' }} aria-hidden="true" />
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: 12, color: 'var(--ink)',
+                        textDecoration: m.concluida ? 'line-through' : 'none',
+                        opacity: m.concluida ? 0.6 : 1,
+                      }}>
+                        {m.texto}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Lembrete de check-in pendente */}
       {checkinPendente && (

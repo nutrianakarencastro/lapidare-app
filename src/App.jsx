@@ -40,6 +40,7 @@ import EbooksPaciente from './app/paciente/Ebooks.jsx';
 import SuplementosPaciente from './app/paciente/Suplementos.jsx';
 import HabitosPaciente from './app/paciente/Habitos.jsx';
 import CicloPaciente from './app/paciente/Ciclo.jsx';
+import JornadaPaciente from './app/paciente/Jornada.jsx';
 
 export default function App() {
   return (
@@ -89,6 +90,7 @@ export default function App() {
             <Route path="/paciente/habitos" element={<HabitosPaciente />} />
             <Route path="/paciente/checkin/:envioId" element={<Checkin />} />
             <Route path="/paciente/ciclo" element={<CicloPaciente />} />
+            <Route path="/paciente/jornada" element={<JornadaPaciente />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
