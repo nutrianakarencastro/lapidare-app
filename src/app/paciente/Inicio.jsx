@@ -123,24 +123,32 @@ export default function Inicio() {
 
   async function setValorHabito(habito, valor) {
     const hoje = new Date().toISOString().slice(0, 10);
-    // Update otimista
-    setHabitosLogs(prev => ({ ...prev, [habito.id]: valor }));
-    if (valor === 0 && habito.tipo === 'boolean') {
-      // Toggle off pra boolean: remove o log
-      const { data: existente } = await supabase.from('habitos_logs')
-        .select('id').eq('habito_id', habito.id).eq('data', hoje).maybeSingle();
-      if (existente) await supabase.from('habitos_logs').delete().eq('id', existente.id);
-      setHabitosLogs(prev => {
-        const novo = { ...prev };
-        delete novo[habito.id];
-        return novo;
-      });
+
+    // Boolean toggle-off: passa 0 ao RPC (que faz delete em habitos_logs)
+    const atual = habitosLogs[habito.id];
+    const finalValor = (habito.tipo === 'boolean' && atual !== undefined && atual === valor) ? 0 : valor;
+
+    // Optimistic update — hábitos
+    if (finalValor === 0 && habito.tipo === 'boolean') {
+      setHabitosLogs(prev => { const n = { ...prev }; delete n[habito.id]; return n; });
     } else {
-      await supabase.from('habitos_logs').upsert({
-        habito_id: habito.id, paciente_id: user.id,
-        data: hoje, valor,
-      }, { onConflict: 'habito_id,data' });
+      setHabitosLogs(prev => ({ ...prev, [habito.id]: finalValor }));
     }
+
+    // Optimistic update — metas da jornada vinculadas a este hábito
+    if (jornada?.metas_semana) {
+      const novasMetas = jornada.metas_semana.map(m =>
+        m.habito_id === habito.id ? { ...m, concluida: finalValor > 0 } : m
+      );
+      setJornada(j => ({ ...j, metas_semana: novasMetas }));
+    }
+
+    // RPC única: grava habitos_logs + sincroniza meta vinculada na jornada
+    await supabase.rpc('paciente_marcar_habito_e_meta', {
+      p_habito_id: habito.id,
+      p_valor:     finalValor,
+      p_data:      hoje,
+    });
   }
 
   const habitosCumpridos = habitos.filter(h => cumpriuHabito(h, habitosLogs[h.id])).length;

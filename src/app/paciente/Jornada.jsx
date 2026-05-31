@@ -15,12 +15,13 @@ export default function Jornada() {
   const navigate = useNavigate();
   const [jornada,   setJornada]   = useState(undefined);
   const [historico, setHistorico] = useState([]);
+  const [habitos,   setHabitos]   = useState([]);
 
   useEffect(() => {
     if (!user) return;
     let active = true;
     async function load() {
-      const [jRes, hRes] = await Promise.all([
+      const [jRes, hRes, habRes] = await Promise.all([
         supabase.from('jornadas')
           .select('fase, nome_fase, objetivo_fase, consulta_numero, data_inicio_fase, duracao_semanas_prevista, metas_semana, proximo_marco, data_proximo_marco, evolucao_resumida')
           .eq('paciente_id', user.id)
@@ -29,10 +30,14 @@ export default function Jornada() {
           .select('fase, nome_fase, objetivo_fase, consulta_numero, data_inicio_fase, data_fim_fase, semanas_cumpridas, metas_semana, evolucao_resumida')
           .eq('paciente_id', user.id)
           .order('data_inicio_fase', { ascending: true }),
+        supabase.from('habitos')
+          .select('id, nome, emoji')
+          .eq('paciente_id', user.id).eq('ativo', true),
       ]);
       if (!active) return;
       setJornada(jRes.data ?? null);
       setHistorico(hRes.data ?? []);
+      setHabitos(habRes.data ?? []);
     }
     load();
     return () => { active = false; };
@@ -192,7 +197,11 @@ export default function Jornada() {
                     Metas desta semana · {metasConcluidas}/{totalMetas}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                    {(jornada.metas_semana ?? []).map(m => (
+                    {(jornada.metas_semana ?? []).map(m => {
+                      const hab = m.habito_id
+                        ? habitos.find(h => h.id === m.habito_id)
+                        : null;
+                      return (
                       <button
                         key={m.id}
                         onClick={() => toggleMeta(m.id, !m.concluida)}
@@ -214,15 +223,28 @@ export default function Jornada() {
                             <i className="ti ti-check" style={{ fontSize: 10, color: 'var(--white)' }} aria-hidden="true" />
                           )}
                         </div>
-                        <span style={{
-                          fontSize: 13, color: 'var(--ink)',
-                          textDecoration: m.concluida ? 'line-through' : 'none',
-                          opacity: m.concluida ? 0.6 : 1,
-                        }}>
-                          {m.texto}
-                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{
+                            fontSize: 13, color: 'var(--ink)',
+                            textDecoration: m.concluida ? 'line-through' : 'none',
+                            opacity: m.concluida ? 0.6 : 1,
+                          }}>
+                            {m.texto}
+                          </span>
+                          {hab && (
+                            <span style={{
+                              marginLeft: 7, fontSize: 10, padding: '1px 6px', borderRadius: 20,
+                              background: 'var(--gold-soft, var(--bg-soft))',
+                              color: 'var(--gold-deep)', fontWeight: 500,
+                              verticalAlign: 'middle',
+                            }}>
+                              {hab.emoji ?? '●'} {hab.nome}
+                            </span>
+                          )}
+                        </div>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

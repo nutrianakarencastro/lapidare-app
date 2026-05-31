@@ -39,23 +39,28 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   const [jornada,   setJornada]   = useState(undefined);
   const [historico, setHistorico] = useState([]);
   const [form,      setForm]      = useState(null);
-  const [novaMeta,  setNovaMeta]  = useState('');
+  const [novaMeta,         setNovaMeta]         = useState('');
+  const [novaMetaHabitoId, setNovaMetaHabitoId] = useState('');
+  const [habitosPaciente,  setHabitosPaciente]  = useState([]);
   const [busy,      setBusy]      = useState(false);
   const [aviso,     setAviso]     = useState(null);
   const [encerrando, setEncerrando] = useState(false);
   const [histAberto, setHistAberto] = useState(false);
 
   async function carregar() {
-    const [jRes, hRes] = await Promise.all([
+    const [jRes, hRes, habRes] = await Promise.all([
       supabase.from('jornadas').select('*').eq('paciente_id', pacienteId).maybeSingle(),
       supabase.from('jornada_historico').select('*')
         .eq('paciente_id', pacienteId)
         .order('data_inicio_fase', { ascending: false }),
+      supabase.from('habitos').select('id, nome, emoji, tipo')
+        .eq('paciente_id', pacienteId).eq('ativo', true).order('ordem'),
     ]);
     const j = jRes.data ?? null;
     setJornada(j);
     setHistorico(hRes.data ?? []);
     setForm(j ? { ...j, novo: false } : null);
+    setHabitosPaciente(habRes.data ?? []);
   }
 
   useEffect(() => { carregar(); }, [pacienteId]);
@@ -65,8 +70,14 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   function adicionarMeta() {
     const texto = novaMeta.trim();
     if (!texto) return;
-    sv('metas_semana', [...(form.metas_semana ?? []), { id: crypto.randomUUID(), texto, concluida: false }]);
+    sv('metas_semana', [...(form.metas_semana ?? []), {
+      id:        crypto.randomUUID(),
+      texto,
+      concluida: false,
+      habito_id: novaMetaHabitoId || null,
+    }]);
     setNovaMeta('');
+    setNovaMetaHabitoId('');
   }
 
   function removerMeta(id) {
@@ -294,34 +305,73 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
                 <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>Metas da semana</div>
                 {(form.metas_semana ?? []).length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
-                    {(form.metas_semana ?? []).map(m => (
-                      <div key={m.id} style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '7px 10px', borderRadius: 7,
-                        background: 'var(--bg2)', border: '0.5px solid var(--border)',
-                      }}>
-                        <span style={{ flex: 1, fontSize: 13, color: 'var(--dark)' }}>{m.texto}</span>
-                        <button
-                          onClick={() => removerMeta(m.id)}
-                          style={{
-                            background: 'none', border: 'none', cursor: 'pointer',
-                            color: 'var(--text4)', fontSize: 14, padding: '0 2px',
-                          }}>
-                          <i className="ti ti-x" aria-hidden="true" />
-                        </button>
-                      </div>
-                    ))}
+                    {(form.metas_semana ?? []).map(m => {
+                      const hab = m.habito_id
+                        ? habitosPaciente.find(h => h.id === m.habito_id)
+                        : null;
+                      return (
+                        <div key={m.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '7px 10px', borderRadius: 7,
+                          background: 'var(--bg2)', border: '0.5px solid var(--border)',
+                        }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: 13, color: 'var(--dark)' }}>{m.texto}</span>
+                            {hab ? (
+                              <span style={{
+                                marginLeft: 8, fontSize: 10, padding: '1px 7px', borderRadius: 20,
+                                background: 'var(--gold-soft, var(--white))',
+                                border: '0.5px solid var(--gold, var(--border))',
+                                color: 'var(--gold-deep)', fontWeight: 500,
+                              }}>
+                                {hab.emoji ?? '●'} {hab.nome}
+                              </span>
+                            ) : (
+                              <span style={{
+                                marginLeft: 8, fontSize: 10, padding: '1px 7px', borderRadius: 20,
+                                background: 'var(--bg2)', color: 'var(--text4)',
+                                border: '0.5px solid var(--border)',
+                              }}>
+                                meta livre
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => removerMeta(m.id)}
+                            style={{
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              color: 'var(--text4)', fontSize: 14, padding: '0 2px',
+                            }}>
+                            <i className="ti ti-x" aria-hidden="true" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <input
                     type="text"
-                    placeholder="Nova meta…"
+                    placeholder="Descrição da meta…"
                     value={novaMeta}
                     onChange={e => setNovaMeta(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), adicionarMeta())}
-                    style={{ ...inpSt, flex: 1 }}
+                    style={{ ...inpSt, flex: '1 1 160px' }}
                   />
+                  {habitosPaciente.length > 0 && (
+                    <select
+                      value={novaMetaHabitoId}
+                      onChange={e => setNovaMetaHabitoId(e.target.value)}
+                      style={{ ...inpSt, flex: '0 0 auto', maxWidth: 180 }}
+                    >
+                      <option value="">Meta livre</option>
+                      {habitosPaciente.map(h => (
+                        <option key={h.id} value={h.id}>
+                          {h.emoji ?? '●'} {h.nome}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <button className="btn-outline" onClick={adicionarMeta} style={{ whiteSpace: 'nowrap' }}>
                     <i className="ti ti-plus" aria-hidden="true" /> Adicionar
                   </button>

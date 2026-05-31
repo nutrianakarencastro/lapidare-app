@@ -37,20 +37,16 @@ export default function Habitos() {
   async function setValor(habito, valor) {
     const hoje = HOJE();
     const atual = logMap[habito.id]?.[hoje];
-    if (atual !== undefined && atual === valor) {
-      // mesmo valor → toggle off pra boolean
-      if (habito.tipo === 'boolean') {
-        const { data: existente } = await supabase.from('habitos_logs')
-          .select('id').eq('habito_id', habito.id).eq('data', hoje).maybeSingle();
-        if (existente) await supabase.from('habitos_logs').delete().eq('id', existente.id);
-      }
-    } else {
-      // upsert
-      await supabase.from('habitos_logs').upsert({
-        habito_id: habito.id, paciente_id: user.id,
-        data: hoje, valor,
-      }, { onConflict: 'habito_id,data' });
-    }
+
+    // Boolean toggle-off → passa 0 ao RPC (que faz delete em habitos_logs)
+    const finalValor = (habito.tipo === 'boolean' && atual !== undefined && atual === valor) ? 0 : valor;
+
+    // RPC única: grava habitos_logs + sincroniza meta vinculada na jornada (se existir)
+    await supabase.rpc('paciente_marcar_habito_e_meta', {
+      p_habito_id: habito.id,
+      p_valor:     finalValor,
+      p_data:      hoje,
+    });
     carregar();
   }
 
