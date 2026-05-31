@@ -22,6 +22,7 @@ const MAIS_ITEMS = [
   { path: '/paciente/prescricoes', icon: 'file-text',     label: 'Prescrições',          sub: 'Documentos da Dra.' },
   { path: '/paciente/ebooks',      icon: 'book-2',        label: 'E-books',              sub: 'Materiais da Dra.' },
   { path: '/paciente/ciclo',        icon: 'moon',            label: 'Ciclo & Hormônios',   sub: 'Acompanhe seu ciclo' },
+  { path: '/paciente/jornada',     icon: 'route',           label: 'Minha jornada',       sub: 'Fases e evolução' },
   { path: '/paciente/chat',        icon: 'message-circle', label: 'Chat com a Dra.',     sub: 'Conversa direta' },
 ];
 
@@ -36,6 +37,7 @@ const HEADERS = {
   '/paciente/suplementos':  () =>                ({ eyebrow: 'Habit tracker',    title: 'Meus suplementos',  subtitle: 'Marque diariamente' }),
   '/paciente/habitos':      () =>                ({ eyebrow: 'Hábitos do dia',   title: 'Meus hábitos',      subtitle: 'Acompanhe sua rotina' }),
   '/paciente/ciclo':        () =>                ({ eyebrow: 'Saúde hormonal',   title: 'Ciclo & Hormônios',     subtitle: 'Acompanhe seu ciclo menstrual' }),
+  '/paciente/jornada':     () =>                ({ eyebrow: 'Minha evolução',   title: 'Minha jornada',         subtitle: 'Fases e marcos do acompanhamento' }),
   '/paciente/chat':         (_nome, nutriNome) => ({ eyebrow: 'Conversa',         title: nutriNome || 'Sua nutri', subtitle: 'Online' }),
 };
 
@@ -123,7 +125,7 @@ export default function PacienteLayout() {
           {TABS.map(t => {
             const active = t.path
               ? location.pathname === t.path
-              : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/prescricoes', '/paciente/ebooks', '/paciente/ciclo', '/paciente/chat'].includes(location.pathname);
+              : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/prescricoes', '/paciente/ebooks', '/paciente/ciclo', '/paciente/jornada', '/paciente/chat'].includes(location.pathname);
 
             if (!t.path) {
               return (
