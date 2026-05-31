@@ -79,7 +79,8 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   }
 
   async function salvar() {
-    if (!form.nome_fase?.trim()) { setAviso('Informe o nome da fase.'); return; }
+    if (!form.nome_fase?.trim())    { setAviso('Informe o nome da fase.');        return; }
+    if (!form.data_inicio_fase)     { setAviso('Informe a data de início da fase.'); return; }
     setBusy(true);
     const payload = {
       fase:                     Number(form.fase) || 1,
@@ -96,12 +97,12 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
       updated_at:               new Date().toISOString(),
     };
 
-    if (form.novo) {
-      await supabase.from('jornadas').insert({ ...payload, paciente_id: pacienteId, nutri_id: nutriId });
-    } else {
-      await supabase.from('jornadas').update(payload).eq('id', jornada.id);
-    }
+    const { error } = form.novo
+      ? await supabase.from('jornadas').insert({ ...payload, paciente_id: pacienteId, nutri_id: nutriId })
+      : await supabase.from('jornadas').update(payload).eq('id', jornada.id);
+
     setBusy(false);
+    if (error) { feedback('Erro ao salvar: ' + error.message); return; }
     feedback('Jornada salva.');
     carregar();
   }
@@ -132,7 +133,7 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
 
     if (iniciarNova) {
       const novaFase = (form.fase ?? jornada.fase) + 1;
-      await supabase.from('jornadas').update({
+      const { error: errUpd } = await supabase.from('jornadas').update({
         fase:                     novaFase,
         nome_fase:                `Fase ${novaFase}`,
         objetivo_fase:            null,
@@ -146,9 +147,11 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
         observacoes:              null,
         updated_at:               new Date().toISOString(),
       }).eq('id', jornada.id);
+      if (errUpd) { feedback('Fase arquivada, mas erro ao criar nova fase: ' + errUpd.message); setBusy(false); carregar(); return; }
       feedback('Fase encerrada. Nova fase iniciada.');
     } else {
-      await supabase.from('jornadas').delete().eq('id', jornada.id);
+      const { error: errDel } = await supabase.from('jornadas').delete().eq('id', jornada.id);
+      if (errDel) { feedback('Fase arquivada, mas erro ao encerrar: ' + errDel.message); setBusy(false); carregar(); return; }
       feedback('Acompanhamento encerrado. Histórico preservado.');
     }
 
