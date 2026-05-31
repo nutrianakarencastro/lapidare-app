@@ -4,9 +4,10 @@ import { useSession } from '../../lib/session.jsx';
 import { dataBR } from '../../lib/utils.js';
 
 const TIPOS = {
-  exame:   { color: 'var(--blue)',   bg: 'var(--blue-soft)',   icon: 'microscope', label: 'Exame' },
-  laudo:   { color: 'var(--green)',  bg: 'var(--green-soft)',  icon: 'file-text',  label: 'Laudo' },
-  receita: { color: 'var(--orange)', bg: 'var(--orange-soft)', icon: 'pill',       label: 'Receita' },
+  exame:         { color: 'var(--blue)',       bg: 'var(--blue-soft)',   icon: 'microscope',    label: 'Exame' },
+  laudo:         { color: 'var(--green)',      bg: 'var(--green-soft)',  icon: 'file-text',     label: 'Laudo' },
+  receita:       { color: 'var(--orange)',     bg: 'var(--orange-soft)', icon: 'pill',          label: 'Receita' },
+  suplementacao: { color: 'var(--gold-deep)', bg: 'var(--gold-soft, var(--bg-soft))', icon: 'flask', label: 'Manipulação' },
 };
 
 export default function PrescricoesPaciente() {
