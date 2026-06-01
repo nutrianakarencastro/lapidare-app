@@ -11,6 +11,7 @@ export default function Plano() {
   const [pdfPath, setPdfPath] = useState(null);
   const [pdfNome, setPdfNome] = useState(null);
   const [pdfAtualizadoEm, setPdfAtualizadoEm] = useState(null);
+  const [abrindoPdf, setAbrindoPdf] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -35,12 +36,13 @@ export default function Plano() {
   }, [user]);
 
   async function abrirPdf() {
-    // Segurança: path deve pertencer ao próprio paciente
+    if (abrindoPdf) return;
     if (!pdfPath?.startsWith(user.id + '/')) return;
+    setAbrindoPdf(true);
     const { data: signed, error } = await supabase.storage
       .from('planos').createSignedUrl(pdfPath, 120);
+    setAbrindoPdf(false);
     if (error || !signed?.signedUrl) return;
-    // Abertura mobile-friendly (evita bloqueio de popup em iOS/Android)
     const a = document.createElement('a');
     a.href = signed.signedUrl;
     a.target = '_blank';
@@ -76,16 +78,26 @@ export default function Plano() {
     <>
       {/* Botão de PDF da prescrição */}
       {pdfPath && (
-        <div onClick={abrirPdf} style={{
-          margin: '0 16px 12px', padding: '12px 14px',
-          background: 'var(--white)', border: '0.5px solid var(--hair)',
-          borderRadius: 12, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 10,
-        }}>
+        <div
+          onClick={abrirPdf}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => e.key === 'Enter' && abrirPdf()}
+          style={{
+            margin: '0 16px 12px', padding: '12px 14px',
+            background: 'var(--white)', border: '0.5px solid var(--hair)',
+            borderRadius: 12,
+            cursor: abrindoPdf ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: 10,
+            opacity: abrindoPdf ? 0.6 : 1,
+            transition: 'opacity .15s',
+            WebkitTapHighlightColor: 'rgba(0,0,0,0.06)',
+            userSelect: 'none',
+          }}>
           <i className="ti ti-file-type-pdf" style={{ fontSize: 20, color: '#e05252', flexShrink: 0 }} aria-hidden="true" />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
-              Abrir Prescrição Alimentar
+              {abrindoPdf ? 'Abrindo…' : 'Abrir Prescrição Alimentar'}
             </div>
             {pdfAtualizadoEm && (
               <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>

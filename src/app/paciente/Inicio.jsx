@@ -12,6 +12,7 @@ export default function Inicio() {
   const navigate = useNavigate();
   const { user } = useSession();
   const [plano, setPlano] = useState(null);
+  const [planoPdfPath, setPlanoPdfPath] = useState(null);
   const [compras, setCompras] = useState(null);
   const [proximaConsulta, setProximaConsulta] = useState(null);
   const [checkinPendente, setCheckinPendente] = useState(null);
@@ -32,7 +33,7 @@ export default function Inicio() {
       const agora = new Date().toISOString();
       const hoje  = new Date().toISOString().slice(0, 10);
       const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes] = await Promise.all([
-        supabase.from('planos').select('dados, publicado_em')
+        supabase.from('planos').select('dados, publicado_em, pdf_path')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
@@ -77,6 +78,7 @@ export default function Inicio() {
       ]);
       if (!active) return;
       setPlano(planoRes.data?.dados ?? null);
+      setPlanoPdfPath(planoRes.data?.pdf_path ?? null);
       setCompras(comprasRes.data?.dados ?? null);
       setProximaConsulta(consultaRes.data ?? null);
       setCheckinPendente(checkinRes.data ?? null);
@@ -776,9 +778,15 @@ export default function Inicio() {
         <div className="card" style={{ padding: '20px 18px', textAlign: 'center' }}>
           <i className="ti ti-sparkles" style={{ fontSize: 28, color: 'var(--gold-deep)', display: 'block', marginBottom: 8 }}></i>
           <div className="serif" style={{ fontSize: 18, marginBottom: 4 }}>Bem-vinda ao Útera ✨</div>
-          <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-            Dra. {nutriNome} publicará sua prescrição em breve. Você será notificada!
-          </div>
+          {(plano || planoPdfPath) ? (
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Sua prescrição alimentar está pronta. Toque no card abaixo para acessar.
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Dra. {nutriNome} publicará sua prescrição em breve. Você será notificada!
+            </div>
+          )}
         </div>
       )}
 
@@ -798,7 +806,11 @@ export default function Inicio() {
                 P {plano.macros?.prot_g}g · C {plano.macros?.cho_g}g · G {plano.macros?.lip_g}g
               </div>
             </>
-          ) : <div style={{ fontSize: 12, color: 'var(--muted)' }}>Aguardando prescrição</div>}
+          ) : planoPdfPath ? (
+            <div style={{ fontSize: 12, color: 'var(--green)' }}>Prescrição disponível</div>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>Aguardando prescrição</div>
+          )}
         </div>
 
         <div className="card" style={{ margin: 0, padding: '12px 14px', cursor: 'pointer' }} onClick={() => navigate('/paciente/ciclo')}>
