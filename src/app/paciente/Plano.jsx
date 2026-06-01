@@ -12,6 +12,7 @@ export default function Plano() {
   const [pdfNome, setPdfNome] = useState(null);
   const [pdfAtualizadoEm, setPdfAtualizadoEm] = useState(null);
   const [abrindoPdf, setAbrindoPdf] = useState(false);
+  const [erroPdf, setErroPdf] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -37,19 +38,31 @@ export default function Plano() {
 
   async function abrirPdf() {
     if (abrindoPdf) return;
-    if (!pdfPath?.startsWith(user.id + '/')) return;
+    console.log('[abrirPdf] pdfPath:', pdfPath, '| user.id:', user?.id);
+    if (!pdfPath?.startsWith(user.id + '/')) {
+      console.warn('[abrirPdf] pdfPath nao pertence ao user. pdfPath:', pdfPath, '| user.id:', user?.id);
+      setErroPdf('Não foi possível abrir o PDF. Tente novamente.');
+      return;
+    }
     setAbrindoPdf(true);
+    setErroPdf(null);
+    // Abre janela antes do await — iOS/Safari bloqueia window.open após operações assíncronas
+    const win = window.open('', '_blank');
     const { data: signed, error } = await supabase.storage
       .from('planos').createSignedUrl(pdfPath, 120);
     setAbrindoPdf(false);
-    if (error || !signed?.signedUrl) return;
-    const a = document.createElement('a');
-    a.href = signed.signedUrl;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    console.log('[abrirPdf] signed:', signed, '| error:', error);
+    if (error || !signed?.signedUrl) {
+      win?.close();
+      setErroPdf('Não foi possível abrir o PDF. Tente novamente.');
+      return;
+    }
+    if (win) {
+      win.location.href = signed.signedUrl;
+    } else {
+      // Fallback: se popup foi bloqueado pelo navegador, abre na aba atual
+      window.location.href = signed.signedUrl;
+    }
   }
 
   const toggleSubs = (key) => setOpenSubs(s => ({ ...s, [key]: !s[key] }));
@@ -106,6 +119,18 @@ export default function Plano() {
             )}
           </div>
           <i className="ti ti-external-link" style={{ fontSize: 15, color: 'var(--muted)', flexShrink: 0 }} aria-hidden="true" />
+        </div>
+      )}
+
+      {erroPdf && (
+        <div style={{
+          margin: '-4px 16px 12px', padding: '10px 14px',
+          background: '#fff0f0', border: '0.5px solid #f5c0c0',
+          borderRadius: 10, fontSize: 12, color: '#c0392b',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <i className="ti ti-alert-circle" style={{ fontSize: 14, flexShrink: 0 }} aria-hidden="true" />
+          {erroPdf}
         </div>
       )}
 
