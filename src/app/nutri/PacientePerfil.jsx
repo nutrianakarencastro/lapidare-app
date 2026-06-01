@@ -788,38 +788,61 @@ function PublicarPlano({ pacienteId, nutriId }) {
     carregar();
   }
 
-  async function uploadPdfPlano(plano) {
+  async function uploadPdfPlano() {
     if (!pdfFile) return;
-    // Validação de tipo
     if (!pdfFile.name.toLowerCase().endsWith('.pdf') && pdfFile.type !== 'application/pdf') {
       return setFeedback({ tipo: 'erro', msg: 'Apenas arquivos PDF são aceitos.' });
     }
-    // Validação de tamanho (máx 10 MB)
     if (pdfFile.size > 10 * 1024 * 1024) {
       return setFeedback({ tipo: 'erro', msg: 'Arquivo muito grande. Tamanho máximo: 10 MB.' });
     }
     setUploadandoPdf(true);
     setFeedback(null);
+
+    let plano = historico[0] ?? null;
+    let registroCriado = false;
+
+    if (!plano) {
+      const { data: novo, error: insErr } = await supabase
+        .from('planos')
+        .insert({ paciente_id: pacienteId, nutri_id: nutriId, dados: null })
+        .select('id, pdf_path')
+        .single();
+      if (insErr) {
+        setUploadandoPdf(false);
+        return setFeedback({ tipo: 'erro', msg: insErr.message });
+      }
+      plano = novo;
+      registroCriado = true;
+    }
+
     const ext = (pdfFile.name.split('.').pop() || 'pdf').toLowerCase();
     const path = `${pacienteId}/${Date.now()}-prescricao.${ext}`;
+
     if (plano.pdf_path) {
       await supabase.storage.from('planos').remove([plano.pdf_path]);
     }
+
     const { error: upErr } = await supabase.storage.from('planos').upload(path, pdfFile);
     if (upErr) {
+      if (registroCriado) await supabase.from('planos').delete().eq('id', plano.id);
       setUploadandoPdf(false);
       return setFeedback({ tipo: 'erro', msg: upErr.message });
     }
+
     const { error: dbErr } = await supabase.from('planos').update({
       pdf_path: path,
       pdf_nome: pdfFile.name,
       pdf_atualizado_em: new Date().toISOString(),
     }).eq('id', plano.id);
+
     setUploadandoPdf(false);
     if (dbErr) {
       await supabase.storage.from('planos').remove([path]);
+      if (registroCriado) await supabase.from('planos').delete().eq('id', plano.id);
       return setFeedback({ tipo: 'erro', msg: dbErr.message });
     }
+
     setPdfFile(null);
     setSubstituindoPlano(false);
     setFeedback({ tipo: 'ok', msg: 'PDF da prescrição publicado!' });
@@ -882,67 +905,65 @@ function PublicarPlano({ pacienteId, nutriId }) {
       </div>
 
       {/* PDF da Prescrição Alimentar */}
-      {historico.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="card-title">PDF da Prescrição Alimentar</div>
-              <div className="card-sub">Complementa o plano estruturado. A paciente poderá abrir o original.</div>
-            </div>
-          </div>
-          <div className="card-body">
-            {historico[0].pdf_path && !substituindoPlano ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <i className="ti ti-file-type-pdf" style={{ fontSize: 22, color: '#e05252', flexShrink: 0 }} aria-hidden="true" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {historico[0].pdf_nome}
-                  </div>
-                  {historico[0].pdf_atualizado_em && (
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                      Atualizado em {dataBR(historico[0].pdf_atualizado_em)}
-                    </div>
-                  )}
-                </div>
-                <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }}
-                  onClick={() => abrirPdfPlano(historico[0])}>
-                  <i className="ti ti-external-link" aria-hidden="true" /> Abrir
-                </button>
-                <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }}
-                  onClick={() => { setPdfFile(null); setSubstituindoPlano(true); }}>
-                  <i className="ti ti-refresh" aria-hidden="true" /> Substituir
-                </button>
-                <button onClick={() => removerPdfPlano(historico[0])}
-                  style={{ background: 'none', border: '0.5px solid var(--red)', borderRadius: 6, padding: '4px 8px', color: 'var(--red)', cursor: 'pointer', flexShrink: 0 }}>
-                  <i className="ti ti-trash" aria-hidden="true" />
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <label className="field-label">
-                    {substituindoPlano ? 'Novo PDF (substituirá o atual)' : 'Selecionar PDF'}
-                    <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>máx. 10 MB</span>
-                  </label>
-                  <input type="file" accept="application/pdf,.pdf"
-                    onChange={e => setPdfFile(e.target.files?.[0] ?? null)}
-                    style={{ width: '100%' }} />
-                </div>
-                <button className="btn" onClick={() => uploadPdfPlano(historico[0])}
-                  disabled={!pdfFile || uploadandoPdf}>
-                  <i className="ti ti-upload" aria-hidden="true" />
-                  {uploadandoPdf ? 'Enviando…' : substituindoPlano ? 'Substituir PDF' : 'Enviar PDF'}
-                </button>
-                {substituindoPlano && (
-                  <button className="btn-outline" onClick={() => { setPdfFile(null); setSubstituindoPlano(false); }}>
-                    Cancelar
-                  </button>
-                )}
-              </div>
-            )}
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <div className="card-title">PDF da Prescrição Alimentar</div>
+            <div className="card-sub">Publique o PDF gerado pela sua ferramenta. A paciente poderá abrir o original.</div>
           </div>
         </div>
-      )}
+        <div className="card-body">
+          {historico[0]?.pdf_path && !substituindoPlano ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <i className="ti ti-file-type-pdf" style={{ fontSize: 22, color: '#e05252', flexShrink: 0 }} aria-hidden="true" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {historico[0].pdf_nome}
+                </div>
+                {historico[0].pdf_atualizado_em && (
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                    Atualizado em {dataBR(historico[0].pdf_atualizado_em)}
+                  </div>
+                )}
+              </div>
+              <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }}
+                onClick={() => abrirPdfPlano(historico[0])}>
+                <i className="ti ti-external-link" aria-hidden="true" /> Abrir
+              </button>
+              <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }}
+                onClick={() => { setPdfFile(null); setSubstituindoPlano(true); }}>
+                <i className="ti ti-refresh" aria-hidden="true" /> Substituir
+              </button>
+              <button onClick={() => removerPdfPlano(historico[0])}
+                style={{ background: 'none', border: '0.5px solid var(--red)', borderRadius: 6, padding: '4px 8px', color: 'var(--red)', cursor: 'pointer', flexShrink: 0 }}>
+                <i className="ti ti-trash" aria-hidden="true" />
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <label className="field-label">
+                  {substituindoPlano ? 'Novo PDF (substituirá o atual)' : 'Selecionar PDF'}
+                  <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>máx. 10 MB</span>
+                </label>
+                <input type="file" accept="application/pdf,.pdf"
+                  onChange={e => setPdfFile(e.target.files?.[0] ?? null)}
+                  style={{ width: '100%' }} />
+              </div>
+              <button className="btn" onClick={uploadPdfPlano}
+                disabled={!pdfFile || uploadandoPdf}>
+                <i className="ti ti-upload" aria-hidden="true" />
+                {uploadandoPdf ? 'Enviando…' : substituindoPlano ? 'Substituir PDF' : 'Enviar PDF'}
+              </button>
+              {substituindoPlano && (
+                <button className="btn-outline" onClick={() => { setPdfFile(null); setSubstituindoPlano(false); }}>
+                  Cancelar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       <HistoricoLista
         titulo="Planos publicados"
@@ -952,18 +973,22 @@ function PublicarPlano({ pacienteId, nutriId }) {
           <>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 500 }}>
-                {p.dados?.macros?.kcal ? `${p.dados.macros.kcal} kcal · ` : ''}
-                {p.dados?.refeicoes?.length ?? 0} refeições
+                {p.dados
+                  ? `${p.dados.macros?.kcal ? `${p.dados.macros.kcal} kcal · ` : ''}${p.dados.refeicoes?.length ?? 0} refeições`
+                  : 'Prescrição em PDF'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
                 Publicado em {dataBR(p.publicado_em)}
                 {p.validade && ` · válido até ${dataBR(p.validade)}`}
+                {!p.dados && p.pdf_nome && ` · ${p.pdf_nome}`}
               </div>
             </div>
-            <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px' }}
-              onClick={() => setVerJson(p)}>
-              <i className="ti ti-code" aria-hidden="true"></i> JSON
-            </button>
+            {p.dados && (
+              <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px' }}
+                onClick={() => setVerJson(p)}>
+                <i className="ti ti-code" aria-hidden="true"></i> JSON
+              </button>
+            )}
           </>
         )}
       />
@@ -1030,7 +1055,7 @@ function PublicarLista({ pacienteId, nutriId }) {
     carregar();
   }
 
-  async function uploadPdfLista(lista) {
+  async function uploadPdfLista() {
     if (!pdfFile) return;
     if (!pdfFile.name.toLowerCase().endsWith('.pdf') && pdfFile.type !== 'application/pdf') {
       return setFeedback({ tipo: 'erro', msg: 'Apenas arquivos PDF são aceitos.' });
@@ -1040,26 +1065,51 @@ function PublicarLista({ pacienteId, nutriId }) {
     }
     setUploadandoPdf(true);
     setFeedback(null);
+
+    let lista = historico[0] ?? null;
+    let registroCriado = false;
+
+    if (!lista) {
+      const { data: nova, error: insErr } = await supabase
+        .from('listas_compras')
+        .insert({ paciente_id: pacienteId, nutri_id: nutriId, dados: null })
+        .select('id, pdf_path')
+        .single();
+      if (insErr) {
+        setUploadandoPdf(false);
+        return setFeedback({ tipo: 'erro', msg: insErr.message });
+      }
+      lista = nova;
+      registroCriado = true;
+    }
+
     const ext = (pdfFile.name.split('.').pop() || 'pdf').toLowerCase();
     const path = `${pacienteId}/${Date.now()}-lista-compras.${ext}`;
+
     if (lista.pdf_path) {
       await supabase.storage.from('planos').remove([lista.pdf_path]);
     }
+
     const { error: upErr } = await supabase.storage.from('planos').upload(path, pdfFile);
     if (upErr) {
+      if (registroCriado) await supabase.from('listas_compras').delete().eq('id', lista.id);
       setUploadandoPdf(false);
       return setFeedback({ tipo: 'erro', msg: upErr.message });
     }
+
     const { error: dbErr } = await supabase.from('listas_compras').update({
       pdf_path: path,
       pdf_nome: pdfFile.name,
       pdf_atualizado_em: new Date().toISOString(),
     }).eq('id', lista.id);
+
     setUploadandoPdf(false);
     if (dbErr) {
       await supabase.storage.from('planos').remove([path]);
+      if (registroCriado) await supabase.from('listas_compras').delete().eq('id', lista.id);
       return setFeedback({ tipo: 'erro', msg: dbErr.message });
     }
+
     setPdfFile(null);
     setSubstituindoLista(false);
     setFeedback({ tipo: 'ok', msg: 'PDF da lista publicado!' });
@@ -1116,67 +1166,65 @@ function PublicarLista({ pacienteId, nutriId }) {
       </div>
 
       {/* PDF da Lista de Compras */}
-      {historico.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="card-title">PDF da Lista de Compras</div>
-              <div className="card-sub">Complementa a lista estruturada. A paciente poderá abrir o original.</div>
-            </div>
-          </div>
-          <div className="card-body">
-            {historico[0].pdf_path && !substituindoLista ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <i className="ti ti-file-type-pdf" style={{ fontSize: 22, color: '#e05252', flexShrink: 0 }} aria-hidden="true" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {historico[0].pdf_nome}
-                  </div>
-                  {historico[0].pdf_atualizado_em && (
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                      Atualizado em {dataBR(historico[0].pdf_atualizado_em)}
-                    </div>
-                  )}
-                </div>
-                <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }}
-                  onClick={() => abrirPdfLista(historico[0])}>
-                  <i className="ti ti-external-link" aria-hidden="true" /> Abrir
-                </button>
-                <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }}
-                  onClick={() => { setPdfFile(null); setSubstituindoLista(true); }}>
-                  <i className="ti ti-refresh" aria-hidden="true" /> Substituir
-                </button>
-                <button onClick={() => removerPdfLista(historico[0])}
-                  style={{ background: 'none', border: '0.5px solid var(--red)', borderRadius: 6, padding: '4px 8px', color: 'var(--red)', cursor: 'pointer', flexShrink: 0 }}>
-                  <i className="ti ti-trash" aria-hidden="true" />
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <label className="field-label">
-                    {substituindoLista ? 'Novo PDF (substituirá o atual)' : 'Selecionar PDF'}
-                    <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>máx. 10 MB</span>
-                  </label>
-                  <input type="file" accept="application/pdf,.pdf"
-                    onChange={e => setPdfFile(e.target.files?.[0] ?? null)}
-                    style={{ width: '100%' }} />
-                </div>
-                <button className="btn" onClick={() => uploadPdfLista(historico[0])}
-                  disabled={!pdfFile || uploadandoPdf}>
-                  <i className="ti ti-upload" aria-hidden="true" />
-                  {uploadandoPdf ? 'Enviando…' : substituindoLista ? 'Substituir PDF' : 'Enviar PDF'}
-                </button>
-                {substituindoLista && (
-                  <button className="btn-outline" onClick={() => { setPdfFile(null); setSubstituindoLista(false); }}>
-                    Cancelar
-                  </button>
-                )}
-              </div>
-            )}
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <div className="card-title">PDF da Lista de Compras</div>
+            <div className="card-sub">Publique o PDF da lista. A paciente poderá abrir o original.</div>
           </div>
         </div>
-      )}
+        <div className="card-body">
+          {historico[0]?.pdf_path && !substituindoLista ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <i className="ti ti-file-type-pdf" style={{ fontSize: 22, color: '#e05252', flexShrink: 0 }} aria-hidden="true" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {historico[0].pdf_nome}
+                </div>
+                {historico[0].pdf_atualizado_em && (
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                    Atualizado em {dataBR(historico[0].pdf_atualizado_em)}
+                  </div>
+                )}
+              </div>
+              <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }}
+                onClick={() => abrirPdfLista(historico[0])}>
+                <i className="ti ti-external-link" aria-hidden="true" /> Abrir
+              </button>
+              <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }}
+                onClick={() => { setPdfFile(null); setSubstituindoLista(true); }}>
+                <i className="ti ti-refresh" aria-hidden="true" /> Substituir
+              </button>
+              <button onClick={() => removerPdfLista(historico[0])}
+                style={{ background: 'none', border: '0.5px solid var(--red)', borderRadius: 6, padding: '4px 8px', color: 'var(--red)', cursor: 'pointer', flexShrink: 0 }}>
+                <i className="ti ti-trash" aria-hidden="true" />
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <label className="field-label">
+                  {substituindoLista ? 'Novo PDF (substituirá o atual)' : 'Selecionar PDF'}
+                  <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>máx. 10 MB</span>
+                </label>
+                <input type="file" accept="application/pdf,.pdf"
+                  onChange={e => setPdfFile(e.target.files?.[0] ?? null)}
+                  style={{ width: '100%' }} />
+              </div>
+              <button className="btn" onClick={uploadPdfLista}
+                disabled={!pdfFile || uploadandoPdf}>
+                <i className="ti ti-upload" aria-hidden="true" />
+                {uploadandoPdf ? 'Enviando…' : substituindoLista ? 'Substituir PDF' : 'Enviar PDF'}
+              </button>
+              {substituindoLista && (
+                <button className="btn-outline" onClick={() => { setPdfFile(null); setSubstituindoLista(false); }}>
+                  Cancelar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       <HistoricoLista
         titulo="Listas publicadas"
@@ -1186,16 +1234,21 @@ function PublicarLista({ pacienteId, nutriId }) {
           <>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 500 }}>
-                {contarItensLista(l.dados)} itens em {l.dados?.lista?.length ?? 0} categorias
+                {l.dados
+                  ? `${contarItensLista(l.dados)} itens em ${l.dados?.lista?.length ?? 0} categorias`
+                  : 'Lista em PDF'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
                 Publicada em {dataBR(l.publicado_em)}
+                {!l.dados && l.pdf_nome && ` · ${l.pdf_nome}`}
               </div>
             </div>
-            <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px' }}
-              onClick={() => setVerJson(l)}>
-              <i className="ti ti-code" aria-hidden="true"></i> JSON
-            </button>
+            {l.dados && (
+              <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px' }}
+                onClick={() => setVerJson(l)}>
+                <i className="ti ti-code" aria-hidden="true"></i> JSON
+              </button>
+            )}
           </>
         )}
       />

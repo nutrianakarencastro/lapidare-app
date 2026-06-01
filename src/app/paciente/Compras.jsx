@@ -89,7 +89,8 @@ export default function Compras() {
     return <div className="empty-state"><div className="empty-sub">Carregando…</div></div>;
   }
 
-  if (!compras) {
+  // Sem dados e sem PDF: estado realmente vazio
+  if (!compras && !pdfPath) {
     return (
       <div className="empty-state">
         <i className="ti ti-shopping-cart empty-icon" aria-hidden="true"></i>
@@ -101,7 +102,7 @@ export default function Compras() {
     );
   }
 
-  const totalItens = comprasLimpas.lista?.reduce((a, c) => a + (c.itens?.length ?? 0), 0) ?? 0;
+  const totalItens = comprasLimpas?.lista?.reduce((a, c) => a + (c.itens?.length ?? 0), 0) ?? 0;
   const totalMarcados = Object.values(marcados).filter(Boolean).length;
 
   const toggle = (key) => setMarcados(m => ({ ...m, [key]: !m[key] }));
@@ -131,51 +132,56 @@ export default function Compras() {
         </div>
       )}
 
-      <div className="card" style={{ padding: '14px 16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <span style={{ fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 500 }}>
-            Progresso
-          </span>
-          <span className="pill ghost">{totalMarcados}/{totalItens} itens</span>
-        </div>
-        <div className="bar">
-          <i style={{ width: `${totalItens > 0 ? (totalMarcados / totalItens) * 100 : 0}%`, background: 'var(--green)' }}></i>
-        </div>
-      </div>
-
-      {comprasLimpas.lista?.map((cat, ci) => (
-        <div key={ci} className="card" style={{ padding: '12px 16px' }}>
-          <div style={{
-            fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase',
-            color: 'var(--gold-deep)', fontWeight: 500, marginBottom: 8,
-            display: 'flex', alignItems: 'center', gap: 6
-          }}>
-            {cat.emoji && <span>{cat.emoji}</span>}
-            <span>{cat.categoria}</span>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--muted)' }}>{cat.itens?.length ?? 0} itens</span>
+      {/* Progresso e lista — só quando há dados estruturados */}
+      {comprasLimpas && (
+        <>
+          <div className="card" style={{ padding: '14px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 500 }}>
+                Progresso
+              </span>
+              <span className="pill ghost">{totalMarcados}/{totalItens} itens</span>
+            </div>
+            <div className="bar">
+              <i style={{ width: `${totalItens > 0 ? (totalMarcados / totalItens) * 100 : 0}%`, background: 'var(--green)' }}></i>
+            </div>
           </div>
-          {cat.itens?.map((item, ii) => {
-            const key = `${ci}-${ii}`;
-            const done = !!marcados[key];
-            return (
-              <div key={ii} className={`compra-item ${done ? 'done' : ''}`} onClick={() => toggle(key)}>
-                <button className={`check ${done ? 'done' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); toggle(key); }}
-                  aria-label={done ? 'Desmarcar' : 'Marcar'}>
-                  <i className="ti ti-check"></i>
-                </button>
-                <span className="compra-nome">{item}</span>
-              </div>
-            );
-          })}
-        </div>
-      ))}
 
-      {totalMarcados === totalItens && totalItens > 0 && (
-        <div style={{ margin: '0 16px 16px', textAlign: 'center', padding: 16, background: 'var(--green-soft)', borderRadius: 12 }}>
-          <div style={{ fontSize: 20, marginBottom: 4 }}>🎉</div>
-          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--green)' }}>Lista completa!</div>
-        </div>
+          {comprasLimpas.lista?.map((cat, ci) => (
+            <div key={ci} className="card" style={{ padding: '12px 16px' }}>
+              <div style={{
+                fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase',
+                color: 'var(--gold-deep)', fontWeight: 500, marginBottom: 8,
+                display: 'flex', alignItems: 'center', gap: 6
+              }}>
+                {cat.emoji && <span>{cat.emoji}</span>}
+                <span>{cat.categoria}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--muted)' }}>{cat.itens?.length ?? 0} itens</span>
+              </div>
+              {cat.itens?.map((item, ii) => {
+                const key = `${ci}-${ii}`;
+                const done = !!marcados[key];
+                return (
+                  <div key={ii} className={`compra-item ${done ? 'done' : ''}`} onClick={() => toggle(key)}>
+                    <button className={`check ${done ? 'done' : ''}`}
+                      onClick={(e) => { e.stopPropagation(); toggle(key); }}
+                      aria-label={done ? 'Desmarcar' : 'Marcar'}>
+                      <i className="ti ti-check"></i>
+                    </button>
+                    <span className="compra-nome">{item}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
+          {totalMarcados === totalItens && totalItens > 0 && (
+            <div style={{ margin: '0 16px 16px', textAlign: 'center', padding: 16, background: 'var(--green-soft)', borderRadius: 12 }}>
+              <div style={{ fontSize: 20, marginBottom: 4 }}>🎉</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--green)' }}>Lista completa!</div>
+            </div>
+          )}
+        </>
       )}
     </>
   );
