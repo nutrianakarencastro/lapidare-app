@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { useTheme } from '../../lib/theme.jsx';
-import { textoDias, dataConsultaBR, diasAte, linkCall, consultaEmBreve, gerarGoogleCalendarUrl } from '../../lib/utils.js';
+import { textoDias, dataConsultaBR, diasAte, linkCall, consultaEmBreve, gerarGoogleCalendarUrl, dataBR } from '../../lib/utils.js';
 
 export default function Inicio() {
   const tema = useTheme();
@@ -19,6 +19,7 @@ export default function Inicio() {
   const [habitosLogs, setHabitosLogs] = useState({});  // { habito_id: valor }
   const [habitosStreak, setHabitosStreak] = useState(0);
   const [jornada, setJornada] = useState(null);
+  const [feedbackPendente, setFeedbackPendente] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -26,7 +27,7 @@ export default function Inicio() {
       if (!user) return;
       const agora = new Date().toISOString();
       const hoje  = new Date().toISOString().slice(0, 10);
-      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes] = await Promise.all([
+      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
@@ -48,6 +49,13 @@ export default function Inicio() {
           .select('fase, nome_fase, objetivo_fase, consulta_numero, data_inicio_fase, duracao_semanas_prevista, metas_semana, proximo_marco, data_proximo_marco, evolucao_resumida')
           .eq('paciente_id', user.id)
           .maybeSingle(),
+        supabase.from('checkin_envios')
+          .select('id, nome, tipo, feedback, feedback_em, feedback_atualizado_em, feedback_lido_em')
+          .eq('paciente_id', user.id)
+          .not('feedback', 'is', null)
+          .order('feedback_atualizado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
       if (!active) return;
       setPlano(planoRes.data?.dados ?? null);
@@ -64,6 +72,14 @@ export default function Inicio() {
       setHabitos(habitosLista);
       setHabitosLogs(logsHoje);
       setJornada(jornadaRes.data ?? null);
+
+      const fb = feedbackRes.data;
+      const novoFeedback = fb && (
+        !fb.feedback_lido_em ||
+        (fb.feedback_atualizado_em &&
+         new Date(fb.feedback_atualizado_em) > new Date(fb.feedback_lido_em))
+      );
+      setFeedbackPendente(novoFeedback ? fb : null);
 
       // Calcula streak (dias seguidos com todos cumpridos)
       const todosLogs = logsHojeRes.data ?? [];
@@ -170,6 +186,41 @@ export default function Inicio() {
 
   return (
     <>
+      {/* Card de feedback da nutricionista */}
+      {feedbackPendente && (
+        <div
+          onClick={() => navigate(`/paciente/checkin/${feedbackPendente.id}`)}
+          style={{
+            margin: '0 16px 14px', padding: '16px 18px',
+            background: 'linear-gradient(135deg, var(--ink) 0%, #3d2b1a 100%)',
+            borderRadius: 16, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 14,
+          }}>
+          <div style={{
+            width: 46, height: 46, borderRadius: 12, flexShrink: 0,
+            background: 'var(--gold)', color: 'var(--ink)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 22,
+          }}>💌</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
+              color: 'var(--gold)', fontWeight: 600, marginBottom: 3,
+            }}>Novo feedback</div>
+            <div className="serif" style={{ fontSize: 17, color: 'var(--bg-soft)', lineHeight: 1.15, marginBottom: 3 }}>
+              Sua nutricionista deixou um novo feedback para você
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)' }}>
+              {feedbackPendente.feedback_atualizado_em
+                ? dataBR(feedbackPendente.feedback_atualizado_em)
+                : dataBR(feedbackPendente.feedback_em)}
+              {' · '}Toque para ler
+            </div>
+          </div>
+          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--gold)', flexShrink: 0 }} aria-hidden="true" />
+        </div>
+      )}
+
       {/* Aviso de e-books novos */}
       {ebooksNovos > 0 && (
         <div onClick={marcarEbooksComoVistos}

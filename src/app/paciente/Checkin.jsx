@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { respostasIniciais } from '../../lib/checkinDefault.js';
+import { dataBR } from '../../lib/utils.js';
 import CheckinForm from '../../components/CheckinForm.jsx';
 
 export default function Checkin() {
@@ -15,6 +16,17 @@ export default function Checkin() {
   const [erro, setErro] = useState(null);
   const [sucesso, setSucesso] = useState(false);
   const [invalidas, setInvalidas] = useState([]);
+
+  // Marca feedback como lido assim que a paciente abre a tela
+  useEffect(() => {
+    if (!envio?.feedback) return;
+    const precisaMarcar = !envio.feedback_lido_em ||
+      (envio.feedback_atualizado_em &&
+       new Date(envio.feedback_atualizado_em) > new Date(envio.feedback_lido_em));
+    if (precisaMarcar) {
+      supabase.rpc('marcar_feedback_lido', { p_envio_id: envio.id }); // fire-and-forget
+    }
+  }, [envio?.id, envio?.feedback_atualizado_em]);
 
   useEffect(() => {
     let active = true;
@@ -165,6 +177,34 @@ export default function Checkin() {
         disabled={jaRespondido}
         invalidas={invalidas}
       />
+
+      {jaRespondido && envio.feedback && (
+        <div style={{ padding: '4px 20px 28px' }}>
+          <div style={{
+            background: 'linear-gradient(135deg, var(--gold-soft, #fdf8f0), var(--white))',
+            border: '1px solid var(--gold, #c9a96e)',
+            borderRadius: 16, padding: '18px 18px',
+          }}>
+            <div style={{
+              fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
+              color: 'var(--gold-deep)', fontWeight: 600, marginBottom: 4,
+            }}>
+              Feedback da Nutricionista
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 14 }}>
+              {envio.feedback_atualizado_em && envio.feedback_atualizado_em !== envio.feedback_em
+                ? `Atualizado em ${dataBR(envio.feedback_atualizado_em)}`
+                : `Enviado em ${dataBR(envio.feedback_em)}`}
+            </div>
+            <div style={{
+              fontSize: 14, color: 'var(--ink)', lineHeight: 1.75,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {envio.feedback}
+            </div>
+          </div>
+        </div>
+      )}
 
       {!jaRespondido && (
         <div style={{ padding: '16px 20px 40px' }}>

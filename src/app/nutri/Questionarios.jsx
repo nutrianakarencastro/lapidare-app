@@ -23,7 +23,7 @@ export default function Questionarios() {
         .eq('nutri_id', user.id).eq('tipo', 'pre_consulta')
         .order('created_at'),
       supabase.from('checkin_envios')
-        .select('id, paciente_id, perguntas, enviado_em, respondido_em, respostas, nome, tipo, paciente:pacientes(id, nome)')
+        .select('id, paciente_id, perguntas, enviado_em, respondido_em, respostas, nome, tipo, feedback, feedback_em, feedback_atualizado_em, feedback_lido_em, paciente:pacientes(id, nome)')
         .eq('nutri_id', user.id).eq('tipo', 'pre_consulta')
         .order('enviado_em', { ascending: false }),
     ]);
@@ -183,7 +183,7 @@ export default function Questionarios() {
       )}
 
       {verResposta && (
-        <RespostaModal envio={verResposta} onClose={() => setVerResposta(null)} />
+        <RespostaModal envio={verResposta} onClose={() => setVerResposta(null)} onFeedbackSalvo={carregar} />
       )}
 
       {toast && (
@@ -716,9 +716,48 @@ function EditorOpcoes({ opcoes, onChange }) {
 /* ──────────────────────────────────────────────────────────────
    MODAL DE RESPOSTA (com download PDF)
    ────────────────────────────────────────────────────────────── */
-function RespostaModal({ envio, onClose }) {
+function RespostaModal({ envio, onClose, onFeedbackSalvo }) {
   const respostas = envio.respostas ?? {};
   const pacienteNome = envio.paciente?.nome ?? '—';
+
+  // ── Estado do feedback ───────────────────────────────────────
+  const feedbackInicial = envio.feedback ?? '';
+  const [feedbackText, setFeedbackText] = useState(feedbackInicial);
+  const [feedbackEm, setFeedbackEm] = useState(envio.feedback_em ?? null);
+  const [feedbackAtualizadoEm, setFeedbackAtualizadoEm] = useState(envio.feedback_atualizado_em ?? null);
+  const [editando, setEditando] = useState(!envio.feedback);
+  const [salvando, setSalvando] = useState(false);
+  const [erroFeedback, setErroFeedback] = useState(null);
+
+  const statusLeitura = (() => {
+    if (!feedbackEm) return null;
+    if (!envio.feedback_lido_em) return 'nao_lido';
+    const ultimaEdicao = feedbackAtualizadoEm
+      ? new Date(feedbackAtualizadoEm)
+      : new Date(feedbackEm);
+    return ultimaEdicao > new Date(envio.feedback_lido_em)
+      ? 'lido_versao_anterior'
+      : 'lido';
+  })();
+
+  async function salvarFeedback() {
+    if (!feedbackText.trim()) return;
+    setErroFeedback(null);
+    setSalvando(true);
+    const agora = new Date().toISOString();
+    const updates = { feedback: feedbackText.trim(), feedback_atualizado_em: agora };
+    if (!feedbackEm) updates.feedback_em = agora;
+    const { error } = await supabase
+      .from('checkin_envios')
+      .update(updates)
+      .eq('id', envio.id);
+    setSalvando(false);
+    if (error) { setErroFeedback(error.message); return; }
+    if (!feedbackEm) setFeedbackEm(agora);
+    setFeedbackAtualizadoEm(agora);
+    setEditando(false);
+    onFeedbackSalvo?.();
+  }
 
   function baixarPDF() {
     const linhas = (envio.perguntas ?? []).map(p => `
@@ -793,7 +832,94 @@ function RespostaModal({ envio, onClose }) {
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, gap: 8 }}>
+      {/* ── Feedback da Nutricionista ── */}
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: '0.5px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)' }}>
+            Feedback da Nutricionista
+          </div>
+          {feedbackEm && !editando && (
+            <div style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 5 }}>
+              {statusLeitura === 'lido' && (
+                <span style={{ color: 'var(--green)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <i className="ti ti-eye" style={{ fontSize: 12 }} aria-hidden="true" />
+                  Lido em {dataBR(envio.feedback_lido_em)}
+                </span>
+              )}
+              {statusLeitura === 'lido_versao_anterior' && (
+                <span style={{ color: 'var(--orange)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <i className="ti ti-eye-off" style={{ fontSize: 12 }} aria-hidden="true" />
+                  Lido antes da última edição
+                </span>
+              )}
+              {statusLeitura === 'nao_lido' && (
+                <span style={{ color: 'var(--text3)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <i className="ti ti-eye-off" style={{ fontSize: 12 }} aria-hidden="true" />
+                  Não lido
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {editando ? (
+          <>
+            <textarea
+              value={feedbackText}
+              onChange={e => setFeedbackText(e.target.value)}
+              placeholder="Escreva seu feedback para a paciente…"
+              rows={8}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 8,
+                border: '0.5px solid var(--border)', background: 'var(--bg2)',
+                fontSize: 13, fontFamily: 'var(--font-sans)', color: 'var(--dark)',
+                lineHeight: 1.65, resize: 'vertical', minHeight: 120, boxSizing: 'border-box',
+              }}
+            />
+            {erroFeedback && (
+              <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 6 }}>{erroFeedback}</div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              {feedbackEm && (
+                <button className="btn-outline" style={{ flex: 1 }}
+                  onClick={() => { setFeedbackText(feedbackInicial); setEditando(false); }}>
+                  Cancelar
+                </button>
+              )}
+              <button className="btn" style={{ flex: 2 }}
+                onClick={salvarFeedback}
+                disabled={salvando || !feedbackText.trim()}>
+                <i className="ti ti-check" aria-hidden="true" />
+                {salvando ? 'Salvando…' : 'Salvar feedback'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{
+              padding: '12px 14px', borderRadius: 8,
+              background: 'var(--bg2)', border: '0.5px solid var(--border)',
+              fontSize: 13, color: 'var(--dark)', lineHeight: 1.7,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {feedbackText}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                {feedbackAtualizadoEm && feedbackAtualizadoEm !== feedbackEm
+                  ? `Atualizado em ${dataBR(feedbackAtualizadoEm)}`
+                  : `Enviado em ${dataBR(feedbackEm)}`}
+              </div>
+              <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px' }}
+                onClick={() => setEditando(true)}>
+                <i className="ti ti-pencil" aria-hidden="true" /> Editar
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16, gap: 8 }}>
         <button className="btn" onClick={baixarPDF}>
           <i className="ti ti-download" aria-hidden="true"></i> Baixar PDF
         </button>
