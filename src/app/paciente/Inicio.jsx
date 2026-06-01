@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { useTheme } from '../../lib/theme.jsx';
 import { textoDias, dataConsultaBR, diasAte, linkCall, consultaEmBreve, gerarGoogleCalendarUrl, dataBR } from '../../lib/utils.js';
+import { calcularFaseDoCiclo, FASES } from '../../lib/cicloUtils.js';
 
 export default function Inicio() {
   const tema = useTheme();
@@ -20,6 +21,9 @@ export default function Inicio() {
   const [habitosStreak, setHabitosStreak] = useState(0);
   const [jornada, setJornada] = useState(null);
   const [feedbackPendente, setFeedbackPendente] = useState(null);
+  const [cicloPeriodos,   setCicloPeriodos]   = useState([]);
+  const [totalSupl,       setTotalSupl]       = useState(0);
+  const [suplTomados,     setSuplTomados]     = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -27,7 +31,7 @@ export default function Inicio() {
       if (!user) return;
       const agora = new Date().toISOString();
       const hoje  = new Date().toISOString().slice(0, 10);
-      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes] = await Promise.all([
+      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
@@ -56,6 +60,20 @@ export default function Inicio() {
           .order('feedback_atualizado_em', { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase.from('ciclo_periodos')
+          .select('inicio, fim')
+          .eq('paciente_id', user.id)
+          .order('inicio', { ascending: false })
+          .limit(6),
+        supabase.from('suplementos')
+          .select('id', { count: 'exact', head: true })
+          .eq('paciente_id', user.id)
+          .eq('ativo', true),
+        supabase.from('suplementos_logs')
+          .select('id', { count: 'exact', head: true })
+          .eq('paciente_id', user.id)
+          .eq('data', hoje)
+          .eq('tomado', true),
       ]);
       if (!active) return;
       setPlano(planoRes.data?.dados ?? null);
@@ -80,6 +98,9 @@ export default function Inicio() {
          new Date(fb.feedback_atualizado_em) > new Date(fb.feedback_lido_em))
       );
       setFeedbackPendente(novoFeedback ? fb : null);
+      setCicloPeriodos(cicloRes.data ?? []);
+      setTotalSupl(suplRes.count ?? 0);
+      setSuplTomados(suplLogsRes.count ?? 0);
 
       // Calcula streak (dias seguidos com todos cumpridos)
       const todosLogs = logsHojeRes.data ?? [];
@@ -169,6 +190,31 @@ export default function Inicio() {
 
   const habitosCumpridos = habitos.filter(h => cumpriuHabito(h, habitosLogs[h.id])).length;
 
+  // ── Calendário Hoje ──────────────────────────────────────────────
+  const calHoje       = new Date().toISOString().slice(0, 10);
+  const infoCiclo     = cicloPeriodos.length > 0 ? calcularFaseDoCiclo(cicloPeriodos, calHoje) : null;
+  const faseCiclo     = infoCiclo && infoCiclo.fase !== 'desconhecida' ? (FASES[infoCiclo.fase] ?? null) : null;
+
+  const calTotalMetas     = (jornada?.metas_semana ?? []).length;
+  const calMetasConcluidas = (jornada?.metas_semana ?? []).filter(m => m.concluida).length;
+
+  const calDiasConsulta  = proximaConsulta ? diasAte(proximaConsulta.data_hora) : null;
+  const calConsultaProxima = calDiasConsulta !== null && calDiasConsulta <= 7;
+  const calConsultaTexto   = calConsultaProxima
+    ? (calDiasConsulta === 0 ? 'Consulta hoje' : calDiasConsulta === 1 ? 'Consulta amanhã' : `Consulta em ${calDiasConsulta} dias`)
+    : null;
+
+  const calHasTaskItems = habitos.length > 0 || totalSupl > 0 || calTotalMetas > 0;
+  const calTudoEmDia    = calHasTaskItems &&
+    (habitos.length === 0    || habitosCumpridos   === habitos.length) &&
+    (totalSupl === 0         || suplTomados        === totalSupl) &&
+    (calTotalMetas === 0     || calMetasConcluidas === calTotalMetas) &&
+    !checkinPendente && !calConsultaProxima;
+
+  const calTemConteudo = faseCiclo !== null || !!jornada?.objetivo_fase ||
+    habitos.length > 0 || totalSupl > 0 || calTotalMetas > 0 ||
+    !!checkinPendente  || calConsultaProxima;
+
   function semanaAtualDe(dataInicio) {
     if (!dataInicio) return 1;
     const diff = Math.floor((new Date() - new Date(dataInicio + 'T12:00:00')) / 86400000);
@@ -252,6 +298,76 @@ export default function Inicio() {
             </div>
           </div>
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--muted)' }} aria-hidden="true"></i>
+        </div>
+      )}
+
+      {/* ── Seu calendário hoje ── */}
+      {calTemConteudo && (
+        <div style={{
+          margin: '0 16px 14px',
+          background: 'var(--white)',
+          border: '0.5px solid var(--hair)',
+          borderRadius: 16,
+          padding: '14px 16px',
+        }}>
+          <div style={{
+            fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
+            color: 'var(--muted)', fontWeight: 500,
+            marginBottom: jornada?.objetivo_fase ? 8 : 12,
+          }}>
+            Seu calendário hoje
+          </div>
+
+          {jornada?.objetivo_fase && (
+            <div style={{
+              fontSize: 13, color: 'var(--gold-deep)', fontWeight: 500,
+              marginBottom: 12,
+            }}>
+              ✨ Foco atual: {jornada.objetivo_fase}
+            </div>
+          )}
+
+          {calTudoEmDia ? (
+            <div style={{ fontSize: 13, color: 'var(--green)', lineHeight: 1.65 }}>
+              ✨ Tudo em dia por hoje.<br />
+              <span style={{ color: 'var(--muted)', fontWeight: 400 }}>
+                Continue cuidando de você.
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {faseCiclo && (
+                <div style={{ fontSize: 13, color: 'var(--ink)' }}>
+                  {faseCiclo.icone} {faseCiclo.label}{infoCiclo.diaDociclo ? ` · Dia ${infoCiclo.diaDociclo}` : ''}
+                </div>
+              )}
+              {totalSupl > 0 && (
+                <div style={{ fontSize: 13, color: 'var(--ink)' }}>
+                  💊 {suplTomados} de {totalSupl} suplemento{totalSupl !== 1 ? 's' : ''} tomado{suplTomados !== 1 && totalSupl !== 1 ? 's' : ''}
+                </div>
+              )}
+              {habitos.length > 0 && (
+                <div style={{ fontSize: 13, color: 'var(--ink)' }}>
+                  💧 {habitosCumpridos} de {habitos.length} hábito{habitos.length !== 1 ? 's' : ''} realizado{habitosCumpridos !== 1 && habitos.length !== 1 ? 's' : ''}
+                </div>
+              )}
+              {calTotalMetas > 0 && (
+                <div style={{ fontSize: 13, color: 'var(--ink)' }}>
+                  🎯 {calMetasConcluidas} de {calTotalMetas} meta{calTotalMetas !== 1 ? 's' : ''} concluída{calMetasConcluidas !== 1 && calTotalMetas !== 1 ? 's' : ''}
+                </div>
+              )}
+              {checkinPendente && (
+                <div style={{ fontSize: 13, color: 'var(--ink)' }}>
+                  📝 Check-in disponível
+                </div>
+              )}
+              {calConsultaProxima && (
+                <div style={{ fontSize: 13, color: 'var(--ink)' }}>
+                  📅 {calConsultaTexto}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
