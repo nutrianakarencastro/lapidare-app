@@ -8,6 +8,9 @@ export default function Plano() {
   const [plano, setPlano] = useState(undefined); // undefined=loading, null=vazio
   const [validade, setValidade] = useState(null);
   const [openSubs, setOpenSubs] = useState({});
+  const [pdfPath, setPdfPath] = useState(null);
+  const [pdfNome, setPdfNome] = useState(null);
+  const [pdfAtualizadoEm, setPdfAtualizadoEm] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -15,7 +18,7 @@ export default function Plano() {
       if (!user) return;
       const { data } = await supabase
         .from('planos')
-        .select('dados, validade, publicado_em')
+        .select('dados, validade, publicado_em, pdf_path, pdf_nome, pdf_atualizado_em')
         .eq('paciente_id', user.id)
         .order('publicado_em', { ascending: false })
         .limit(1)
@@ -23,10 +26,29 @@ export default function Plano() {
       if (!active) return;
       setPlano(data?.dados ?? null);
       setValidade(data?.validade ?? null);
+      setPdfPath(data?.pdf_path ?? null);
+      setPdfNome(data?.pdf_nome ?? null);
+      setPdfAtualizadoEm(data?.pdf_atualizado_em ?? null);
     }
     load();
     return () => { active = false; };
   }, [user]);
+
+  async function abrirPdf() {
+    // Segurança: path deve pertencer ao próprio paciente
+    if (!pdfPath?.startsWith(user.id + '/')) return;
+    const { data: signed, error } = await supabase.storage
+      .from('planos').createSignedUrl(pdfPath, 120);
+    if (error || !signed?.signedUrl) return;
+    // Abertura mobile-friendly (evita bloqueio de popup em iOS/Android)
+    const a = document.createElement('a');
+    a.href = signed.signedUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 
   const toggleSubs = (key) => setOpenSubs(s => ({ ...s, [key]: !s[key] }));
 
@@ -51,6 +73,29 @@ export default function Plano() {
 
   return (
     <>
+      {/* Botão de PDF da prescrição */}
+      {pdfPath && (
+        <div onClick={abrirPdf} style={{
+          margin: '0 16px 12px', padding: '12px 14px',
+          background: 'var(--white)', border: '0.5px solid var(--hair)',
+          borderRadius: 12, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <i className="ti ti-file-type-pdf" style={{ fontSize: 20, color: '#e05252', flexShrink: 0 }} aria-hidden="true" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
+              Abrir Prescrição Alimentar
+            </div>
+            {pdfAtualizadoEm && (
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                Atualizado em {dataBR(pdfAtualizadoEm)}
+              </div>
+            )}
+          </div>
+          <i className="ti ti-external-link" style={{ fontSize: 15, color: 'var(--muted)', flexShrink: 0 }} aria-hidden="true" />
+        </div>
+      )}
+
       {/* Macros */}
       <div className="card" style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
+import { dataBR } from '../../lib/utils.js';
 
 // Limpa o nome do item: tira quantidade (após "—" ou "-") e parênteses.
 // Retorna null se for um item de substituição (deve ser filtrado).
@@ -42,6 +43,8 @@ export default function Compras() {
   const { user } = useSession();
   const [compras, setCompras] = useState(undefined);
   const [marcados, setMarcados] = useState({});
+  const [pdfPath, setPdfPath] = useState(null);
+  const [pdfAtualizadoEm, setPdfAtualizadoEm] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -49,17 +52,35 @@ export default function Compras() {
       if (!user) return;
       const { data } = await supabase
         .from('listas_compras')
-        .select('dados, publicado_em')
+        .select('dados, publicado_em, pdf_path, pdf_nome, pdf_atualizado_em')
         .eq('paciente_id', user.id)
         .order('publicado_em', { ascending: false })
         .limit(1)
         .maybeSingle();
       if (!active) return;
       setCompras(data?.dados ?? null);
+      setPdfPath(data?.pdf_path ?? null);
+      setPdfAtualizadoEm(data?.pdf_atualizado_em ?? null);
     }
     load();
     return () => { active = false; };
   }, [user]);
+
+  async function abrirPdf() {
+    // Segurança: path deve pertencer ao próprio paciente
+    if (!pdfPath?.startsWith(user.id + '/')) return;
+    const { data: signed, error } = await supabase.storage
+      .from('planos').createSignedUrl(pdfPath, 120);
+    if (error || !signed?.signedUrl) return;
+    // Abertura mobile-friendly (evita bloqueio de popup em iOS/Android)
+    const a = document.createElement('a');
+    a.href = signed.signedUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 
   // Lista limpa: sem quantidades, sem substitutos, sem duplicados.
   const comprasLimpas = useMemo(() => compras ? limparLista(compras) : compras, [compras]);
@@ -87,6 +108,29 @@ export default function Compras() {
 
   return (
     <>
+      {/* Botão de PDF da lista */}
+      {pdfPath && (
+        <div onClick={abrirPdf} style={{
+          margin: '0 16px 12px', padding: '12px 14px',
+          background: 'var(--white)', border: '0.5px solid var(--hair)',
+          borderRadius: 12, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <i className="ti ti-file-type-pdf" style={{ fontSize: 20, color: '#e05252', flexShrink: 0 }} aria-hidden="true" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
+              Abrir Lista de Compras
+            </div>
+            {pdfAtualizadoEm && (
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                Atualizado em {dataBR(pdfAtualizadoEm)}
+              </div>
+            )}
+          </div>
+          <i className="ti ti-external-link" style={{ fontSize: 15, color: 'var(--muted)', flexShrink: 0 }} aria-hidden="true" />
+        </div>
+      )}
+
       <div className="card" style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 500 }}>
