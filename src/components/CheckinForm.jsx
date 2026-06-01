@@ -13,7 +13,7 @@ import '../styles/checkin.css';
  *   onChange:  (id, novoValor) => void
  *   disabled:  bool — modo só-leitura (para a nutri ver respostas)
  */
-export default function CheckinForm({ perguntas, valores, onChange, disabled = false }) {
+export default function CheckinForm({ perguntas, valores, onChange, disabled = false, invalidas = [] }) {
   const secoes = useMemo(() => listarSecoes(perguntas), [perguntas]);
 
   // Numera as perguntas globalmente
@@ -35,6 +35,7 @@ export default function CheckinForm({ perguntas, valores, onChange, disabled = f
                 valor={valores?.[p.id]}
                 onChange={v => onChange?.(p.id, v)}
                 disabled={disabled}
+                invalida={invalidas.includes(p.id)}
               />
             ))}
         </div>
@@ -43,12 +44,21 @@ export default function CheckinForm({ perguntas, valores, onChange, disabled = f
   );
 }
 
-function Pergunta({ pergunta, valor, onChange, disabled }) {
+function Pergunta({ pergunta, valor, onChange, disabled, invalida }) {
   return (
-    <div className="ckg-q">
+    <div
+      className="ckg-q"
+      data-pergunta-id={pergunta.id}
+      style={invalida ? { outline: '2px solid var(--red, #e05252)', outlineOffset: '-2px', borderRadius: 8 } : undefined}
+    >
       <div className="ckg-num">{String(pergunta._num).padStart(2, '0')}</div>
       <div className="ckg-pergunta">{pergunta.pergunta}</div>
       {pergunta.sub && <div className="ckg-sub">{pergunta.sub}</div>}
+      {invalida && (
+        <div style={{ fontSize: 11, color: 'var(--red, #e05252)', fontWeight: 500, marginBottom: 6 }}>
+          Obrigatória — preencha antes de enviar.
+        </div>
+      )}
       {renderTipo(pergunta, valor, onChange, disabled)}
     </div>
   );

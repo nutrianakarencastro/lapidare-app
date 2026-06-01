@@ -14,6 +14,7 @@ export default function Checkin() {
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState(null);
   const [sucesso, setSucesso] = useState(false);
+  const [invalidas, setInvalidas] = useState([]);
 
   useEffect(() => {
     let active = true;
@@ -61,8 +62,36 @@ export default function Checkin() {
 
   const jaRespondido = !!envio.respondido_em;
 
+  function validarRespostas() {
+    const ids = [];
+    for (const p of (envio?.perguntas ?? [])) {
+      if (p.obrigatorio === false) continue;
+      if (p.tipo === 'slider') continue; // slider sempre tem valor numérico
+      const v = respostas[p.id];
+      if (p.tipo === 'texto') {
+        if (v == null || String(v).trim() === '') ids.push(p.id);
+      } else if (p.tipo === 'multi' || p.tipo === 'habitos') {
+        if (!Array.isArray(v) || v.length === 0) ids.push(p.id);
+      } else {
+        // single, emoji_scale
+        if (v == null) ids.push(p.id);
+      }
+    }
+    return ids;
+  }
+
   async function enviar() {
     setErro(null);
+    const ids = validarRespostas();
+    if (ids.length > 0) {
+      setInvalidas(ids);
+      setTimeout(() => {
+        document.querySelector(`[data-pergunta-id="${ids[0]}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+      return;
+    }
+    setInvalidas([]);
     setBusy(true);
     const { error } = await supabase
       .from('checkin_envios')
@@ -129,12 +158,27 @@ export default function Checkin() {
       <CheckinForm
         perguntas={envio.perguntas}
         valores={respostas}
-        onChange={(id, v) => setRespostas(r => ({ ...r, [id]: v }))}
+        onChange={(id, v) => {
+          setRespostas(r => ({ ...r, [id]: v }));
+          setInvalidas(prev => prev.filter(x => x !== id));
+        }}
         disabled={jaRespondido}
+        invalidas={invalidas}
       />
 
       {!jaRespondido && (
         <div style={{ padding: '16px 20px 40px' }}>
+          {invalidas.length > 0 && (
+            <div style={{
+              background: 'var(--red-soft, #fff0f0)', color: 'var(--red, #e05252)',
+              border: '1px solid var(--red, #e05252)',
+              padding: '10px 14px', borderRadius: 8, fontSize: 13,
+              marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <i className="ti ti-alert-circle" style={{ fontSize: 16, flexShrink: 0 }} aria-hidden="true"></i>
+              Existem perguntas sem resposta. Revise antes de enviar.
+            </div>
+          )}
           {erro && (
             <div style={{
               background: 'var(--red-soft)', color: 'var(--red)',
