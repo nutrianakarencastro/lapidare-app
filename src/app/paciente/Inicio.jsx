@@ -775,9 +775,9 @@ export default function Inicio() {
       ) : (
         <div className="card" style={{ padding: '20px 18px', textAlign: 'center' }}>
           <i className="ti ti-sparkles" style={{ fontSize: 28, color: 'var(--gold-deep)', display: 'block', marginBottom: 8 }}></i>
-          <div className="serif" style={{ fontSize: 18, marginBottom: 4 }}>Bem-vinda ao seu app</div>
+          <div className="serif" style={{ fontSize: 18, marginBottom: 4 }}>Bem-vinda ao Útera ✨</div>
           <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-            Sua nutricionista publicará seu plano em breve. Você será notificada!
+            Dra. {nutriNome} publicará sua prescrição em breve. Você será notificada!
           </div>
         </div>
       )}
@@ -787,7 +787,7 @@ export default function Inicio() {
         <div className="card" style={{ margin: 0, padding: '12px 14px', cursor: 'pointer' }} onClick={() => navigate('/paciente/plano')}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
             <i className="ti ti-salad" style={{ fontSize: 14, color: 'var(--green)' }}></i>
-            <span style={{ fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 500 }}>Plano</span>
+            <span style={{ fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 500 }}>Prescrição Alimentar</span>
           </div>
           {plano ? (
             <>
@@ -798,19 +798,15 @@ export default function Inicio() {
                 P {plano.macros?.prot_g}g · C {plano.macros?.cho_g}g · G {plano.macros?.lip_g}g
               </div>
             </>
-          ) : <div style={{ fontSize: 12, color: 'var(--muted)' }}>Aguardando plano</div>}
+          ) : <div style={{ fontSize: 12, color: 'var(--muted)' }}>Aguardando prescrição</div>}
         </div>
 
-        <div className="card" style={{ margin: 0, padding: '12px 14px', cursor: 'pointer' }} onClick={() => navigate('/paciente/compras')}>
+        <div className="card" style={{ margin: 0, padding: '12px 14px', cursor: 'pointer' }} onClick={() => navigate('/paciente/ciclo')}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
-            <i className="ti ti-shopping-cart" style={{ fontSize: 14, color: 'var(--orange)' }}></i>
-            <span style={{ fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 500 }}>Compras</span>
+            <i className="ti ti-moon" style={{ fontSize: 14, color: 'var(--muted)' }}></i>
+            <span style={{ fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 500 }}>Ciclos & Hormônios</span>
           </div>
-          {compras ? (
-            <div className="serif" style={{ fontSize: 22, lineHeight: 1 }}>
-              {totalCompras}<span style={{ fontSize: 13, color: 'var(--muted)', marginLeft: 2 }}>itens</span>
-            </div>
-          ) : <div style={{ fontSize: 12, color: 'var(--muted)' }}>Lista não enviada</div>}
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Ver sua fase atual</div>
         </div>
 
         <div className="card" style={{ margin: 0, padding: '12px 14px', cursor: 'pointer' }} onClick={() => navigate('/paciente/progresso')}>
@@ -821,12 +817,12 @@ export default function Inicio() {
           <div style={{ fontSize: 12, color: 'var(--muted)' }}>Veja sua evolução</div>
         </div>
 
-        <div className="card" style={{ margin: 0, padding: '12px 14px', cursor: 'pointer' }} onClick={() => navigate('/paciente/chat')}>
+        <div className="card" style={{ margin: 0, padding: '12px 14px', cursor: 'pointer' }} onClick={() => navigate('/paciente/suplementos')}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
-            <i className="ti ti-message-circle" style={{ fontSize: 14, color: 'var(--gold-deep)' }}></i>
-            <span style={{ fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 500 }}>Chat</span>
+            <i className="ti ti-pill" style={{ fontSize: 14, color: 'var(--gold-deep)' }}></i>
+            <span style={{ fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 500 }}>Suplementação</span>
           </div>
-          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Falar com a Dra.</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Ver seus suplementos</div>
         </div>
       </div>
     </>
