@@ -348,7 +348,7 @@ export default function Inicio() {
               )}
               {habitos.length > 0 && (
                 <div style={{ fontSize: 13, color: 'var(--ink)' }}>
-                  💧 {habitosCumpridos} de {habitos.length} hábito{habitos.length !== 1 ? 's' : ''} realizado{habitosCumpridos !== 1 && habitos.length !== 1 ? 's' : ''}
+                  💧 {habitosCumpridos} de {habitos.length} hábito{habitos.length !== 1 ? 's' : ''} concluído{habitos.length !== 1 ? 's' : ''}
                 </div>
               )}
               {calTotalMetas > 0 && (
