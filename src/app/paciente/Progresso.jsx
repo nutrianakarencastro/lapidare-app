@@ -34,6 +34,7 @@ export default function Progresso() {
   const { user } = useSession();
   const [registros, setRegistros] = useState(undefined);
   const [metrica, setMetrica] = useState('kg');
+  const [abrindoId, setAbrindoId] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -41,7 +42,7 @@ export default function Progresso() {
       if (!user) return;
       const { data } = await supabase
         .from('peso_registros')
-        .select('id, data, kg, altura_cm, cintura_cm, quadril_cm, braco_cm, coxa_cm, pgc, mm_kg, obs')
+        .select('id, data, kg, altura_cm, cintura_cm, quadril_cm, braco_cm, coxa_cm, pgc, mm_kg, obs, pdf_path, pdf_nome')
         .eq('paciente_id', user.id)
         .order('data', { ascending: true });
       if (!active) return;
@@ -50,6 +51,20 @@ export default function Progresso() {
     load();
     return () => { active = false; };
   }, [user]);
+
+  async function abrirPdfAvaliacao(registro) {
+    if (!registro.pdf_path?.startsWith(user.id + '/')) return;
+    if (abrindoId) return;
+    setAbrindoId(registro.id);
+    // Abre janela antes do await — iOS/Safari bloqueia window.open após operações assíncronas
+    const win = window.open('', '_blank');
+    const { data: signed, error } = await supabase.storage
+      .from('avaliacoes').createSignedUrl(registro.pdf_path, 120);
+    setAbrindoId(null);
+    if (error || !signed?.signedUrl) { win?.close(); return; }
+    if (win) win.location.href = signed.signedUrl;
+    else window.location.href = signed.signedUrl;
+  }
 
   // Métricas disponíveis (com pelo menos 1 valor não-nulo)
   const metricasDisponiveis = useMemo(() => {
@@ -149,6 +164,38 @@ export default function Progresso() {
         </div>
       )}
 
+      {/* Botão PDF da avaliação mais recente */}
+      {(() => {
+        const maisRecente = registros[registros.length - 1];
+        if (!maisRecente?.pdf_path) return null;
+        const carregando = abrindoId === maisRecente.id;
+        return (
+          <div
+            onClick={() => abrirPdfAvaliacao(maisRecente)}
+            style={{
+              margin: '0 16px 12px', padding: '12px 14px',
+              background: 'var(--white)', border: '0.5px solid var(--hair)',
+              borderRadius: 12, cursor: carregando ? 'default' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 10,
+              opacity: carregando ? 0.6 : 1, transition: 'opacity .15s',
+              WebkitTapHighlightColor: 'rgba(0,0,0,0.06)', userSelect: 'none',
+            }}>
+            <i className="ti ti-file-type-pdf" style={{ fontSize: 20, color: '#e05252', flexShrink: 0 }} aria-hidden="true" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
+                {carregando ? 'Abrindo…' : 'Abrir Avaliação 3D'}
+              </div>
+              {maisRecente.pdf_nome && (
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                  {maisRecente.pdf_nome}
+                </div>
+              )}
+            </div>
+            <i className="ti ti-external-link" style={{ fontSize: 15, color: 'var(--muted)', flexShrink: 0 }} aria-hidden="true" />
+          </div>
+        );
+      })()}
+
       {/* Chart */}
       {dadosMetrica.length > 1 ? (
         <div className="card" style={{ padding: '14px 12px 10px' }}>
@@ -214,6 +261,21 @@ export default function Progresso() {
               <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontStyle: 'italic', marginTop: 6 }}>
                 "{r.obs}"
               </div>
+            )}
+            {r.pdf_path && (
+              <button
+                onClick={() => abrirPdfAvaliacao(r)}
+                disabled={!!abrindoId}
+                style={{
+                  marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 5,
+                  background: 'var(--bg-soft)', border: 'none', borderRadius: 8,
+                  padding: '5px 10px', cursor: abrindoId ? 'default' : 'pointer',
+                  fontSize: 11, color: 'var(--ink)', fontFamily: 'var(--font-sans)',
+                  opacity: abrindoId === r.id ? 0.6 : 1,
+                }}>
+                <i className="ti ti-file-type-pdf" style={{ color: '#e05252', fontSize: 13 }} aria-hidden="true" />
+                {abrindoId === r.id ? 'Abrindo…' : 'Abrir Avaliação 3D'}
+              </button>
             )}
           </div>
         ))}

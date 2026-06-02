@@ -540,6 +540,7 @@ function RegistrarAvaliacao({ pacienteId, nutriId }) {
   const [form, setForm] = useState(novaAvaliacao());
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [uploadingId, setUploadingId] = useState(null);
 
   function novaAvaliacao() {
     return {
@@ -552,7 +553,7 @@ function RegistrarAvaliacao({ pacienteId, nutriId }) {
   async function carregar() {
     const { data } = await supabase
       .from('peso_registros')
-      .select('id, data, kg, altura_cm, cintura_cm, quadril_cm, braco_cm, coxa_cm, pgc, mm_kg, obs')
+      .select('id, data, kg, altura_cm, cintura_cm, quadril_cm, braco_cm, coxa_cm, pgc, mm_kg, obs, pdf_path, pdf_nome, pdf_atualizado_em')
       .eq('paciente_id', pacienteId)
       .order('data', { ascending: false });
     setHistorico(data ?? []);
@@ -597,8 +598,49 @@ function RegistrarAvaliacao({ pacienteId, nutriId }) {
 
   async function remover(id) {
     if (!window.confirm('Remover esta avaliação?')) return;
+    const reg = historico.find(h => h.id === id);
+    if (reg?.pdf_path) await supabase.storage.from('avaliacoes').remove([reg.pdf_path]);
     await supabase.from('peso_registros').delete().eq('id', id);
     carregar();
+  }
+
+  async function uploadPdfAvaliacao(registro, file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      setFeedback({ tipo: 'erro', msg: 'Apenas arquivos PDF.' }); return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setFeedback({ tipo: 'erro', msg: 'Tamanho máximo: 10 MB.' }); return;
+    }
+    setUploadingId(registro.id);
+    setFeedback(null);
+    const path = `${pacienteId}/${registro.id}.pdf`;
+    if (registro.pdf_path) {
+      await supabase.storage.from('avaliacoes').remove([registro.pdf_path]);
+    }
+    const { error: upErr } = await supabase.storage.from('avaliacoes').upload(path, file, { upsert: true });
+    if (upErr) { setUploadingId(null); setFeedback({ tipo: 'erro', msg: upErr.message }); return; }
+    const now = new Date().toISOString();
+    const { error: dbErr } = await supabase.from('peso_registros').update({
+      pdf_path: path, pdf_nome: file.name, pdf_atualizado_em: now,
+    }).eq('id', registro.id);
+    setUploadingId(null);
+    if (dbErr) { setFeedback({ tipo: 'erro', msg: dbErr.message }); return; }
+    setFeedback({ tipo: 'ok', msg: 'PDF anexado.' });
+    setHistorico(prev => prev.map(h =>
+      h.id === registro.id ? { ...h, pdf_path: path, pdf_nome: file.name, pdf_atualizado_em: now } : h
+    ));
+  }
+
+  async function removerPdfAvaliacao(registro) {
+    if (!window.confirm('Remover o PDF desta avaliação?')) return;
+    await supabase.storage.from('avaliacoes').remove([registro.pdf_path]);
+    await supabase.from('peso_registros').update({
+      pdf_path: null, pdf_nome: null, pdf_atualizado_em: null,
+    }).eq('id', registro.id);
+    setHistorico(prev => prev.map(h =>
+      h.id === registro.id ? { ...h, pdf_path: null, pdf_nome: null, pdf_atualizado_em: null } : h
+    ));
   }
 
   // IMC calculado em tempo real
@@ -705,6 +747,7 @@ function RegistrarAvaliacao({ pacienteId, nutriId }) {
                 <th>Quadril</th>
                 <th>% gordura</th>
                 <th>M. magra</th>
+                <th>PDF 3D</th>
                 <th></th>
               </tr>
             </thead>
@@ -717,6 +760,31 @@ function RegistrarAvaliacao({ pacienteId, nutriId }) {
                   <td>{a.quadril_cm ? `${a.quadril_cm} cm` : '—'}</td>
                   <td>{a.pgc ? `${a.pgc}%` : '—'}</td>
                   <td>{a.mm_kg ? `${a.mm_kg} kg` : '—'}</td>
+                  <td>
+                    {uploadingId === a.id ? (
+                      <span style={{ fontSize: 11, color: 'var(--text3)' }}>Enviando…</span>
+                    ) : a.pdf_path ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <i className="ti ti-file-type-pdf" style={{ color: '#e05252', fontSize: 13 }} aria-hidden="true" />
+                        <label style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text2)' }}
+                          title={a.pdf_nome}>
+                          subst.
+                          <input type="file" accept="application/pdf,.pdf" style={{ display: 'none' }}
+                            onChange={e => uploadPdfAvaliacao(a, e.target.files[0])} />
+                        </label>
+                        <button onClick={() => removerPdfAvaliacao(a)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', padding: 2, fontSize: 12 }}>
+                          <i className="ti ti-x" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text3)' }}>
+                        + PDF
+                        <input type="file" accept="application/pdf,.pdf" style={{ display: 'none' }}
+                          onChange={e => uploadPdfAvaliacao(a, e.target.files[0])} />
+                      </label>
+                    )}
+                  </td>
                   <td style={{ textAlign: 'right' }}>
                     <button onClick={() => remover(a.id)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', padding: 4 }}
