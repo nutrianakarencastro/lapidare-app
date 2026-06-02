@@ -26,6 +26,7 @@ const MAIS_ITEMS = [
   { path: '/paciente/jornada',     icon: 'route',          label: 'Minha jornada',         sub: 'Fases e evolução' },
   // CHAT DESATIVADO — canal oficial é WhatsApp. Reativar: descomentar linha abaixo e remover o item whatsapp.
   // { path: '/paciente/chat', icon: 'message-circle', label: 'Chat com a Dra.', sub: 'Conversa direta' },
+  { path: '/paciente/exames',      icon: 'flask',          label: 'Exames & Análises',          sub: 'Resultados e avaliações' },
   { href: WHATSAPP_URL,            icon: 'brand-whatsapp', label: 'Falar com a Dra. Ana Karen', sub: 'Abre o WhatsApp' },
 ];
 
@@ -41,6 +42,7 @@ const HEADERS = {
   '/paciente/habitos':      () =>                ({ eyebrow: 'Hábitos do dia',   title: 'Meus hábitos',      subtitle: 'Acompanhe sua rotina' }),
   '/paciente/ciclo':        () =>                ({ eyebrow: 'Saúde hormonal',   title: 'Ciclo & Hormônios',     subtitle: 'Acompanhe seu ciclo menstrual' }),
   '/paciente/jornada':      () =>                ({ eyebrow: 'Minha evolução',   title: 'Minha jornada',         subtitle: 'Fases e marcos do acompanhamento' }),
+  '/paciente/exames':       () =>                ({ eyebrow: 'Saúde & Exames',   title: 'Meus Exames',           subtitle: 'Análises e resultados' }),
   // '/paciente/chat':      (_nome, nutriNome) => ({ eyebrow: 'Conversa', title: nutriNome || 'Sua nutri', subtitle: 'Online' }),
 };
 
@@ -85,7 +87,7 @@ export default function PacienteLayout() {
         {TABS.map(t => {
           const active = t.path
             ? location.pathname === t.path
-            : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/prescricoes', '/paciente/ebooks', '/paciente/ciclo', '/paciente/jornada'].includes(location.pathname);
+            : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/prescricoes', '/paciente/ebooks', '/paciente/ciclo', '/paciente/jornada', '/paciente/exames'].includes(location.pathname);
 
           if (!t.path) {
             return (

@@ -38,9 +38,7 @@ export default function Plano() {
 
   async function abrirPdf() {
     if (abrindoPdf) return;
-    console.log('[abrirPdf] pdfPath:', pdfPath, '| user.id:', user?.id);
     if (!pdfPath?.startsWith(user.id + '/')) {
-      console.warn('[abrirPdf] pdfPath nao pertence ao user. pdfPath:', pdfPath, '| user.id:', user?.id);
       setErroPdf('Não foi possível abrir o PDF. Tente novamente.');
       return;
     }
@@ -51,7 +49,6 @@ export default function Plano() {
     const { data: signed, error } = await supabase.storage
       .from('planos').createSignedUrl(pdfPath, 120);
     setAbrindoPdf(false);
-    console.log('[abrirPdf] signed:', signed, '| error:', error);
     if (error || !signed?.signedUrl) {
       win?.close();
       setErroPdf('Não foi possível abrir o PDF. Tente novamente.');

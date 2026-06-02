@@ -14,6 +14,7 @@ export default function Inicio() {
   const [plano, setPlano] = useState(null);
   const [planoPdfPath, setPlanoPdfPath] = useState(null);
   const [compras, setCompras] = useState(null);
+  const [exameRecente, setExameRecente] = useState(null);
   const [proximaConsulta, setProximaConsulta] = useState(null);
   const [checkinPendente, setCheckinPendente] = useState(null);
   const [ebooksNovos, setEbooksNovos] = useState(0);
@@ -32,7 +33,7 @@ export default function Inicio() {
       if (!user) return;
       const agora = new Date().toISOString();
       const hoje  = new Date().toISOString().slice(0, 10);
-      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes] = await Promise.all([
+      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em, pdf_path')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
@@ -75,6 +76,11 @@ export default function Inicio() {
           .eq('paciente_id', user.id)
           .eq('data', hoje)
           .eq('tomado', true),
+        supabase.from('exames_avaliacoes')
+          .select('id, titulo, atualizado_em, visto_pela_paciente_em')
+          .eq('paciente_id', user.id)
+          .order('data_avaliacao', { ascending: false })
+          .limit(1).maybeSingle(),
       ]);
       if (!active) return;
       setPlano(planoRes.data?.dados ?? null);
@@ -83,6 +89,7 @@ export default function Inicio() {
       setProximaConsulta(consultaRes.data ?? null);
       setCheckinPendente(checkinRes.data ?? null);
       setEbooksNovos(ebooksRes.count ?? 0);
+      setExameRecente(examesRes.data ?? null);
 
       const habitosLista = habitosRes.data ?? [];
       const logsHoje = {};
@@ -302,6 +309,48 @@ export default function Inicio() {
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--muted)' }} aria-hidden="true"></i>
         </div>
       )}
+
+      {/* Card de análise de exames */}
+      {exameRecente && (() => {
+        const nova = !exameRecente.visto_pela_paciente_em ||
+          new Date(exameRecente.atualizado_em) > new Date(exameRecente.visto_pela_paciente_em);
+        return (
+          <div
+            onClick={() => navigate('/paciente/exames')}
+            style={{
+              margin: '0 16px 12px', padding: '14px 16px',
+              background: nova
+                ? 'linear-gradient(135deg, var(--gold-soft, var(--bg-soft)), var(--white))'
+                : 'var(--white)',
+              border: nova ? '0.5px solid var(--gold-deep)' : '0.5px solid var(--hair)',
+              borderRadius: 14, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+              background: nova ? 'var(--gold-deep)' : 'var(--bg-soft)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20,
+            }}>🧪</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
+                color: nova ? 'var(--gold-deep)' : 'var(--muted)',
+                fontWeight: 500, marginBottom: 2,
+              }}>
+                {nova ? 'Nova análise' : 'Resultados de exames'}
+              </div>
+              <div className="serif" style={{ fontSize: 17, lineHeight: 1.1 }}>
+                {exameRecente.titulo || 'Análise de Exames'}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                Toque para ver
+              </div>
+            </div>
+            <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--muted)' }} aria-hidden="true" />
+          </div>
+        );
+      })()}
 
       {/* ── Seu calendário hoje ── */}
       {calTemConteudo && (
