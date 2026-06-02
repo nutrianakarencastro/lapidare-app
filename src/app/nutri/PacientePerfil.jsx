@@ -323,7 +323,8 @@ export default function PacientePerfil() {
           { id: 'compras',     label: 'Compras',      icon: 'shopping-cart' },
           { id: 'suplementacao', label: 'Suplementação', icon: 'pill' },
           { id: 'habitos',       label: 'Hábitos',       icon: 'checklist' },
-          { id: 'prescricoes', label: 'Prescrições',  icon: 'file-text' },
+          // Prescrições desativada — pedidos/resultados → Exames; laudos → futura aba Documentos
+          // { id: 'prescricoes', label: 'Prescrições', icon: 'file-text' },
           { id: 'ebooks',      label: 'E-books',      icon: 'book-2' },
           { id: 'avaliacao',   label: 'Avaliação',    icon: 'ruler-measure' },
           { id: 'checkin',     label: 'Check-in',     icon: 'clipboard-check' },
@@ -358,7 +359,7 @@ export default function PacientePerfil() {
       {tab === 'habitos' && <Habitos pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'plano' && <PublicarPlano pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'compras' && <PublicarLista pacienteId={paciente.id} nutriId={user.id} />}
-      {tab === 'prescricoes' && <EnviarPrescricao pacienteId={paciente.id} nutriId={user.id} />}
+      {/* {tab === 'prescricoes' && <EnviarPrescricao pacienteId={paciente.id} nutriId={user.id} />} */}
       {tab === 'ebooks' && <EbooksDaPaciente pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'avaliacao' && <RegistrarAvaliacao pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'checkin' && <CheckinPersonalizado pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}

@@ -84,7 +84,8 @@ export default function App() {
             <Route path="/paciente/compras" element={<Compras />} />
             <Route path="/paciente/feed" element={<FeedPaciente />} />
             <Route path="/paciente/progresso" element={<Progresso />} />
-            <Route path="/paciente/prescricoes" element={<PrescricoesPaciente />} />
+            {/* Prescrições desativada — pedidos/resultados → Exames; laudos → futura aba Documentos */}
+            {/* <Route path="/paciente/prescricoes" element={<PrescricoesPaciente />} /> */}
             {/* CHAT DESATIVADO — reativar: descomentar linha abaixo */}
             {/* <Route path="/paciente/chat" element={<ChatPaciente />} /> */}
             <Route path="/paciente/ebooks" element={<EbooksPaciente />} />
