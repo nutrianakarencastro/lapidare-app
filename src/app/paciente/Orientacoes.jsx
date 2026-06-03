@@ -21,46 +21,73 @@ export default function OrientacoesPaciente() {
     if (!user) return;
     setErroQuery(null);
 
-    // Query 1: atribuições desta paciente
-    const { data: atData, error: atError } = await supabase
-      .from('orientacoes_pacientes')
-      .select('id, status, visto_pela_paciente_em, atribuido_em, orientacao_id')
-      .eq('paciente_id', user.id)
-      .order('atribuido_em', { ascending: false });
+    console.log('[Orientacoes] user.id:', user.id);
 
-    if (atError) {
-      setErroQuery(atError.message);
+    // RPC SECURITY DEFINER — faz JOIN interno, bypassa RLS ambíguo
+    const { data: rows, error: rpcError } = await supabase
+      .rpc('get_orientacoes_da_paciente');
+
+    console.log('[Orientacoes] rpc rows:', rows);
+    console.log('[Orientacoes] rpc error:', rpcError);
+    console.log('[Orientacoes] primeiro row:', rows?.[0]);
+
+    if (rpcError) {
+      // Fallback: diagnóstico com queries separadas para ajudar no debug
+      console.warn('[Orientacoes] RPC falhou, tentando queries separadas…');
+
+      const { data: atData, error: atError } = await supabase
+        .from('orientacoes_pacientes')
+        .select('id, status, visto_pela_paciente_em, atribuido_em, orientacao_id')
+        .eq('paciente_id', user.id)
+        .order('atribuido_em', { ascending: false });
+
+      console.log('[Orientacoes] assignments:', atData, 'error:', atError);
+
+      const ids = (atData ?? []).map(a => a.orientacao_id);
+      console.log('[Orientacoes] orientacao ids:', ids);
+
+      const { data: orData, error: orError } = await supabase
+        .from('orientacoes')
+        .select('id, titulo')
+        .in('id', ids);
+
+      console.log('[Orientacoes] orData:', orData, 'orError:', orError);
+
+      setErroQuery(rpcError.message);
       setAtribuicoes([]);
       return;
     }
 
-    const assignments = atData ?? [];
-
-    if (assignments.length === 0) {
-      setAtribuicoes([]);
-      return;
-    }
-
-    // Query 2: dados das orientações pelos IDs
-    const ids = assignments.map(a => a.orientacao_id);
-    const { data: orData, error: orError } = await supabase
-      .from('orientacoes')
-      .select('id, titulo, descricao, categoria, subcategoria, tags, thumbnail_path, thumbnail_nome, pdf_path, pdf_nome, video_url, audio_path, audio_nome')
-      .in('id', ids);
-
-    if (orError) {
-      setErroQuery(orError.message);
-      setAtribuicoes([]);
-      return;
-    }
-
-    const orMap = {};
-    for (const o of orData ?? []) orMap[o.id] = o;
-
-    const lista = assignments.map(a => ({
-      ...a,
-      orientacao: orMap[a.orientacao_id] ?? null,
-    }));
+    const lista = (rows ?? []).map(r => {
+      // Guard: ignora linha corrompida sem orientacao_id
+      if (!r.atribuicao_id) {
+        console.warn('[Orientacoes] row sem atribuicao_id ignorada:', r);
+        return null;
+      }
+      return {
+        id:                     r.atribuicao_id,
+        status:                 r.status,
+        visto_pela_paciente_em: r.visto_pela_paciente_em,
+        atribuido_em:           r.atribuido_em,
+        orientacao_id:          r.orientacao_id,
+        // Monta objeto orientacao a partir dos campos planos do RPC
+        orientacao: r.orientacao_id ? {
+          id:             r.orientacao_id,
+          titulo:         r.titulo         ?? null,
+          descricao:      r.descricao      ?? null,
+          categoria:      r.categoria      ?? null,
+          subcategoria:   r.subcategoria   ?? null,
+          tags:           Array.isArray(r.tags) ? r.tags : [],
+          thumbnail_path: r.thumbnail_path ?? null,
+          thumbnail_nome: r.thumbnail_nome ?? null,
+          pdf_path:       r.pdf_path       ?? null,
+          pdf_nome:       r.pdf_nome       ?? null,
+          video_url:      r.video_url      ?? null,
+          audio_path:     r.audio_path     ?? null,
+          audio_nome:     r.audio_nome     ?? null,
+        } : null,
+      };
+    }).filter(Boolean);
 
     setAtribuicoes(lista);
 
@@ -156,7 +183,6 @@ export default function OrientacoesPaciente() {
       {atribuicoes.map(at => {
         const o = at.orientacao;
 
-        // Fallback se o dado da orientação não carregou
         if (!o) return (
           <div key={at.id} style={{
             border: '0.5px solid var(--hair)', borderRadius: 14,
@@ -243,11 +269,11 @@ export default function OrientacoesPaciente() {
             {isAberta && (
               <div style={{ borderTop: '0.5px solid var(--hair)', padding: '14px 14px 16px' }}>
 
-                {o.descricao ? (
+                {o.descricao && (
                   <p style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.55, margin: '0 0 14px' }}>
                     {o.descricao}
                   </p>
-                ) : null}
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
