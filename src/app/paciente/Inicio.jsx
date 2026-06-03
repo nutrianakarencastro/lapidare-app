@@ -18,6 +18,7 @@ export default function Inicio() {
   const [proximaConsulta, setProximaConsulta] = useState(null);
   const [checkinPendente, setCheckinPendente] = useState(null);
   const [ebooksNovos, setEbooksNovos] = useState(0);
+  const [orientacoesNovas, setOrientacoesNovas] = useState(0);
   const [habitos, setHabitos] = useState([]);
   const [habitosLogs, setHabitosLogs] = useState({});  // { habito_id: valor }
   const [habitosStreak, setHabitosStreak] = useState(0);
@@ -33,7 +34,7 @@ export default function Inicio() {
       if (!user) return;
       const agora = new Date().toISOString();
       const hoje  = new Date().toISOString().slice(0, 10);
-      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes] = await Promise.all([
+      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em, pdf_path')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
@@ -81,6 +82,10 @@ export default function Inicio() {
           .eq('paciente_id', user.id)
           .order('data_avaliacao', { ascending: false })
           .limit(1).maybeSingle(),
+        supabase.from('orientacoes_pacientes')
+          .select('id', { count: 'exact', head: true })
+          .eq('paciente_id', user.id)
+          .eq('status', 'nao_visualizada'),
       ]);
       if (!active) return;
       setPlano(planoRes.data?.dados ?? null);
@@ -89,6 +94,7 @@ export default function Inicio() {
       setProximaConsulta(consultaRes.data ?? null);
       setCheckinPendente(checkinRes.data ?? null);
       setEbooksNovos(ebooksRes.count ?? 0);
+      setOrientacoesNovas(orientacoesRes.count ?? 0);
       setExameRecente(examesRes.data ?? null);
 
       const habitosLista = habitosRes.data ?? [];
@@ -307,6 +313,38 @@ export default function Inicio() {
             </div>
           </div>
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--muted)' }} aria-hidden="true"></i>
+        </div>
+      )}
+
+      {/* Card de orientações novas */}
+      {orientacoesNovas > 0 && (
+        <div onClick={() => navigate('/paciente/orientacoes')}
+          style={{
+            margin: '0 16px 12px', padding: '14px 16px',
+            background: 'linear-gradient(135deg, var(--gold-soft, var(--bg-soft)), var(--white))',
+            border: '0.5px solid var(--gold-deep)',
+            borderRadius: 14, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 10,
+            background: 'var(--gold-deep)', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 20, flexShrink: 0,
+          }}>📋</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
+              color: 'var(--gold-deep)', fontWeight: 500, marginBottom: 2,
+            }}>Nova orientação</div>
+            <div className="serif" style={{ fontSize: 17, lineHeight: 1.1 }}>
+              {orientacoesNovas === 1
+                ? 'Você tem 1 orientação nova'
+                : `Você tem ${orientacoesNovas} orientações novas`}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Toque para ver</div>
+          </div>
+          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--muted)' }} aria-hidden="true" />
         </div>
       )}
 

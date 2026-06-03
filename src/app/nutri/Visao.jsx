@@ -24,6 +24,10 @@ export default function Visao() {
   const [checkinsPendentes, setCheckinsPendentes] = useState([]);
   const [planosTerminando, setPlanosTerminando] = useState([]);
   const [alertasRelacionais, setAlertasRelacionais] = useState([]);
+  const [orientacoesTotal,      setOrientacoesTotal]      = useState(0);
+  const [orientacoesAtribuidas, setOrientacoesAtribuidas] = useState(0);
+  const [orientacoesNaoVistas,  setOrientacoesNaoVistas]  = useState(0);
+  const [orientacoesConcluidas, setOrientacoesConcluidas] = useState(0);
   const [receitaMes, setReceitaMes] = useState(0);
   const [metaMensal, setMetaMensal] = useState(null);
   const [ocultarMeta, setOcultarMeta] = useState(() => {
@@ -60,6 +64,7 @@ export default function Visao() {
         pacRes, agSemanaRes, parcRes, checkRes,
         parcelasMesRes, allConsultasRes, nutriRes,
         msgRes, feedRes, supRes, supLogRes,
+        orientTotalRes, orientAssignRes,
       ] = await Promise.all([
         // pacientes ativas (com nascimento pra aniversário)
         supabase.from('pacientes').select('id, nome, tipo_plano, nascimento').eq('nutri_id', user.id),
@@ -101,6 +106,12 @@ export default function Visao() {
         // logs de suplemento últimos 7 dias
         supabase.from('suplementos_logs').select('suplemento_id, paciente_id, data, tomado')
           .gte('data', dias7atras),
+        // orientações criadas (ativas)
+        supabase.from('orientacoes').select('id', { count: 'exact', head: true })
+          .eq('nutri_id', user.id).eq('ativo', true),
+        // status das atribuições
+        supabase.from('orientacoes_pacientes').select('status')
+          .eq('nutri_id', user.id),
       ]);
 
       if (!active) return;
@@ -232,6 +243,12 @@ export default function Visao() {
       }
       alertas.sort((a, b) => a.prioridade - b.prioridade);
       setAlertasRelacionais(alertas);
+
+      setOrientacoesTotal(orientTotalRes.count ?? 0);
+      const assigns = orientAssignRes.data ?? [];
+      setOrientacoesAtribuidas(assigns.length);
+      setOrientacoesNaoVistas(assigns.filter(a => a.status === 'nao_visualizada').length);
+      setOrientacoesConcluidas(assigns.filter(a => a.status === 'concluida').length);
 
       setCarregando(false);
     }
@@ -397,6 +414,27 @@ export default function Visao() {
             sub: `${brl(p.valor)} · venc. ${dataBR(p.vencimento)}${statusParcela(p) === 'atrasado' ? ' ⚠️' : ''}`,
           }))}
           onClick={() => navigate('/nutri/financeiro')}
+        />
+
+        <NotifCard
+          icon="notebook"
+          color="var(--gold-deep, #a08456)"
+          titulo="Orientações"
+          count={orientacoesNaoVistas}
+          descricao={
+            orientacoesTotal === 0
+              ? 'Nenhuma criada ainda'
+              : orientacoesNaoVistas === 0
+                ? 'Tudo visualizado ✓'
+                : `${orientacoesNaoVistas} aguardam visualização`
+          }
+          itens={orientacoesTotal > 0 ? [
+            {
+              label: `${orientacoesTotal} criada${orientacoesTotal === 1 ? '' : 's'}`,
+              sub: `${orientacoesAtribuidas} atribuída${orientacoesAtribuidas === 1 ? '' : 's'} · ${orientacoesConcluidas} concluída${orientacoesConcluidas === 1 ? '' : 's'}`,
+            },
+          ] : []}
+          onClick={() => navigate('/nutri/biblioteca')}
         />
 
         <NotifCard

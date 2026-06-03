@@ -42,6 +42,7 @@ import HabitosPaciente from './app/paciente/Habitos.jsx';
 import CicloPaciente from './app/paciente/Ciclo.jsx';
 import JornadaPaciente from './app/paciente/Jornada.jsx';
 import ExamesPaciente from './app/paciente/Exames.jsx';
+import OrientacoesPaciente from './app/paciente/Orientacoes.jsx';
 
 export default function App() {
   return (
@@ -95,6 +96,7 @@ export default function App() {
             <Route path="/paciente/ciclo" element={<CicloPaciente />} />
             <Route path="/paciente/jornada" element={<JornadaPaciente />} />
             <Route path="/paciente/exames" element={<ExamesPaciente />} />
+            <Route path="/paciente/orientacoes" element={<OrientacoesPaciente />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
