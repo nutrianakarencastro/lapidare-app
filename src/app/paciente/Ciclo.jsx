@@ -311,6 +311,12 @@ function Calendario({ periodos, sintomas, onDiaTocado, situacaoCiclo = 'menstrua
 
 // ─── Modal de dia ─────────────────────────────────────────────────────────────
 
+const TIPO_SANGRAMENTO_OPS = [
+  { v: 'nao',         label: '✗ Sem sangramento' },
+  { v: 'escape',      label: '💧 Escape'          },
+  { v: 'menstruacao', label: '🩸 Menstruação'     },
+];
+
 const COR_SANGUE_OPS    = [
   { v: 'rosado',          label: '🩷 Rosado'           },
   { v: 'vermelho_vivo',   label: '🔴 Vermelho vivo'    },
@@ -335,9 +341,40 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
   const hoje = isoHoje();
   const ePeriodo = isDiaPeriodo(periodos, dia);
   const [busy, setBusy] = useState(false);
+
+  // step 1 após marcar início: detalhes do período (ciclo_periodos)
   const [novoPeridoId, setNovoPeridoId] = useState(null);
   const [detalhes, setDetalhes] = useState({ cor_sangue: '', intensidade_fluxo: '', coagulos: 'nao', escape_pre: false, notas_periodo: '' });
   const [salvandoDetalhes, setSalvandoDetalhes] = useState(false);
+
+  // step: sangramento diário (ciclo_sintomas_diarios)
+  const [mostrarSangramento, setMostrarSangramento] = useState(false);
+  const [tipoSang, setTipoSang] = useState(sintomaDia?.sangramento_dia ?? '');
+  const [detSang, setDetSang] = useState({
+    cor_sangue_dia:        sintomaDia?.cor_sangue_dia        ?? '',
+    intensidade_fluxo_dia: sintomaDia?.intensidade_fluxo_dia ?? '',
+    coagulos_dia:          sintomaDia?.coagulos_dia          ?? 'nao',
+    absorventes_dia:       sintomaDia?.absorventes_dia       ?? null,
+    notas_sangramento_dia: sintomaDia?.notas_sangramento_dia ?? '',
+  });
+  const [salvandoSang, setSalvandoSang] = useState(false);
+  const setDS = (k, v) => setDetSang(d => ({ ...d, [k]: v }));
+
+  async function salvarSangramento() {
+    setSalvandoSang(true);
+    const tipo = tipoSang || 'nao';
+    const payload = { paciente_id: pacienteId, data: dia, sangramento_dia: tipo };
+    if (tipo !== 'nao') {
+      if (detSang.cor_sangue_dia)        payload.cor_sangue_dia        = detSang.cor_sangue_dia;
+      if (detSang.intensidade_fluxo_dia) payload.intensidade_fluxo_dia = detSang.intensidade_fluxo_dia;
+      payload.coagulos_dia = detSang.coagulos_dia;
+      if (detSang.absorventes_dia !== null) payload.absorventes_dia = detSang.absorventes_dia;
+      if (detSang.notas_sangramento_dia) payload.notas_sangramento_dia = detSang.notas_sangramento_dia;
+    }
+    await supabase.from('ciclo_sintomas_diarios').upsert(payload, { onConflict: 'paciente_id,data' });
+    setSalvandoSang(false);
+    onSalvarPeriodo();
+  }
 
   const periodoExistente = periodos.find(p => {
     const ini = new Date(p.inicio + 'T12:00:00');
@@ -420,7 +457,79 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
           <div style={{ marginBottom: 14 }} />
         )}
 
-        {novoPeridoId ? (
+        {mostrarSangramento ? (
+          /* ── Sangramento diário (qualquer dia) ── */
+          <div>
+            <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, marginBottom: 12 }}>
+              Sangramento do dia
+            </div>
+
+            <FL>Como foi hoje?</FL>
+            <GrupoOpcoes valor={tipoSang} opcoes={TIPO_SANGRAMENTO_OPS}
+              onChange={v => setTipoSang(v)} cols={3} />
+
+            {['escape', 'menstruacao'].includes(tipoSang) && (
+              <>
+                <FL>Cor do sangue</FL>
+                <GrupoOpcoes valor={detSang.cor_sangue_dia} opcoes={COR_SANGUE_OPS}
+                  onChange={v => setDS('cor_sangue_dia', v)} cols={2} />
+
+                <FL>Intensidade do fluxo</FL>
+                <GrupoOpcoes valor={detSang.intensidade_fluxo_dia} opcoes={INTENSIDADE_OPS}
+                  onChange={v => setDS('intensidade_fluxo_dia', v)} cols={4} />
+
+                <FL>Coágulos</FL>
+                <GrupoOpcoes valor={detSang.coagulos_dia} opcoes={COAGULOS_OPS}
+                  onChange={v => setDS('coagulos_dia', v)} cols={4} />
+
+                <FL>Absorventes / trocas no dia</FL>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button onClick={() => setDS('absorventes_dia', Math.max(0, (detSang.absorventes_dia ?? 0) - 1))}
+                    style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-soft)', border: '0.5px solid var(--hair)', cursor: 'pointer', fontSize: 16 }}>−</button>
+                  <span style={{ minWidth: 32, textAlign: 'center', fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>
+                    {detSang.absorventes_dia ?? 0}
+                  </span>
+                  <button onClick={() => setDS('absorventes_dia', (detSang.absorventes_dia ?? 0) + 1)}
+                    style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-soft)', border: '0.5px solid var(--hair)', cursor: 'pointer', fontSize: 16 }}>+</button>
+                </div>
+
+                <FL>Observações</FL>
+                <textarea
+                  value={detSang.notas_sangramento_dia}
+                  onChange={e => setDS('notas_sangramento_dia', e.target.value)}
+                  placeholder="Cólica, odor, sensação…"
+                  rows={2}
+                  style={{ ...inputSt, resize: 'vertical', marginTop: 4 }}
+                />
+              </>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button onClick={() => setMostrarSangramento(false)}
+                style={{
+                  flex: 1, padding: '11px 0', borderRadius: 11,
+                  background: 'var(--bg-soft)', color: 'var(--muted)',
+                  border: '0.5px solid var(--hair)', fontSize: 13, fontWeight: 500,
+                  cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                }}>
+                Voltar
+              </button>
+              <button onClick={salvarSangramento} disabled={salvandoSang || !tipoSang}
+                style={{
+                  flex: 2, padding: '11px 0', borderRadius: 11,
+                  background: (salvandoSang || !tipoSang) ? 'var(--muted-2)' : 'var(--ink)',
+                  color: 'var(--bg-soft)', border: 'none',
+                  fontSize: 13, fontWeight: 500,
+                  cursor: (salvandoSang || !tipoSang) ? 'default' : 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}>
+                <i className="ti ti-check" aria-hidden="true" />
+                {salvandoSang ? 'Salvando…' : 'Salvar sangramento'}
+              </button>
+            </div>
+          </div>
+        ) : novoPeridoId ? (
           /* ── Detalhes do sangramento (passo 2, opcional) ── */
           <div>
             <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, marginBottom: 12 }}>
@@ -501,6 +610,17 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
             )}
             {!futuro && (
               <BotaoSheet
+                icon="droplet-half-2"
+                label={sintomaDia?.sangramento_dia ? 'Editar sangramento do dia' : 'Registrar sangramento do dia'}
+                sub={sintomaDia?.sangramento_dia
+                  ? `Registrado: ${TIPO_SANGRAMENTO_OPS.find(o => o.v === sintomaDia.sangramento_dia)?.label ?? sintomaDia.sangramento_dia}`
+                  : 'Escape, menstruação, coágulos, absorventes'}
+                onClick={() => setMostrarSangramento(true)}
+                cor="#c4616e"
+              />
+            )}
+            {!futuro && (
+              <BotaoSheet
                 icon="clipboard-list" label={sintomaDia ? 'Editar sintomas do dia' : 'Registrar sintomas do dia'}
                 sub={sintomaDia ? 'Já existe um registro para este dia' : 'Humor, energia, dores e mais'}
                 onClick={() => onAbrirSintomas(dia)}
@@ -564,7 +684,9 @@ function novoSintoma() {
     fluxo_muito_maior: false, fluxo_muito_menor: false,
     secura_vaginal: false, palpitacoes: false, queda_cabelo: false,
     insonia: false, acorda_madrugada: false,
-    absorventes_dia: null,
+    sangramento_dia: '', cor_sangue_dia: '',
+    intensidade_fluxo_dia: '', coagulos_dia: 'nao',
+    absorventes_dia: null, notas_sangramento_dia: '',
     muco_cervical: '',
     notas: '',
   };
@@ -649,6 +771,52 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
         <FL>Libido</FL>
         <Escala5 valor={form.libido} onChange={v => sv('libido', v)} emojis={['Sem','Baixa','Média','Alta','Muita']} />
 
+        <SL>Sangramento do dia</SL>
+        <FL>Como foi hoje?</FL>
+        <GrupoOpcoes valor={form.sangramento_dia} opcoes={TIPO_SANGRAMENTO_OPS}
+          onChange={v => sv('sangramento_dia', v)} cols={3} />
+
+        {['escape', 'menstruacao'].includes(form.sangramento_dia) && (
+          <>
+            <FL>Cor do sangue</FL>
+            <GrupoOpcoes valor={form.cor_sangue_dia} opcoes={COR_SANGUE_OPS}
+              onChange={v => sv('cor_sangue_dia', v)} cols={2} />
+
+            <FL>Intensidade do fluxo</FL>
+            <GrupoOpcoes valor={form.intensidade_fluxo_dia} opcoes={INTENSIDADE_OPS}
+              onChange={v => sv('intensidade_fluxo_dia', v)} cols={4} />
+
+            <FL>Coágulos</FL>
+            <GrupoOpcoes valor={form.coagulos_dia} opcoes={COAGULOS_OPS}
+              onChange={v => sv('coagulos_dia', v)} cols={4} />
+
+            <FL>Absorventes / trocas no dia</FL>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={() => sv('absorventes_dia', Math.max(0, (form.absorventes_dia ?? 0) - 1))}
+                style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-soft)', border: '0.5px solid var(--hair)', cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font-sans)' }}>−</button>
+              <span style={{ minWidth: 40, textAlign: 'center', fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>
+                {form.absorventes_dia ?? 0}
+              </span>
+              <button onClick={() => sv('absorventes_dia', (form.absorventes_dia ?? 0) + 1)}
+                style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-soft)', border: '0.5px solid var(--hair)', cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font-sans)' }}>+</button>
+              <span style={{ fontSize: 11, color: 'var(--muted)' }}>trocas</span>
+              {(form.absorventes_dia ?? 0) > 0 && (
+                <button onClick={() => sv('absorventes_dia', null)}
+                  style={{ fontSize: 11, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>limpar</button>
+              )}
+            </div>
+
+            <FL>Observações do sangramento</FL>
+            <textarea
+              value={form.notas_sangramento_dia}
+              onChange={e => sv('notas_sangramento_dia', e.target.value)}
+              placeholder="Cólica, odor, sensação, momento do dia…"
+              rows={2}
+              style={{ ...inputSt, resize: 'vertical', minHeight: 48, lineHeight: 1.5 }}
+            />
+          </>
+        )}
+
         <SL>Físico</SL>
         <FL>Dor pélvica / cólica</FL>
         <Escala3 valor={form.dor_pelvica} onChange={v => sv('dor_pelvica', v)} />
@@ -688,21 +856,6 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
           <BtnToggle ativo={form.queda_cabelo}     onClick={() => tog('queda_cabelo')}     label="Queda de cabelo notada hoje"       icon="scissors" />
         </div>
 
-        <FL>Absorventes trocados hoje (só se estiver menstruada)</FL>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => sv('absorventes_dia', Math.max(0, (form.absorventes_dia ?? 0) - 1))}
-            style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-soft)', border: '0.5px solid var(--hair)', cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font-sans)' }}>−</button>
-          <span style={{ minWidth: 40, textAlign: 'center', fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>
-            {form.absorventes_dia ?? 0}
-          </span>
-          <button onClick={() => sv('absorventes_dia', (form.absorventes_dia ?? 0) + 1)}
-            style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-soft)', border: '0.5px solid var(--hair)', cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font-sans)' }}>+</button>
-          <span style={{ fontSize: 11, color: 'var(--muted)' }}>trocas</span>
-          {(form.absorventes_dia ?? 0) > 0 && (
-            <button onClick={() => sv('absorventes_dia', null)}
-              style={{ fontSize: 11, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>limpar</button>
-          )}
-        </div>
 
         <SL>Digestivo &amp; emocional</SL>
         <FL>Intestino</FL>
