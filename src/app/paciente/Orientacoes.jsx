@@ -3,14 +3,15 @@ import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 
 const STATUS_CFG = {
-  nao_visualizada: { label: 'Novo',      bg: 'var(--gold)',   color: 'var(--ink)'  },
+  nao_visualizada: { label: 'Novo',      bg: 'var(--gold)',              color: 'var(--ink)'   },
   visualizada:     { label: 'Visto',     bg: 'var(--bg-soft, #f3f4f6)', color: 'var(--muted)' },
-  concluida:       { label: 'Concluído', bg: '#dcfce7',       color: '#166534'     },
+  concluida:       { label: 'Concluído', bg: '#dcfce7',                  color: '#166534'      },
 };
 
 export default function OrientacoesPaciente() {
   const { user } = useSession();
-  const [atribuicoes, setAtribuicoes] = useState(null);
+  const [atribuicoes, setAtribuicoes] = useState(null);   // null = carregando
+  const [erroQuery,   setErroQuery]   = useState(null);
   const [abertaId,    setAbertaId]    = useState(null);
   const [pdfUrls,     setPdfUrls]     = useState({});
   const [audioUrls,   setAudioUrls]   = useState({});
@@ -18,31 +19,62 @@ export default function OrientacoesPaciente() {
 
   async function carregar() {
     if (!user) return;
-    const { data } = await supabase
+    setErroQuery(null);
+
+    // Query 1: atribuições desta paciente
+    const { data: atData, error: atError } = await supabase
       .from('orientacoes_pacientes')
-      .select(`
-        id, status, visto_pela_paciente_em, atribuido_em,
-        orientacoes (
-          id, titulo, descricao, categoria, subcategoria, tags,
-          thumbnail_path, thumbnail_nome,
-          pdf_path, pdf_nome, video_url, audio_path, audio_nome
-        )
-      `)
+      .select('id, status, visto_pela_paciente_em, atribuido_em, orientacao_id')
       .eq('paciente_id', user.id)
       .order('atribuido_em', { ascending: false });
 
-    const lista = data ?? [];
+    if (atError) {
+      setErroQuery(atError.message);
+      setAtribuicoes([]);
+      return;
+    }
+
+    const assignments = atData ?? [];
+
+    if (assignments.length === 0) {
+      setAtribuicoes([]);
+      return;
+    }
+
+    // Query 2: dados das orientações pelos IDs
+    const ids = assignments.map(a => a.orientacao_id);
+    const { data: orData, error: orError } = await supabase
+      .from('orientacoes')
+      .select('id, titulo, descricao, categoria, subcategoria, tags, thumbnail_path, thumbnail_nome, pdf_path, pdf_nome, video_url, audio_path, audio_nome')
+      .in('id', ids);
+
+    if (orError) {
+      setErroQuery(orError.message);
+      setAtribuicoes([]);
+      return;
+    }
+
+    const orMap = {};
+    for (const o of orData ?? []) orMap[o.id] = o;
+
+    const lista = assignments.map(a => ({
+      ...a,
+      orientacao: orMap[a.orientacao_id] ?? null,
+    }));
+
     setAtribuicoes(lista);
 
+    // Signed URLs para thumbnails (batch)
     const thumbPaths = lista
-      .filter(a => a.orientacoes?.thumbnail_path)
-      .map(a => a.orientacoes.thumbnail_path);
+      .filter(a => a.orientacao?.thumbnail_path)
+      .map(a => a.orientacao.thumbnail_path);
+
     if (thumbPaths.length > 0) {
       const { data: signed } = await supabase.storage
         .from('orientacoes').createSignedUrls(thumbPaths, 300);
       const map = {};
       for (const s of signed ?? []) {
-        const a = lista.find(x => x.orientacoes?.thumbnail_path === s.path);
+        const a = lista.find(x => x.orientacao?.thumbnail_path === s.path);
         if (a && s.signedUrl) map[a.id] = s.signedUrl;
       }
       setThumbUrls(map);
@@ -56,6 +88,7 @@ export default function OrientacoesPaciente() {
     setAbertaId(novaAberta);
     if (!novaAberta) return;
 
+    // Marcar como visualizada via RPC
     if (at.status === 'nao_visualizada') {
       await supabase.rpc('marcar_orientacao_vista', { p_atribuicao_id: at.id });
       setAtribuicoes(prev => prev.map(a =>
@@ -65,15 +98,18 @@ export default function OrientacoesPaciente() {
       ));
     }
 
-    if (at.orientacoes?.pdf_path && !pdfUrls[at.id]) {
+    const o = at.orientacao;
+    if (!o) return;
+
+    if (o.pdf_path && !pdfUrls[at.id]) {
       const { data } = await supabase.storage
-        .from('orientacoes').createSignedUrl(at.orientacoes.pdf_path, 300);
+        .from('orientacoes').createSignedUrl(o.pdf_path, 300);
       if (data?.signedUrl) setPdfUrls(prev => ({ ...prev, [at.id]: data.signedUrl }));
     }
 
-    if (at.orientacoes?.audio_path && !audioUrls[at.id]) {
+    if (o.audio_path && !audioUrls[at.id]) {
       const { data } = await supabase.storage
-        .from('orientacoes').createSignedUrl(at.orientacoes.audio_path, 300);
+        .from('orientacoes').createSignedUrl(o.audio_path, 300);
       if (data?.signedUrl) setAudioUrls(prev => ({ ...prev, [at.id]: data.signedUrl }));
     }
   }
@@ -89,8 +125,20 @@ export default function OrientacoesPaciente() {
     });
   }
 
+  // ── Estados da tela ──────────────────────────────────────────
+
   if (atribuicoes === null)
     return <div className="card empty-card"><div className="empty-sub">Carregando…</div></div>;
+
+  if (erroQuery)
+    return (
+      <div className="card empty-card">
+        <i className="ti ti-alert-circle empty-icon" style={{ color: 'var(--red)' }} aria-hidden="true" />
+        <div className="empty-title">Não foi possível carregar</div>
+        <div className="empty-sub">{erroQuery}</div>
+        <button className="btn" onClick={carregar} style={{ marginTop: 12 }}>Tentar novamente</button>
+      </div>
+    );
 
   if (atribuicoes.length === 0)
     return (
@@ -101,14 +149,27 @@ export default function OrientacoesPaciente() {
       </div>
     );
 
+  // ── Lista ────────────────────────────────────────────────────
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 16 }}>
       {atribuicoes.map(at => {
-        const o      = at.orientacoes;
-        if (!o) return null;
+        const o = at.orientacao;
+
+        // Fallback se o dado da orientação não carregou
+        if (!o) return (
+          <div key={at.id} style={{
+            border: '0.5px solid var(--hair)', borderRadius: 14,
+            padding: '14px', fontSize: 13, color: 'var(--muted)',
+          }}>
+            Conteúdo indisponível no momento.
+          </div>
+        );
+
         const isAberta = abertaId === at.id;
         const isNova   = at.status === 'nao_visualizada';
         const cfg      = STATUS_CFG[at.status] ?? STATUS_CFG.visualizada;
+        const tags     = Array.isArray(o.tags) ? o.tags : [];
 
         return (
           <div key={at.id} style={{
@@ -119,15 +180,16 @@ export default function OrientacoesPaciente() {
               : 'var(--white)',
           }}>
 
-            {/* Header */}
+            {/* ── Header clicável ── */}
             <button onClick={() => abrirFechar(at)}
               style={{
-                display: 'flex', gap: 12, padding: '14px 14px',
+                display: 'flex', gap: 12, padding: '14px',
                 background: 'none', border: 'none', cursor: 'pointer',
                 width: '100%', textAlign: 'left', fontFamily: 'var(--font-sans)',
                 alignItems: 'flex-start',
               }}>
 
+              {/* Thumbnail */}
               <div style={{
                 width: 52, height: 52, borderRadius: 10, flexShrink: 0,
                 overflow: 'hidden', background: 'var(--bg-soft)',
@@ -144,7 +206,7 @@ export default function OrientacoesPaciente() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 3 }}>
                   <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink)', lineHeight: 1.2 }}>
-                    {o.titulo}
+                    {o.titulo ?? 'Sem título'}
                   </span>
                   {isNova && (
                     <span style={{
@@ -177,18 +239,19 @@ export default function OrientacoesPaciente() {
                 aria-hidden="true" />
             </button>
 
-            {/* Conteúdo expandido */}
+            {/* ── Conteúdo expandido ── */}
             {isAberta && (
               <div style={{ borderTop: '0.5px solid var(--hair)', padding: '14px 14px 16px' }}>
 
-                {o.descricao && (
+                {o.descricao ? (
                   <p style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.55, margin: '0 0 14px' }}>
                     {o.descricao}
                   </p>
-                )}
+                ) : null}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
+                  {/* PDF */}
                   {o.pdf_path && (
                     pdfUrls[at.id] ? (
                       <a href={pdfUrls[at.id]} target="_blank" rel="noreferrer"
@@ -217,6 +280,7 @@ export default function OrientacoesPaciente() {
                     )
                   )}
 
+                  {/* Vídeo */}
                   {o.video_url && (
                     <a href={o.video_url} target="_blank" rel="noreferrer"
                       style={{
@@ -241,6 +305,7 @@ export default function OrientacoesPaciente() {
                     </a>
                   )}
 
+                  {/* Áudio */}
                   {o.audio_path && (
                     audioUrls[at.id] ? (
                       <div style={{
@@ -267,9 +332,10 @@ export default function OrientacoesPaciente() {
                   )}
                 </div>
 
-                {o.tags && o.tags.length > 0 && (
+                {/* Tags */}
+                {tags.length > 0 && (
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 14 }}>
-                    {o.tags.map(tag => (
+                    {tags.map(tag => (
                       <span key={tag} style={{
                         fontSize: 10, padding: '2px 8px', borderRadius: 99,
                         background: 'var(--bg-soft)', color: 'var(--muted)',
@@ -279,6 +345,7 @@ export default function OrientacoesPaciente() {
                   </div>
                 )}
 
+                {/* Botão concluída */}
                 <button onClick={() => toggleConcluida(at)}
                   style={{
                     marginTop: 14, width: '100%', padding: '10px 0',
