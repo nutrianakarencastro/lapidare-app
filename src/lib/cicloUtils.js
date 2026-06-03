@@ -7,12 +7,14 @@ import { CORRELACOES } from './clinical/correlacoes.js';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const FASES = {
-  menstrual:    { label: 'Menstrual',             cor: '#c4616e', corSoft: '#fdedef', icone: '🩸' },
-  folicular:    { label: 'Folicular',             cor: '#c4a882', corSoft: '#faf3e8', icone: '🌱' },
-  ovulacao:     { label: 'Ovulação',              cor: '#7ea85a', corSoft: '#eef5e3', icone: '✨' },
-  lutea:        { label: 'Lútea',                 cor: '#9b8b7a', corSoft: '#f2ede6', icone: '🌙' },
-  atrasada:     { label: 'Atrasada',              cor: '#854f0b', corSoft: '#faeeda', icone: '⏳' },
-  desconhecida: { label: 'Sem dados suficientes', cor: '#b4a896', corSoft: '#f5f2ec', icone: '—'  },
+  menstrual:       { label: 'Menstrual',             cor: '#c4616e', corSoft: '#fdedef', icone: '🩸' },
+  folicular:       { label: 'Folicular',             cor: '#c4a882', corSoft: '#faf3e8', icone: '🌱' },
+  ovulacao:        { label: 'Ovulação',              cor: '#7ea85a', corSoft: '#eef5e3', icone: '✨' },
+  lutea:           { label: 'Lútea',                 cor: '#9b8b7a', corSoft: '#f2ede6', icone: '🌙' },
+  atrasada:        { label: 'Atrasada',              cor: '#854f0b', corSoft: '#faeeda', icone: '⏳' },
+  ciclo_suprimido: { label: 'Ciclo suprimido',       cor: '#94a3b8', corSoft: '#f1f5f9', icone: '💊' },
+  nao_menstrua:    { label: 'Sem menstruação',       cor: '#94a3b8', corSoft: '#f1f5f9', icone: '🌿' },
+  desconhecida:    { label: 'Sem dados suficientes', cor: '#b4a896', corSoft: '#f5f2ec', icone: '—'  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,7 +37,12 @@ export function duracaoMediaCiclo(periodos) {
   return Math.round(diffs.reduce((a, b) => a + b, 0) / diffs.length);
 }
 
-export function calcularFaseDoCiclo(periodos, dataAlvo = new Date()) {
+// situacaoCiclo: campo de ciclo_perfil — quando fornecido, substitui cálculo por fase fixa
+export function calcularFaseDoCiclo(periodos, dataAlvo = new Date(), situacaoCiclo = 'menstrua_regularmente') {
+  const base = { diaDociclo: null, duracaoMedia: 28, ovulacaoPrevista: null, proximoPeriodo: null };
+  if (situacaoCiclo === 'ciclo_suprimido') return { fase: 'ciclo_suprimido', ...base };
+  if (situacaoCiclo === 'nao_menstrua')    return { fase: 'nao_menstrua',    ...base };
+
   if (!periodos?.length) {
     return { fase: 'desconhecida', diaDociclo: null, duracaoMedia: 28, ovulacaoPrevista: null, proximoPeriodo: null };
   }
@@ -165,8 +172,11 @@ function calcularScorePerimenopausa(s, estagioPeri) {
     + b(s.calorons)          * 20
     + b(s.suor_noturno)      * 20
     + b(s.despertar_noturno) * 15
+    + b(s.acorda_madrugada)  * 10
     + (b(s.fluxo_muito_maior) || b(s.fluxo_muito_menor)) * 10
     + b(s.dor_articular)     * 10
+    + b(s.palpitacoes)       * 12
+    + b(s.secura_vaginal)    * 10
     + ((s.irritabilidade ?? 0) >= 2 ? 8 : 0)
     + b(s.choro)              * 5
     + (e5(s.humor) >= 4 ? 5 : 0)
@@ -194,7 +204,10 @@ export function calcularScoresHormonais(s, fase = 'desconhecida', estagioPeri = 
     ((s.ansiedade ?? 0) >= 2 ? 30 : (s.ansiedade ?? 0) >= 1 ? 15 : 0) +
     (e5(s.sono) >= 4 ? 25 : e5(s.sono) >= 3 ? 12 : 0) +
     (e5(s.energia) >= 4 ? 20 : e5(s.energia) >= 3 ? 10 : 0) +
-    b(s.calorons) * 15 + b(s.suor_noturno) * 15
+    b(s.calorons)         * 15 + b(s.suor_noturno) * 15 +
+    b(s.palpitacoes)      * 15 +
+    b(s.insonia)          * 15 +
+    b(s.acorda_madrugada) * 20
   );
 
   const estrogenico = clamp(
@@ -202,14 +215,17 @@ export function calcularScoresHormonais(s, fase = 'desconhecida', estagioPeri = 
     ((s.dor_mamas ?? 0) >= 2 ? 25 : (s.dor_mamas ?? 0) >= 1 ? 12 : 0) +
     ((s.inchaco ?? 0) >= 2 ? 20 : (s.inchaco ?? 0) >= 1 ? 10 : 0) +
     (naLutea && e5(s.humor) >= 4 ? 15 : 0) +
-    b(s.choro) * 15
+    b(s.choro)            * 15 +
+    b(s.secura_vaginal)   * 20 +
+    ((s.absorventes_dia ?? 0) >= 6 ? 25 : (s.absorventes_dia ?? 0) >= 3 ? 12 : 0)
   );
 
   const progesterona = clamp(
     (naLutea && (s.irritabilidade ?? 0) >= 2 ? 30 : 0) +
     ((s.ansiedade ?? 0) >= 2 ? 20 : 0) +
     (naLutea && e5(s.sono) >= 4 ? 20 : 0) +
-    b(s.choro) * 15 +
+    b(s.choro)   * 15 +
+    b(s.insonia) * 15 +
     (naLutea && (s.compulsao ?? 0) >= 2 ? 15 : 0)
   );
 
@@ -217,7 +233,8 @@ export function calcularScoresHormonais(s, fase = 'desconhecida', estagioPeri = 
     ((s.acne ?? 0) >= 2 ? 35 : (s.acne ?? 0) >= 1 ? 15 : 0) +
     ((s.oleosidade ?? 0) >= 2 ? 35 : (s.oleosidade ?? 0) >= 1 ? 15 : 0) +
     ((s.libido !== null && s.libido !== undefined && (s.libido <= 1 || s.libido >= 5)) ? 15 : 0) +
-    ((s.dor_pelvica ?? 0) >= 2 ? 15 : 0)
+    ((s.dor_pelvica ?? 0) >= 2 ? 15 : 0) +
+    b(s.queda_cabelo) * 20
   );
 
   const intestinal = clamp(

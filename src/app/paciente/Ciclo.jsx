@@ -132,7 +132,7 @@ const inputSt = {
 
 const SEMANA = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
-function Calendario({ periodos, sintomas, onDiaTocado }) {
+function Calendario({ periodos, sintomas, onDiaTocado, situacaoCiclo = 'menstrua_regularmente' }) {
   const hoje = isoHoje();
   const [ref, setRef] = useState(() => {
     const d = new Date();
@@ -145,10 +145,10 @@ function Calendario({ periodos, sintomas, onDiaTocado }) {
     const map = {};
     for (const d of dias) {
       if (!d) continue;
-      map[d] = calcularFaseDoCiclo(periodos, d);
+      map[d] = calcularFaseDoCiclo(periodos, d, situacaoCiclo);
     }
     return map;
-  }, [dias, periodos]);
+  }, [dias, periodos, situacaoCiclo]);
 
   const diasPeriodo = useMemo(() => {
     const set = new Set();
@@ -176,7 +176,7 @@ function Calendario({ periodos, sintomas, onDiaTocado }) {
     });
   }
 
-  const infoHoje = calcularFaseDoCiclo(periodos, hoje);
+  const infoHoje = calcularFaseDoCiclo(periodos, hoje, situacaoCiclo);
   const faseHoje = FASES[infoHoje.fase] ?? FASES.desconhecida;
 
   return (
@@ -311,11 +311,33 @@ function Calendario({ periodos, sintomas, onDiaTocado }) {
 
 // ─── Modal de dia ─────────────────────────────────────────────────────────────
 
-function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbrirSintomas, pacienteId }) {
+const COR_SANGUE_OPS    = [
+  { v: 'rosado',          label: '🩷 Rosado'           },
+  { v: 'vermelho_vivo',   label: '🔴 Vermelho vivo'    },
+  { v: 'vermelho_escuro', label: '🩸 Vermelho escuro'  },
+  { v: 'marrom',          label: '🟤 Marrom'           },
+  { v: 'preto',           label: '⚫ Preto'            },
+];
+const INTENSIDADE_OPS   = [
+  { v: 'leve',         label: 'Leve'         },
+  { v: 'moderado',     label: 'Moderado'     },
+  { v: 'intenso',      label: 'Intenso'      },
+  { v: 'muito_intenso',label: 'Muito intenso'},
+];
+const COAGULOS_OPS      = [
+  { v: 'nao',       label: 'Não'       },
+  { v: 'pequenos',  label: 'Pequenos'  },
+  { v: 'moderados', label: 'Moderados' },
+  { v: 'grandes',   label: 'Grandes'   },
+];
+
+function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbrirSintomas, pacienteId, podeMarcarMenstruacao }) {
   const hoje = isoHoje();
   const ePeriodo = isDiaPeriodo(periodos, dia);
-  const [acao, setAcao] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [novoPeridoId, setNovoPeridoId] = useState(null);
+  const [detalhes, setDetalhes] = useState({ cor_sangue: '', intensidade_fluxo: '', coagulos: 'nao', escape_pre: false, notas_periodo: '' });
+  const [salvandoDetalhes, setSalvandoDetalhes] = useState(false);
 
   const periodoExistente = periodos.find(p => {
     const ini = new Date(p.inicio + 'T12:00:00');
@@ -326,10 +348,31 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
 
   async function marcarInicio() {
     setBusy(true);
-    await supabase.from('ciclo_periodos').insert({ paciente_id: pacienteId, inicio: dia });
+    const { data } = await supabase
+      .from('ciclo_periodos')
+      .insert({ paciente_id: pacienteId, inicio: dia })
+      .select('id').single();
     setBusy(false);
+    if (data?.id) setNovoPeridoId(data.id);
+    else onSalvarPeriodo();
+  }
+
+  async function salvarDetalhes() {
+    if (!novoPeridoId) { onSalvarPeriodo(); return; }
+    setSalvandoDetalhes(true);
+    const payload = {
+      coagulos:   detalhes.coagulos,
+      escape_pre: detalhes.escape_pre,
+    };
+    if (detalhes.cor_sangue)        payload.cor_sangue        = detalhes.cor_sangue;
+    if (detalhes.intensidade_fluxo) payload.intensidade_fluxo = detalhes.intensidade_fluxo;
+    if (detalhes.notas_periodo)     payload.notas_periodo     = detalhes.notas_periodo;
+    await supabase.from('ciclo_periodos').update(payload).eq('id', novoPeridoId);
+    setSalvandoDetalhes(false);
     onSalvarPeriodo();
   }
+
+  const setD = (k, v) => setDetalhes(d => ({ ...d, [k]: v }));
 
   async function marcarFim() {
     if (!periodoExistente) return;
@@ -377,44 +420,107 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
           <div style={{ marginBottom: 14 }} />
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {!ePeriodo && !futuro && (
-            <BotaoSheet
-              icon="droplet" label="Marcar início de menstruação"
-              sub="Registra o início de um novo período"
-              onClick={marcarInicio} busy={busy}
-              cor="#c4616e"
+        {novoPeridoId ? (
+          /* ── Detalhes do sangramento (passo 2, opcional) ── */
+          <div>
+            <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, marginBottom: 12 }}>
+              🩸 Período registrado! Quer adicionar detalhes do fluxo?
+            </div>
+
+            <FL>Cor do sangue</FL>
+            <GrupoOpcoes valor={detalhes.cor_sangue} opcoes={COR_SANGUE_OPS}
+              onChange={v => setD('cor_sangue', v)} cols={2} />
+
+            <FL>Intensidade do fluxo</FL>
+            <GrupoOpcoes valor={detalhes.intensidade_fluxo} opcoes={INTENSIDADE_OPS}
+              onChange={v => setD('intensidade_fluxo', v)} cols={4} />
+
+            <FL>Coágulos</FL>
+            <GrupoOpcoes valor={detalhes.coagulos} opcoes={COAGULOS_OPS}
+              onChange={v => setD('coagulos', v)} cols={4} />
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+              <BtnToggle
+                ativo={detalhes.escape_pre}
+                onClick={() => setD('escape_pre', !detalhes.escape_pre)}
+                label="Escape pré-menstrual (spotting)"
+                icon="droplet-half"
+              />
+            </div>
+
+            <FL>Observações</FL>
+            <textarea
+              value={detalhes.notas_periodo}
+              onChange={e => setD('notas_periodo', e.target.value)}
+              placeholder="Cólica, odor, sensação…"
+              rows={2}
+              style={{ ...inputSt, resize: 'vertical' }}
             />
-          )}
-          {ePeriodo && periodoExistente && !periodoExistente.fim && !futuro && (
-            <BotaoSheet
-              icon="droplet-half-2" label="Marcar fim da menstruação"
-              sub={`Iniciada em ${dataBRCurta(periodoExistente.inicio)}`}
-              onClick={marcarFim} busy={busy}
-              cor="#c4a882"
-            />
-          )}
-          {!futuro && (
-            <BotaoSheet
-              icon="clipboard-list" label={sintomaDia ? 'Editar sintomas do dia' : 'Registrar sintomas do dia'}
-              sub={sintomaDia ? 'Já existe um registro para este dia' : 'Humor, energia, dores e mais'}
-              onClick={() => onAbrirSintomas(dia)}
-              cor="var(--gold-deep)"
-            />
-          )}
-          {ePeriodo && (
-            <button onClick={removerPeriodo} disabled={busy}
-              style={{
-                width: '100%', padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
-                background: 'var(--red-soft)', color: 'var(--red)',
-                border: '0.5px solid var(--red)', fontSize: 13, fontWeight: 500,
-                fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center', gap: 8,
-              }}>
-              <i className="ti ti-trash" style={{ fontSize: 15 }} aria-hidden="true" />
-              Remover período
-            </button>
-          )}
-        </div>
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button onClick={onSalvarPeriodo}
+                style={{
+                  flex: 1, padding: '11px 0', borderRadius: 11,
+                  background: 'var(--bg-soft)', color: 'var(--muted)',
+                  border: '0.5px solid var(--hair)', fontSize: 13, fontWeight: 500,
+                  cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                }}>
+                Pular
+              </button>
+              <button onClick={salvarDetalhes} disabled={salvandoDetalhes}
+                style={{
+                  flex: 2, padding: '11px 0', borderRadius: 11,
+                  background: salvandoDetalhes ? 'var(--muted-2)' : 'var(--ink)',
+                  color: 'var(--bg-soft)', border: 'none',
+                  fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}>
+                <i className="ti ti-check" aria-hidden="true" />
+                {salvandoDetalhes ? 'Salvando…' : 'Salvar detalhes'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {!ePeriodo && !futuro && podeMarcarMenstruacao && (
+              <BotaoSheet
+                icon="droplet" label="Marcar início de menstruação"
+                sub="Registra o início de um novo período"
+                onClick={marcarInicio} busy={busy}
+                cor="#c4616e"
+              />
+            )}
+            {ePeriodo && periodoExistente && !periodoExistente.fim && !futuro && (
+              <BotaoSheet
+                icon="droplet-half-2" label="Marcar fim da menstruação"
+                sub={`Iniciada em ${dataBRCurta(periodoExistente.inicio)}`}
+                onClick={marcarFim} busy={busy}
+                cor="#c4a882"
+              />
+            )}
+            {!futuro && (
+              <BotaoSheet
+                icon="clipboard-list" label={sintomaDia ? 'Editar sintomas do dia' : 'Registrar sintomas do dia'}
+                sub={sintomaDia ? 'Já existe um registro para este dia' : 'Humor, energia, dores e mais'}
+                onClick={() => onAbrirSintomas(dia)}
+                cor="var(--gold-deep)"
+              />
+            )}
+            {ePeriodo && (
+              <button onClick={removerPeriodo} disabled={busy}
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
+                  background: 'var(--red-soft)', color: 'var(--red)',
+                  border: '0.5px solid var(--red)', fontSize: 13, fontWeight: 500,
+                  fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                <i className="ti ti-trash" style={{ fontSize: 15 }} aria-hidden="true" />
+                Remover período
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -456,6 +562,9 @@ function novoSintoma() {
     calorons: false, suor_noturno: false,
     despertar_noturno: false, dor_articular: false,
     fluxo_muito_maior: false, fluxo_muito_menor: false,
+    secura_vaginal: false, palpitacoes: false, queda_cabelo: false,
+    insonia: false, acorda_madrugada: false,
+    absorventes_dia: null,
     muco_cervical: '',
     notas: '',
   };
@@ -562,12 +671,37 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
 
         <SL>Transição hormonal</SL>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <BtnToggle ativo={form.calorons}          onClick={() => tog('calorons')}          label="Calorões"         icon="flame"        />
-          <BtnToggle ativo={form.suor_noturno}      onClick={() => tog('suor_noturno')}      label="Suor noturno"     icon="moon"         />
-          <BtnToggle ativo={form.despertar_noturno} onClick={() => tog('despertar_noturno')} label="Despertar noturno" icon="moon-off"    />
-          <BtnToggle ativo={form.dor_articular}     onClick={() => tog('dor_articular')}     label="Dor articular"    icon="bone"         />
-          <BtnToggle ativo={form.fluxo_muito_maior} onClick={() => tog('fluxo_muito_maior')} label="Fluxo muito maior" icon="droplets"    />
-          <BtnToggle ativo={form.fluxo_muito_menor} onClick={() => tog('fluxo_muito_menor')} label="Fluxo muito menor" icon="droplet-half" />
+          <BtnToggle ativo={form.calorons}          onClick={() => tog('calorons')}          label="Calorões"          icon="flame"        />
+          <BtnToggle ativo={form.suor_noturno}      onClick={() => tog('suor_noturno')}      label="Suor noturno"      icon="moon"         />
+          <BtnToggle ativo={form.despertar_noturno} onClick={() => tog('despertar_noturno')} label="Despertar noturno" icon="moon-off"      />
+          <BtnToggle ativo={form.acorda_madrugada}  onClick={() => tog('acorda_madrugada')}  label="Acorda 3h–5h"      icon="clock"        />
+          <BtnToggle ativo={form.dor_articular}     onClick={() => tog('dor_articular')}     label="Dor articular"     icon="bone"         />
+          <BtnToggle ativo={form.palpitacoes}       onClick={() => tog('palpitacoes')}       label="Palpitações"       icon="heartbeat"    />
+          <BtnToggle ativo={form.secura_vaginal}    onClick={() => tog('secura_vaginal')}    label="Secura vaginal"    icon="droplet-off"  />
+          <BtnToggle ativo={form.fluxo_muito_maior} onClick={() => tog('fluxo_muito_maior')} label="Fluxo muito maior" icon="droplets"      />
+          <BtnToggle ativo={form.fluxo_muito_menor} onClick={() => tog('fluxo_muito_menor')} label="Fluxo muito menor" icon="droplet-half"  />
+        </div>
+
+        <SL>Sono</SL>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <BtnToggle ativo={form.insonia}          onClick={() => tog('insonia')}          label="Insônia (dificuldade em adormecer)" icon="zzz"   />
+          <BtnToggle ativo={form.queda_cabelo}     onClick={() => tog('queda_cabelo')}     label="Queda de cabelo notada hoje"       icon="scissors" />
+        </div>
+
+        <FL>Absorventes trocados hoje (só se estiver menstruada)</FL>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={() => sv('absorventes_dia', Math.max(0, (form.absorventes_dia ?? 0) - 1))}
+            style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-soft)', border: '0.5px solid var(--hair)', cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font-sans)' }}>−</button>
+          <span style={{ minWidth: 40, textAlign: 'center', fontSize: 16, fontWeight: 600, color: 'var(--ink)' }}>
+            {form.absorventes_dia ?? 0}
+          </span>
+          <button onClick={() => sv('absorventes_dia', (form.absorventes_dia ?? 0) + 1)}
+            style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--bg-soft)', border: '0.5px solid var(--hair)', cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font-sans)' }}>+</button>
+          <span style={{ fontSize: 11, color: 'var(--muted)' }}>trocas</span>
+          {(form.absorventes_dia ?? 0) > 0 && (
+            <button onClick={() => sv('absorventes_dia', null)}
+              style={{ fontSize: 11, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>limpar</button>
+          )}
         </div>
 
         <SL>Digestivo &amp; emocional</SL>
@@ -691,6 +825,201 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
         }}>
           <i className="ti ti-check" aria-hidden="true" />
           {busy ? 'Salvando…' : 'Salvar registro'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Formulário de perfil hormonal ───────────────────────────────────────────
+
+const SITUACAO_OPS = [
+  { v: 'menstrua_regularmente', label: 'Menstruo regularmente'           },
+  { v: 'ciclo_irregular',       label: 'Ciclo irregular'                 },
+  { v: 'ciclo_suprimido',       label: 'Anticoncepcional que inibe menstruação' },
+  { v: 'nao_menstrua',          label: 'Não menstruo (outro motivo)'     },
+  { v: 'outro',                 label: 'Outra situação'                  },
+];
+const ESTADO_OPS = [
+  { v: 'nenhum',       label: 'Nenhuma condição especial' },
+  { v: 'perimenopausa',label: 'Perimenopausa (transição)' },
+  { v: 'menopausa',    label: 'Menopausa'                 },
+  { v: 'gestante',     label: 'Gestante'                  },
+  { v: 'pos_parto',    label: 'Pós-parto'                 },
+  { v: 'outro',        label: 'Outro'                     },
+];
+const CONTRAC_TIPO_OPS = [
+  { v: 'pilula',       label: 'Pílula'        },
+  { v: 'diu_hormonal', label: 'DIU hormonal'  },
+  { v: 'implante',     label: 'Implante'      },
+  { v: 'injetavel',    label: 'Injetável'     },
+  { v: 'adesivo',      label: 'Adesivo'       },
+  { v: 'anel_vaginal', label: 'Anel vaginal'  },
+  { v: 'outro',        label: 'Outro'         },
+];
+const TRH_TIPO_OPS = [
+  { v: 'estrogênio',   label: 'Estrogênio'    },
+  { v: 'progesterona', label: 'Progesterona'  },
+  { v: 'combinada',    label: 'Combinada'     },
+  { v: 'testosterona', label: 'Testosterona'  },
+  { v: 'outro',        label: 'Outro'         },
+];
+const TRH_VIA_OPS = [
+  { v: 'oral',         label: 'Oral'          },
+  { v: 'transdermica', label: 'Transdérmica'  },
+  { v: 'gel',          label: 'Gel'           },
+  { v: 'adesivo',      label: 'Adesivo'       },
+  { v: 'implante',     label: 'Implante'      },
+  { v: 'outro',        label: 'Outro'         },
+];
+
+function FormPerfil({ pacienteId, perfil, onSalvo, onCancelar }) {
+  const [form, setForm] = useState({
+    situacao_ciclo:       perfil?.situacao_ciclo       ?? 'menstrua_regularmente',
+    estado_reprodutivo:   perfil?.estado_reprodutivo   ?? 'nenhum',
+    amamentando:          perfil?.amamentando          ?? false,
+    usa_contraceptivo:    perfil?.usa_contraceptivo    ?? false,
+    contraceptivo_tipo:   perfil?.contraceptivo_tipo   ?? '',
+    contraceptivo_nome:   perfil?.contraceptivo_nome   ?? '',
+    contraceptivo_continuo: perfil?.contraceptivo_continuo ?? false,
+    contraceptivo_menstrua: perfil?.contraceptivo_menstrua ?? null,
+    contraceptivo_obs:    perfil?.contraceptivo_obs    ?? '',
+    usa_trh:              perfil?.usa_trh              ?? false,
+    trh_tipo:             perfil?.trh_tipo             ?? '',
+    trh_via:              perfil?.trh_via              ?? '',
+    trh_obs:              perfil?.trh_obs              ?? '',
+    obs_geral:            perfil?.obs_geral            ?? '',
+  });
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  const set  = k => v  => setForm(f => ({ ...f, [k]: v }));
+  const setE = k => e  => setForm(f => ({ ...f, [k]: e.target.value }));
+  const tog  = k => () => setForm(f => ({ ...f, [k]: !f[k] }));
+
+  async function salvar() {
+    setSalvando(true);
+    setErro(null);
+    const { error } = await supabase
+      .from('ciclo_perfil')
+      .upsert({ paciente_id: pacienteId, ...form }, { onConflict: 'paciente_id' });
+    setSalvando(false);
+    if (error) { setErro(error.message); return; }
+    onSalvo();
+  }
+
+  return (
+    <div style={{ padding: '0 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ fontFamily: 'var(--font-serif)', fontSize: 20, color: 'var(--ink)' }}>
+          Meu perfil hormonal
+        </div>
+        <button onClick={onCancelar} style={{
+          background: 'none', border: '0.5px solid var(--hair)', borderRadius: 9,
+          padding: '6px 10px', fontSize: 12, color: 'var(--muted)', cursor: 'pointer',
+          fontFamily: 'var(--font-sans)',
+        }}>
+          <i className="ti ti-x" style={{ fontSize: 13 }} aria-hidden="true" />
+        </button>
+      </div>
+
+      <div style={{ background: 'var(--paper)', border: '0.5px solid var(--hair)', borderRadius: 16, padding: '4px 16px 18px' }}>
+        <SL>Como está seu ciclo agora</SL>
+        <GrupoOpcoes valor={form.situacao_ciclo} opcoes={SITUACAO_OPS}
+          onChange={set('situacao_ciclo')} cols={1} />
+
+        <SL>Estado hormonal / reprodutivo</SL>
+        <GrupoOpcoes valor={form.estado_reprodutivo} opcoes={ESTADO_OPS}
+          onChange={set('estado_reprodutivo')} cols={2} />
+        <div style={{ marginTop: 10 }}>
+          <BtnToggle ativo={form.amamentando} onClick={tog('amamentando')} label="Estou amamentando" icon="heart" />
+        </div>
+
+        <SL>Contraceptivo hormonal</SL>
+        <BtnToggle ativo={form.usa_contraceptivo} onClick={tog('usa_contraceptivo')}
+          label="Uso contraceptivo hormonal" icon="pill" />
+        {form.usa_contraceptivo && (
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <FL>Tipo</FL>
+              <GrupoOpcoes valor={form.contraceptivo_tipo} opcoes={CONTRAC_TIPO_OPS}
+                onChange={set('contraceptivo_tipo')} cols={3} />
+            </div>
+            <div>
+              <FL>Nome (opcional)</FL>
+              <input style={inputSt} value={form.contraceptivo_nome} onChange={setE('contraceptivo_nome')}
+                placeholder="Ex: Yasmin, Mirena…" />
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <BtnToggle ativo={form.contraceptivo_continuo} onClick={tog('contraceptivo_continuo')}
+                label="Uso contínuo (sem pausa)" icon="refresh" />
+              <BtnToggle ativo={form.contraceptivo_menstrua === true}
+                onClick={() => set('contraceptivo_menstrua')(form.contraceptivo_menstrua === true ? null : true)}
+                label="Menstruo com ele" icon="droplet" />
+              <BtnToggle ativo={form.contraceptivo_menstrua === false}
+                onClick={() => set('contraceptivo_menstrua')(form.contraceptivo_menstrua === false ? null : false)}
+                label="Não menstruo com ele" icon="droplet-off" />
+            </div>
+          </div>
+        )}
+
+        <SL>Reposição hormonal (TRH)</SL>
+        <BtnToggle ativo={form.usa_trh} onClick={tog('usa_trh')}
+          label="Uso terapia de reposição hormonal" icon="activity" />
+        {form.usa_trh && (
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <FL>Tipo de hormônio</FL>
+              <GrupoOpcoes valor={form.trh_tipo} opcoes={TRH_TIPO_OPS}
+                onChange={set('trh_tipo')} cols={3} />
+            </div>
+            <div>
+              <FL>Via de administração</FL>
+              <GrupoOpcoes valor={form.trh_via} opcoes={TRH_VIA_OPS}
+                onChange={set('trh_via')} cols={3} />
+            </div>
+            <div>
+              <FL>Observações (opcional)</FL>
+              <input style={inputSt} value={form.trh_obs} onChange={setE('trh_obs')}
+                placeholder="Dose, duração…" />
+            </div>
+          </div>
+        )}
+
+        <SL>Observações gerais</SL>
+        <textarea
+          value={form.obs_geral} onChange={setE('obs_geral')}
+          placeholder="Qualquer informação relevante sobre seu histórico hormonal…"
+          rows={3}
+          style={{ ...inputSt, resize: 'vertical', minHeight: 64, lineHeight: 1.5 }}
+        />
+      </div>
+
+      {erro && (
+        <div style={{ marginTop: 10, padding: '9px 12px', borderRadius: 9, background: 'var(--red-soft)', color: 'var(--red)', fontSize: 12 }}>
+          {erro}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+        <button onClick={onCancelar} style={{
+          flex: 1, padding: '11px 0', borderRadius: 11,
+          background: 'var(--bg-soft)', color: 'var(--muted)',
+          border: '0.5px solid var(--hair)', fontSize: 13, fontWeight: 500,
+          cursor: 'pointer', fontFamily: 'var(--font-sans)',
+        }}>
+          Cancelar
+        </button>
+        <button onClick={salvar} disabled={salvando} style={{
+          flex: 2, padding: '11px 0', borderRadius: 11,
+          background: salvando ? 'var(--muted-2)' : 'var(--ink)',
+          color: 'var(--bg-soft)', border: 'none',
+          fontSize: 13, fontWeight: 500, cursor: salvando ? 'default' : 'pointer',
+          fontFamily: 'var(--font-sans)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        }}>
+          <i className="ti ti-check" aria-hidden="true" />
+          {salvando ? 'Salvando…' : 'Salvar perfil'}
         </button>
       </div>
     </div>
@@ -844,20 +1173,24 @@ function Registros({ periodos, sintomas }) {
 
 export default function Ciclo() {
   const { user } = useSession();
-  const [periodos, setPeriodos]  = useState(null);
-  const [sintomas, setSintomas]  = useState([]);
-  const [aba, setAba]            = useState('calendario');
-  const [diaSel, setDiaSel]      = useState(null);
-  const [diaSintoma, setDiaSintoma] = useState(null);
+  const [periodos, setPeriodos]       = useState(null);
+  const [sintomas, setSintomas]       = useState([]);
+  const [perfil, setPerfil]           = useState(null);
+  const [aba, setAba]                 = useState('calendario');
+  const [diaSel, setDiaSel]           = useState(null);
+  const [diaSintoma, setDiaSintoma]   = useState(null);
+  const [mostrarPerfil, setMostrarPerfil] = useState(false);
 
   async function carregar() {
     if (!user) return;
-    const [pRes, sRes] = await Promise.all([
+    const [pRes, sRes, prRes] = await Promise.all([
       supabase.from('ciclo_periodos').select('*').eq('paciente_id', user.id).order('inicio', { ascending: false }),
       supabase.from('ciclo_sintomas_diarios').select('*').eq('paciente_id', user.id).order('data', { ascending: false }).limit(90),
+      supabase.from('ciclo_perfil').select('*').eq('paciente_id', user.id).maybeSingle(),
     ]);
     setPeriodos(pRes.data ?? []);
     setSintomas(sRes.data ?? []);
+    setPerfil(prRes.data ?? null);
   }
 
   useEffect(() => { carregar(); }, [user]);
@@ -880,7 +1213,20 @@ export default function Ciclo() {
     return <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)' }}>Carregando…</div>;
   }
 
-  const sintomaDiaSel = sintomas.find(s => s.data === diaSel);
+  const situacaoCiclo        = perfil?.situacao_ciclo ?? 'menstrua_regularmente';
+  const podeMarcarMenstruacao = !['ciclo_suprimido', 'nao_menstrua'].includes(situacaoCiclo);
+  const sintomaDiaSel        = sintomas.find(s => s.data === diaSel);
+
+  if (mostrarPerfil) {
+    return (
+      <FormPerfil
+        pacienteId={user.id}
+        perfil={perfil}
+        onSalvo={async () => { setMostrarPerfil(false); await carregar(); }}
+        onCancelar={() => setMostrarPerfil(false)}
+      />
+    );
+  }
 
   if (diaSintoma) {
     const existente = sintomas.find(s => s.data === diaSintoma);
@@ -889,6 +1235,7 @@ export default function Ciclo() {
         dia={diaSintoma}
         existente={existente}
         periodos={periodos}
+        situacaoCiclo={situacaoCiclo}
         onSalvo={async () => { setDiaSintoma(null); await carregar(); }}
         onCancelar={() => setDiaSintoma(null)}
       />
@@ -897,6 +1244,26 @@ export default function Ciclo() {
 
   return (
     <div>
+      {/* banner de perfil (se não configurado) */}
+      {!perfil && (
+        <button onClick={() => setMostrarPerfil(true)}
+          style={{
+            width: '100%', margin: '0 0 8px', padding: '11px 16px',
+            background: 'var(--gold-soft, #fffbeb)',
+            border: '0.5px solid var(--gold-deep)',
+            borderRadius: 0, cursor: 'pointer', textAlign: 'left',
+            fontFamily: 'var(--font-sans)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+          <i className="ti ti-sparkles" style={{ fontSize: 16, color: 'var(--gold-deep)', flexShrink: 0 }} aria-hidden="true" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gold-deep)' }}>Configure seu perfil hormonal</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)' }}>Análises mais precisas para sua situação</div>
+          </div>
+          <i className="ti ti-chevron-right" style={{ fontSize: 14, color: 'var(--muted)' }} aria-hidden="true" />
+        </button>
+      )}
+
       {/* tabs */}
       <div style={{
         display: 'flex', gap: 2, padding: '0 16px 12px',
@@ -923,17 +1290,33 @@ export default function Ciclo() {
       </div>
 
       {aba === 'calendario' && (
-        <Calendario
-          periodos={periodos}
-          sintomas={sintomas}
-          onDiaTocado={handleDiaTocado}
-        />
+        <>
+          <Calendario
+            periodos={periodos}
+            sintomas={sintomas}
+            onDiaTocado={handleDiaTocado}
+            situacaoCiclo={situacaoCiclo}
+          />
+          {/* atalho para editar perfil */}
+          <div style={{ padding: '8px 16px' }}>
+            <button onClick={() => setMostrarPerfil(true)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--font-sans)',
+                display: 'flex', alignItems: 'center', gap: 5,
+              }}>
+              <i className="ti ti-settings" style={{ fontSize: 13 }} aria-hidden="true" />
+              {perfil ? 'Editar perfil hormonal' : 'Configurar perfil hormonal'}
+            </button>
+          </div>
+        </>
       )}
       {aba === 'hoje' && (
         <FormSintomas
           dia={isoHoje()}
           existente={sintomas.find(s => s.data === isoHoje())}
           periodos={periodos}
+          situacaoCiclo={situacaoCiclo}
           onSalvo={carregar}
           onCancelar={() => setAba('calendario')}
         />
@@ -952,6 +1335,7 @@ export default function Ciclo() {
           onSalvarPeriodo={handleSalvarPeriodo}
           onAbrirSintomas={handleAbrirSintomas}
           pacienteId={user.id}
+          podeMarcarMenstruacao={podeMarcarMenstruacao}
         />
       )}
     </div>

@@ -407,20 +407,104 @@ function PadroesRecorrencias({ periodos, sintomas, estagioPeri }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
+const SITUACAO_LABEL = {
+  menstrua_regularmente: 'Ciclo regular',
+  ciclo_irregular:       'Ciclo irregular',
+  ciclo_suprimido:       'Ciclo suprimido (anticoncepcional)',
+  nao_menstrua:          'Não menstrua',
+  outro:                 'Outra situação',
+};
+const ESTADO_LABEL = {
+  nenhum:       null,
+  perimenopausa:'Perimenopausa',
+  menopausa:    'Menopausa',
+  gestante:     'Gestante',
+  pos_parto:    'Pós-parto',
+  outro:        'Outra condição',
+};
+const CONTRAC_LABEL = {
+  pilula:'Pílula', diu_hormonal:'DIU hormonal', implante:'Implante',
+  injetavel:'Injetável', adesivo:'Adesivo', anel_vaginal:'Anel vaginal', outro:'Outro',
+};
+const TRH_LABEL = {
+  'estrogênio':'Estrogênio', progesterona:'Progesterona', combinada:'Combinada',
+  testosterona:'Testosterona', outro:'Outro',
+};
+const TRH_VIA_LABEL = {
+  oral:'Oral', transdermica:'Transdérmica', gel:'Gel',
+  adesivo:'Adesivo', implante:'Implante', outro:'Outro',
+};
+
+function CardPerfilHormonal({ perfil }) {
+  if (!perfil) return (
+    <div style={{
+      padding: '10px 14px', borderRadius: 10, marginBottom: 14,
+      background: 'var(--bg2)', border: '0.5px solid var(--border)',
+      fontSize: 12, color: 'var(--text3)', fontStyle: 'italic',
+    }}>
+      Perfil hormonal não configurado — peça à paciente para preencher no app.
+    </div>
+  );
+
+  const estadoLabel = ESTADO_LABEL[perfil.estado_reprodutivo];
+  const tags = [
+    SITUACAO_LABEL[perfil.situacao_ciclo],
+    estadoLabel,
+    perfil.amamentando && 'Amamentando',
+    perfil.usa_contraceptivo && (CONTRAC_LABEL[perfil.contraceptivo_tipo] || 'Anticoncepcional'),
+    perfil.usa_trh && `TRH: ${TRH_LABEL[perfil.trh_tipo] ?? ''}${perfil.trh_via ? ` (${TRH_VIA_LABEL[perfil.trh_via]})` : ''}`,
+  ].filter(Boolean);
+
+  return (
+    <div style={{
+      padding: '12px 14px', borderRadius: 10, marginBottom: 14,
+      background: 'var(--bg2)', border: '0.5px solid var(--border)',
+    }}>
+      <div style={{ fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 500, marginBottom: 8 }}>
+        Perfil hormonal
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {tags.map((t, i) => (
+          <span key={i} style={{
+            fontSize: 11, padding: '3px 10px', borderRadius: 99,
+            background: 'var(--white)', border: '0.5px solid var(--border)',
+            color: 'var(--text2)', fontWeight: 500,
+          }}>{t}</span>
+        ))}
+      </div>
+      {perfil.contraceptivo_nome && (
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
+          Anticoncepcional: {perfil.contraceptivo_nome}
+          {perfil.contraceptivo_menstrua === true  && ' · menstrua com ele'}
+          {perfil.contraceptivo_menstrua === false && ' · não menstrua com ele'}
+        </div>
+      )}
+      {perfil.obs_geral && (
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4, fontStyle: 'italic' }}>
+          {perfil.obs_geral}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CicloHormonios({ pacienteId, pacienteNome }) {
   const [periodos, setPeriodos] = useState(null);
   const [sintomas, setSintomas] = useState([]);
+  const [perfil, setPerfil]     = useState(undefined);
 
   useEffect(() => {
     let active = true;
     async function carregar() {
-      const [pRes, sRes] = await Promise.all([
+      const [pRes, sRes, prRes] = await Promise.all([
         supabase.from('ciclo_periodos').select('*').eq('paciente_id', pacienteId).order('inicio', { ascending: false }),
         supabase.from('ciclo_sintomas_diarios').select('*').eq('paciente_id', pacienteId).order('data', { ascending: false }).limit(120),
+        supabase.from('ciclo_perfil').select('*').eq('paciente_id', pacienteId).maybeSingle(),
       ]);
       if (!active) return;
       setPeriodos(pRes.data ?? []);
       setSintomas(sRes.data ?? []);
+      setPerfil(prRes.data ?? null);
     }
     carregar();
     return () => { active = false; };
@@ -506,6 +590,8 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
 
   return (
     <>
+      <CardPerfilHormonal perfil={perfil} />
+
       {/* Visão geral */}
       <div className="g3">
         <div className="stat">
