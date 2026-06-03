@@ -17,6 +17,7 @@ import CicloHormonios from './_CicloHormonios.jsx';
 import Jornada from './_Jornada.jsx';
 import ExamesNutri from './_Exames.jsx';
 import OrientacoesPaciente from './_OrientacoesPaciente.jsx';
+import DocumentosNutri from './_DocumentosPaciente.jsx';
 import DicaJSON from '../../components/DicaJSON.jsx';
 
 export default function PacientePerfil() {
@@ -334,6 +335,7 @@ export default function PacientePerfil() {
           { id: 'jornada',     label: 'Jornada',           icon: 'route' },
           { id: 'exames',        label: 'Exames',      icon: 'flask'    },
           { id: 'orientacoes',   label: 'Orientações', icon: 'notebook' },
+          { id: 'documentos',    label: 'Documentos',  icon: 'files'    },
         ].map(t => (
           <button
             key={t.id}
@@ -370,6 +372,7 @@ export default function PacientePerfil() {
       {tab === 'jornada'  && <Jornada pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'exames'      && <ExamesNutri pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'orientacoes' && <OrientacoesPaciente pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
+      {tab === 'documentos'  && <DocumentosNutri    pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
     </>
   );
 }

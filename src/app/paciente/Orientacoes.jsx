@@ -21,56 +21,23 @@ export default function OrientacoesPaciente() {
     if (!user) return;
     setErroQuery(null);
 
-    console.log('[Orientacoes] user.id:', user.id);
-
-    // RPC SECURITY DEFINER — faz JOIN interno, bypassa RLS ambíguo
     const { data: rows, error: rpcError } = await supabase
       .rpc('get_orientacoes_da_paciente');
 
-    console.log('[Orientacoes] rpc rows:', rows);
-    console.log('[Orientacoes] rpc error:', rpcError);
-    console.log('[Orientacoes] primeiro row:', rows?.[0]);
-
     if (rpcError) {
-      // Fallback: diagnóstico com queries separadas para ajudar no debug
-      console.warn('[Orientacoes] RPC falhou, tentando queries separadas…');
-
-      const { data: atData, error: atError } = await supabase
-        .from('orientacoes_pacientes')
-        .select('id, status, visto_pela_paciente_em, atribuido_em, orientacao_id')
-        .eq('paciente_id', user.id)
-        .order('atribuido_em', { ascending: false });
-
-      console.log('[Orientacoes] assignments:', atData, 'error:', atError);
-
-      const ids = (atData ?? []).map(a => a.orientacao_id);
-      console.log('[Orientacoes] orientacao ids:', ids);
-
-      const { data: orData, error: orError } = await supabase
-        .from('orientacoes')
-        .select('id, titulo')
-        .in('id', ids);
-
-      console.log('[Orientacoes] orData:', orData, 'orError:', orError);
-
       setErroQuery(rpcError.message);
       setAtribuicoes([]);
       return;
     }
 
     const lista = (rows ?? []).map(r => {
-      // Guard: ignora linha corrompida sem orientacao_id
-      if (!r.atribuicao_id) {
-        console.warn('[Orientacoes] row sem atribuicao_id ignorada:', r);
-        return null;
-      }
+      if (!r.atribuicao_id) return null;
       return {
         id:                     r.atribuicao_id,
         status:                 r.status,
         visto_pela_paciente_em: r.visto_pela_paciente_em,
         atribuido_em:           r.atribuido_em,
         orientacao_id:          r.orientacao_id,
-        // Monta objeto orientacao a partir dos campos planos do RPC
         orientacao: r.orientacao_id ? {
           id:             r.orientacao_id,
           titulo:         r.titulo         ?? null,

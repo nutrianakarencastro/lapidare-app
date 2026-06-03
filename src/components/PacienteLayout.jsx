@@ -29,7 +29,8 @@ const MAIS_ITEMS = [
   // CHAT DESATIVADO — canal oficial é WhatsApp. Reativar: descomentar linha abaixo e remover o item whatsapp.
   // { path: '/paciente/chat', icon: 'message-circle', label: 'Chat com a Dra.', sub: 'Conversa direta' },
   { path: '/paciente/exames',        icon: 'flask',          label: 'Exames & Análises',          sub: 'Resultados e avaliações' },
-  { path: '/paciente/orientacoes',   icon: 'notebook',       label: 'Orientações',                sub: 'Conteúdo da Dra.' },
+  { path: '/paciente/orientacoes',   icon: 'notebook',       label: 'Orientações',                sub: 'Conteúdo da Dra.'              },
+  { path: '/paciente/documentos',    icon: 'files',          label: 'Documentos',                 sub: 'Contratos e documentos oficiais' },
   { href: WHATSAPP_URL,              icon: 'brand-whatsapp', label: 'Falar com a Dra. Ana Karen', sub: 'Abre o WhatsApp' },
 ];
 
@@ -46,7 +47,8 @@ const HEADERS = {
   '/paciente/ciclo':        () =>                ({ eyebrow: 'Saúde hormonal',   title: 'Ciclo & Hormônios',     subtitle: 'Acompanhe seu ciclo menstrual' }),
   '/paciente/jornada':      () =>                ({ eyebrow: 'Minha evolução',   title: 'Minha jornada',         subtitle: 'Fases e marcos do acompanhamento' }),
   '/paciente/exames':       () =>                ({ eyebrow: 'Saúde & Exames',   title: 'Meus Exames',           subtitle: 'Análises e resultados' }),
-  '/paciente/orientacoes':  () =>                ({ eyebrow: 'Meu conteúdo',     title: 'Orientações',           subtitle: 'Enviadas pela sua nutri' }),
+  '/paciente/orientacoes':  () =>                ({ eyebrow: 'Meu conteúdo',     title: 'Orientações',           subtitle: 'Enviadas pela sua nutri'      }),
+  '/paciente/documentos':   () =>                ({ eyebrow: 'Meus documentos',  title: 'Documentos',            subtitle: 'Contratos e documentos oficiais' }),
   // '/paciente/chat':      (_nome, nutriNome) => ({ eyebrow: 'Conversa', title: nutriNome || 'Sua nutri', subtitle: 'Online' }),
 };
 
@@ -91,7 +93,7 @@ export default function PacienteLayout() {
         {TABS.map(t => {
           const active = t.path
             ? location.pathname === t.path
-            : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/ciclo', '/paciente/jornada', '/paciente/exames', '/paciente/orientacoes'].includes(location.pathname);
+            : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/ciclo', '/paciente/jornada', '/paciente/exames', '/paciente/orientacoes', '/paciente/documentos'].includes(location.pathname);
 
           if (!t.path) {
             return (
