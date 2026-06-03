@@ -36,7 +36,8 @@ import Progresso from './app/paciente/Progresso.jsx';
 import PrescricoesPaciente from './app/paciente/Prescricoes.jsx';
 import ChatPaciente from './app/paciente/Chat.jsx';
 import Checkin from './app/paciente/Checkin.jsx';
-import EbooksPaciente from './app/paciente/Ebooks.jsx';
+// E-books desativado da navegação da paciente — Orientações é o módulo oficial de conteúdo
+// import EbooksPaciente from './app/paciente/Ebooks.jsx';
 import SuplementosPaciente from './app/paciente/Suplementos.jsx';
 import HabitosPaciente from './app/paciente/Habitos.jsx';
 import CicloPaciente from './app/paciente/Ciclo.jsx';
@@ -89,7 +90,8 @@ export default function App() {
             {/* <Route path="/paciente/prescricoes" element={<PrescricoesPaciente />} /> */}
             {/* CHAT DESATIVADO — reativar: descomentar linha abaixo */}
             {/* <Route path="/paciente/chat" element={<ChatPaciente />} /> */}
-            <Route path="/paciente/ebooks" element={<EbooksPaciente />} />
+            {/* E-books desativado — Orientações é o módulo oficial de conteúdo */}
+            {/* <Route path="/paciente/ebooks" element={<EbooksPaciente />} /> */}
             <Route path="/paciente/suplementos" element={<SuplementosPaciente />} />
             <Route path="/paciente/habitos" element={<HabitosPaciente />} />
             <Route path="/paciente/checkin/:envioId" element={<Checkin />} />

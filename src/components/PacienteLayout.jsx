@@ -22,7 +22,8 @@ const MAIS_ITEMS = [
   { path: '/paciente/habitos',     icon: 'checklist',      label: 'Hábitos',               sub: 'Tracker diário' },
   // Prescrições desativada — pedidos/resultados → Exames; laudos → futura aba Documentos
   // { path: '/paciente/prescricoes', icon: 'file-text', label: 'Prescrições', sub: 'Documentos da Dra.' },
-  { path: '/paciente/ebooks',      icon: 'book-2',         label: 'E-books',               sub: 'Materiais da Dra.' },
+  // E-books desativado da navegação da paciente — Orientações é o módulo oficial de conteúdo
+  // { path: '/paciente/ebooks', icon: 'book-2', label: 'E-books', sub: 'Materiais da Dra.' },
   { path: '/paciente/ciclo',       icon: 'moon',           label: 'Ciclo & Hormônios',     sub: 'Acompanhe seu ciclo' },
   { path: '/paciente/jornada',     icon: 'route',          label: 'Minha jornada',         sub: 'Fases e evolução' },
   // CHAT DESATIVADO — canal oficial é WhatsApp. Reativar: descomentar linha abaixo e remover o item whatsapp.
@@ -39,7 +40,7 @@ const HEADERS = {
   '/paciente/progresso':    () =>                ({ eyebrow: 'Minha evolução',   title: 'Progresso' }),
   '/paciente/compras':      () =>                ({ eyebrow: 'Lista',            title: 'Compras',           subtitle: 'Para a semana' }),
   // '/paciente/prescricoes':  () => ({ eyebrow: 'Documentos', title: 'Prescrições' }),
-  '/paciente/ebooks':       () =>                ({ eyebrow: 'Materiais',        title: 'E-books',           subtitle: 'Compartilhados pela sua nutri' }),
+  // '/paciente/ebooks': () => ({ eyebrow: 'Materiais', title: 'E-books', subtitle: 'Compartilhados pela sua nutri' }),
   '/paciente/suplementos':  () =>                ({ eyebrow: 'Habit tracker',    title: 'Meus suplementos',  subtitle: 'Marque diariamente' }),
   '/paciente/habitos':      () =>                ({ eyebrow: 'Hábitos do dia',   title: 'Meus hábitos',      subtitle: 'Acompanhe sua rotina' }),
   '/paciente/ciclo':        () =>                ({ eyebrow: 'Saúde hormonal',   title: 'Ciclo & Hormônios',     subtitle: 'Acompanhe seu ciclo menstrual' }),
@@ -90,7 +91,7 @@ export default function PacienteLayout() {
         {TABS.map(t => {
           const active = t.path
             ? location.pathname === t.path
-            : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/ebooks', '/paciente/ciclo', '/paciente/jornada', '/paciente/exames', '/paciente/orientacoes'].includes(location.pathname);
+            : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/ciclo', '/paciente/jornada', '/paciente/exames', '/paciente/orientacoes'].includes(location.pathname);
 
           if (!t.path) {
             return (

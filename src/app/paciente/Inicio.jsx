@@ -17,7 +17,6 @@ export default function Inicio() {
   const [exameRecente, setExameRecente] = useState(null);
   const [proximaConsulta, setProximaConsulta] = useState(null);
   const [checkinPendente, setCheckinPendente] = useState(null);
-  const [ebooksNovos, setEbooksNovos] = useState(0);
   const [orientacoesNovas, setOrientacoesNovas] = useState(0);
   const [habitos, setHabitos] = useState([]);
   const [habitosLogs, setHabitosLogs] = useState({});  // { habito_id: valor }
@@ -34,7 +33,7 @@ export default function Inicio() {
       if (!user) return;
       const agora = new Date().toISOString();
       const hoje  = new Date().toISOString().slice(0, 10);
-      const [planoRes, comprasRes, consultaRes, checkinRes, ebooksRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes] = await Promise.all([
+      const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em, pdf_path')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
@@ -45,8 +44,6 @@ export default function Inicio() {
         supabase.from('checkin_envios').select('id, enviado_em, lembrete_enviado_em, nome, tipo')
           .eq('paciente_id', user.id).is('respondido_em', null)
           .order('enviado_em', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('ebooks_pacientes').select('id', { count: 'exact', head: true })
-          .eq('paciente_id', user.id).is('visto_em', null),
         supabase.from('habitos').select('id, nome, emoji, tipo, meta, unidade, ordem')
           .eq('paciente_id', user.id).eq('ativo', true).order('ordem'),
         supabase.from('habitos_logs').select('habito_id, valor, data')
@@ -93,7 +90,6 @@ export default function Inicio() {
       setCompras(comprasRes.data?.dados ?? null);
       setProximaConsulta(consultaRes.data ?? null);
       setCheckinPendente(checkinRes.data ?? null);
-      setEbooksNovos(ebooksRes.count ?? 0);
       setOrientacoesNovas(orientacoesRes.count ?? 0);
       setExameRecente(examesRes.data ?? null);
 
@@ -157,13 +153,6 @@ export default function Inicio() {
   // Lembrete de check-in: se foi enviado pela nutri E ainda não respondido.
   // Se houver `lembrete_enviado_em`, fica em estilo "urgente" (gradiente forte).
   const ckUrgente = !!checkinPendente?.lembrete_enviado_em;
-
-  async function marcarEbooksComoVistos() {
-    await supabase.from('ebooks_pacientes')
-      .update({ visto_em: new Date().toISOString() })
-      .eq('paciente_id', user.id).is('visto_em', null);
-    navigate('/paciente/ebooks');
-  }
 
   function cumpriuHabito(h, valor) {
     if (valor === undefined || valor === null) return false;
@@ -279,40 +268,6 @@ export default function Inicio() {
             </div>
           </div>
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--gold)', flexShrink: 0 }} aria-hidden="true" />
-        </div>
-      )}
-
-      {/* Aviso de e-books novos */}
-      {ebooksNovos > 0 && (
-        <div onClick={marcarEbooksComoVistos}
-          style={{
-            margin: '0 16px 12px', padding: '14px 16px',
-            background: 'linear-gradient(135deg, var(--gold-soft, var(--bg-soft)), var(--white))',
-            border: '0.5px solid var(--gold-deep)',
-            borderRadius: 14, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 12,
-          }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 10,
-            background: 'var(--gold-deep)', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 20, flexShrink: 0,
-          }}>📚</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
-              color: 'var(--gold-deep)', fontWeight: 500, marginBottom: 2,
-            }}>Novo material</div>
-            <div className="serif" style={{ fontSize: 17, lineHeight: 1.1 }}>
-              {ebooksNovos === 1
-                ? 'Você tem 1 e-book novo'
-                : `Você tem ${ebooksNovos} e-books novos`}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-              Toque para abrir
-            </div>
-          </div>
-          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: 'var(--muted)' }} aria-hidden="true"></i>
         </div>
       )}
 
