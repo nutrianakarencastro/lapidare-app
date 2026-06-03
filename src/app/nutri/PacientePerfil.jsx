@@ -325,7 +325,8 @@ export default function PacientePerfil() {
           { id: 'habitos',       label: 'Hábitos',       icon: 'checklist' },
           // Prescrições desativada — pedidos/resultados → Exames; laudos → futura aba Documentos
           // { id: 'prescricoes', label: 'Prescrições', icon: 'file-text' },
-          { id: 'ebooks',      label: 'E-books',      icon: 'book-2' },
+          // E-books desativado — Orientações é o módulo oficial de conteúdo
+          // { id: 'ebooks', label: 'E-books', icon: 'book-2' },
           { id: 'avaliacao',   label: 'Avaliação',    icon: 'ruler-measure' },
           { id: 'checkin',     label: 'Check-in',     icon: 'clipboard-check' },
           { id: 'ciclo',       label: 'Ciclo & Hormônios', icon: 'moon' },
@@ -360,7 +361,7 @@ export default function PacientePerfil() {
       {tab === 'plano' && <PublicarPlano pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'compras' && <PublicarLista pacienteId={paciente.id} nutriId={user.id} />}
       {/* {tab === 'prescricoes' && <EnviarPrescricao pacienteId={paciente.id} nutriId={user.id} />} */}
-      {tab === 'ebooks' && <EbooksDaPaciente pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
+      {/* {tab === 'ebooks' && <EbooksDaPaciente pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />} */}
       {tab === 'avaliacao' && <RegistrarAvaliacao pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'checkin' && <CheckinPersonalizado pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'ciclo'    && <CicloHormonios pacienteId={paciente.id} pacienteNome={paciente.nome} />}
