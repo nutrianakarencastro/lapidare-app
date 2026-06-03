@@ -16,6 +16,7 @@ import Anamnese from './_Anamnese.jsx';
 import CicloHormonios from './_CicloHormonios.jsx';
 import Jornada from './_Jornada.jsx';
 import ExamesNutri from './_Exames.jsx';
+import OrientacoesPaciente from './_OrientacoesPaciente.jsx';
 import DicaJSON from '../../components/DicaJSON.jsx';
 
 export default function PacientePerfil() {
@@ -331,7 +332,8 @@ export default function PacientePerfil() {
           { id: 'checkin',     label: 'Check-in',     icon: 'clipboard-check' },
           { id: 'ciclo',       label: 'Ciclo & Hormônios', icon: 'moon' },
           { id: 'jornada',     label: 'Jornada',           icon: 'route' },
-          { id: 'exames',      label: 'Exames',            icon: 'flask' },
+          { id: 'exames',        label: 'Exames',      icon: 'flask'    },
+          { id: 'orientacoes',   label: 'Orientações', icon: 'notebook' },
         ].map(t => (
           <button
             key={t.id}
@@ -366,7 +368,8 @@ export default function PacientePerfil() {
       {tab === 'checkin' && <CheckinPersonalizado pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'ciclo'    && <CicloHormonios pacienteId={paciente.id} pacienteNome={paciente.nome} />}
       {tab === 'jornada'  && <Jornada pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
-      {tab === 'exames'   && <ExamesNutri pacienteId={paciente.id} nutriId={user.id} />}
+      {tab === 'exames'      && <ExamesNutri pacienteId={paciente.id} nutriId={user.id} />}
+      {tab === 'orientacoes' && <OrientacoesPaciente pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
     </>
   );
 }
