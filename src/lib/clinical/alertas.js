@@ -426,6 +426,48 @@ const MODULO_A = [
     microconduta:         null,
     gatilhoTemporal:      ['Presente em ≥2 ciclos consecutivos'],
   },
+
+  // ── 8. Alertas Tireoidianos ───────────────────────────────────────────────
+
+  {
+    id: 'hipofuncao_tireoidiana',
+    numero: 20,
+    nome: 'Sinais de Hipofunção Tireoidiana Funcional',
+    categoria: 'problema',
+    eixos: ['tireoidiano'],
+    criterios: ['lentidão', 'frio excessivo', 'queda de cabelo', 'queda de sobrancelhas', 'pele seca', 'intestino lento', 'energia muito baixa'],
+    intensidade: {
+      leve:            { criterio: '2 sintomas' },
+      moderado:        { criterio: '3 sintomas' },
+      importante:      { criterio: '4 sintomas por ≥2 semanas' },
+      atencao_clinica: { criterio: '5+ sintomas persistentes — considerar avaliação laboratorial' },
+    },
+    textoPaciente:        'Seu corpo está apresentando sinais que podem indicar maior lentificação metabólica.',
+    textoNutricionista:   'Padrão compatível com hipofunção tireoidiana funcional. Considerar rastreio de TSH, T4 livre e T3 livre. Queda do terço externo das sobrancelhas é sinal de alta especificidade. Avaliar carências de iodo, selênio, zinco e ferro.',
+    conscienciaCorporal:  'Nos períodos de maior cansaço e frio, perceba se seu raciocínio também está mais lento — esses sinais costumam aparecer juntos.',
+    microconduta:         'Priorize alimentos fontes de selênio (castanha-do-pará), iodo (algas, peixes marinhos) e zinco. Avalie qualidade do sono e manejo do cortisol — o estresse crônico pode reduzir conversão T4→T3.',
+    gatilhoTemporal:      ['≥3 sintomas por ≥2 semanas consecutivas', 'Queda de sobrancelhas associada a qualquer outro sintoma'],
+  },
+
+  {
+    id: 'tireoidiano_cortisol',
+    numero: 21,
+    nome: 'Tireoide + Cortisol',
+    categoria: 'problema',
+    eixos: ['tireoidiano', 'adrenal'],
+    criterios: ['lentidão', 'frio', 'baixa energia', 'sono ruim', 'agitação com cansaço'],
+    intensidade: {
+      leve:            { criterio: '2 sintomas de cada eixo' },
+      moderado:        { criterio: '3+ sintomas combinados' },
+      importante:      { criterio: '4+ sintomas com impacto funcional' },
+      atencao_clinica: { criterio: 'Padrão persistente por ≥3 semanas' },
+    },
+    textoPaciente:        'Seu corpo mostra sinais de cansaço profundo que podem estar relacionados ao metabolismo e ao estresse.',
+    textoNutricionista:   'Coexistência de padrão tireoidiano e adrenal — considerar supressão de T3 mediada por cortisol elevado cronicamente. O estresse pode inibir a conversão T4→T3 e aumentar T3 reverso.',
+    conscienciaCorporal:  'Períodos de maior pressão parecem agravar sua sensação de lentidão e cansaço.',
+    microconduta:         'Manejo do estresse é prioritário — sem esse suporte, o suporte nutricional tireoidiano tem resposta limitada.',
+    gatilhoTemporal:      ['Padrão presente em ≥2 semanas de alto estresse'],
+  },
 ];
 
 // ─── Módulo B — Evolução Positiva ─────────────────────────────────────────────

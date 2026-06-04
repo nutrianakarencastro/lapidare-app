@@ -24,6 +24,7 @@ const MAIS_ITEMS = [
   // { path: '/paciente/prescricoes', icon: 'file-text', label: 'Prescrições', sub: 'Documentos da Dra.' },
   // E-books desativado da navegação da paciente — Orientações é o módulo oficial de conteúdo
   // { path: '/paciente/ebooks', icon: 'book-2', label: 'E-books', sub: 'Materiais da Dra.' },
+  { path: '/paciente/mapa',         icon: 'map',            label: 'Mapa Metabólico',       sub: 'Seus 9 eixos metabólicos' },
   { path: '/paciente/ciclo',       icon: 'moon',           label: 'Ciclo & Hormônios',     sub: 'Acompanhe seu ciclo' },
   { path: '/paciente/jornada',     icon: 'route',          label: 'Minha jornada',         sub: 'Fases e evolução' },
   // CHAT DESATIVADO — canal oficial é WhatsApp. Reativar: descomentar linha abaixo e remover o item whatsapp.
@@ -44,6 +45,7 @@ const HEADERS = {
   // '/paciente/ebooks': () => ({ eyebrow: 'Materiais', title: 'E-books', subtitle: 'Compartilhados pela sua nutri' }),
   '/paciente/suplementos':  () =>                ({ eyebrow: 'Habit tracker',    title: 'Meus suplementos',  subtitle: 'Marque diariamente' }),
   '/paciente/habitos':      () =>                ({ eyebrow: 'Hábitos do dia',   title: 'Meus hábitos',      subtitle: 'Acompanhe sua rotina' }),
+  '/paciente/mapa':         () =>                ({ eyebrow: 'Saúde metabólica', title: 'Mapa Metabólico',       subtitle: 'Seus 9 eixos de equilíbrio' }),
   '/paciente/ciclo':        () =>                ({ eyebrow: 'Saúde hormonal',   title: 'Ciclo & Hormônios',     subtitle: 'Acompanhe seu ciclo menstrual' }),
   '/paciente/jornada':      () =>                ({ eyebrow: 'Minha evolução',   title: 'Minha jornada',         subtitle: 'Fases e marcos do acompanhamento' }),
   '/paciente/exames':       () =>                ({ eyebrow: 'Saúde & Exames',   title: 'Meus Exames',           subtitle: 'Análises e resultados' }),
@@ -93,7 +95,7 @@ export default function PacienteLayout() {
         {TABS.map(t => {
           const active = t.path
             ? location.pathname === t.path
-            : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/ciclo', '/paciente/jornada', '/paciente/exames', '/paciente/orientacoes', '/paciente/documentos'].includes(location.pathname);
+            : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/mapa', '/paciente/ciclo', '/paciente/jornada', '/paciente/exames', '/paciente/orientacoes', '/paciente/documentos'].includes(location.pathname);
 
           if (!t.path) {
             return (

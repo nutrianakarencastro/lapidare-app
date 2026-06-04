@@ -134,6 +134,7 @@ const EIXO_UI = {
   intestinal:    { label: 'Intestinal / Estroboloma',    icon: 'leaf'           },
   inflamatorio:  { label: 'Inflamatório',                icon: 'alert-triangle' },
   perimenopausa: { label: 'Perimenopausa / Transição',   icon: 'moon-stars'     },
+  tireoidiano:   { label: 'Tireoidiano',                 icon: 'thermometer'    },
 };
 
 // EIXOS exportado combina metadados de UI com dados clínicos da biblioteca
@@ -255,7 +256,17 @@ export function calcularScoresHormonais(s, fase = 'desconhecida', estagioPeri = 
 
   const perimenopausa = calcularScorePerimenopausa(s, estagioPeri);
 
-  return { glicemico, adrenal, estrogenico, progesterona, androgenico, intestinal, inflamatorio, perimenopausa };
+  const tireoidiano = clamp(
+    b(s.lentidao)           * 25 +
+    b(s.frio_excessivo)     * 20 +
+    b(s.pele_seca)          * 15 +
+    b(s.queda_cabelo)       * 20 +
+    b(s.queda_sobrancelhas) * 30 +
+    (s.intestino === 'preso' ? 10 : 0) +
+    (e5(s.energia) >= 5 ? 20 : e5(s.energia) >= 4 ? 10 : 0)
+  );
+
+  return { glicemico, adrenal, estrogenico, progesterona, androgenico, intestinal, inflamatorio, perimenopausa, tireoidiano };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -268,6 +268,39 @@ export const EIXOS = {
   },
 
   // ─────────────────────────────────────────────────────────────────────────
+  tireoidiano: {
+    id: 'tireoidiano',
+    numero: 9,
+    nome: 'Eixo Tireoidiano',
+    subtitulo: 'Hipofunção tireoidiana funcional',
+    criterioAlerta: 4,
+    cor: '#5b8fa8',
+    corSoft: '#e8f2f8',
+    sintomas: [
+      { id: 'lentidao',            label: 'Lentidão cognitiva e corporal',          peso: 3 },
+      { id: 'frio_excessivo',      label: 'Sensação de frio excessivo',             peso: 3 },
+      { id: 'pele_seca',           label: 'Pele seca',                              peso: 2 },
+      { id: 'queda_cabelo',        label: 'Queda de cabelo',                        peso: 3 },
+      { id: 'queda_sobrancelhas',  label: 'Queda da terça parte das sobrancelhas',  peso: 4 },
+      { id: 'intestino_preso',     label: 'Intestino preso / lento',                peso: 2 },
+      { id: 'energia_muito_baixa', label: 'Energia muito baixa',                    peso: 3 },
+    ],
+    interpretacaoClinica: [
+      'Hipofunção tireoidiana funcional',
+      'Possível hipotireoidismo subclínico',
+      'Baixa conversão T4→T3',
+      'Impacto metabólico sistêmico',
+      'Desaceleração fisiológica generalizada',
+    ],
+    logicaClinica: [
+      'Queda da terça parte das sobrancelhas é altamente sugestiva',
+      'Lentidão + frio excessivo + queda de cabelo = tríade clássica',
+      'Intestino preso isolado tem baixa especificidade tireoidiana',
+      'Energia muito baixa sem causa aparente aumenta suspeita',
+    ],
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
   perimenopausa: {
     id: 'perimenopausa',
     numero: 8,

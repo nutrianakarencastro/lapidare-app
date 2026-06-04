@@ -535,7 +535,7 @@ export default function CicloHormonios({ pacienteId, pacienteNome }) {
     // Scores médios dos últimos 30 dias
     const ultimos30   = sintomas.slice(0, 30);
     const estagioPeri = classificarEstagioPeri(periodos);
-    const scoresMedias = { glicemico: 0, adrenal: 0, estrogenico: 0, progesterona: 0, androgenico: 0, intestinal: 0, inflamatorio: 0, perimenopausa: 0 };
+    const scoresMedias = { glicemico: 0, adrenal: 0, estrogenico: 0, progesterona: 0, androgenico: 0, intestinal: 0, inflamatorio: 0, perimenopausa: 0, tireoidiano: 0 };
     if (ultimos30.length > 0) {
       for (const s of ultimos30) {
         const { fase } = calcularFaseDoCiclo(periodos, s.data);

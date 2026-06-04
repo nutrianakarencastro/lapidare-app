@@ -18,6 +18,7 @@ import Jornada from './_Jornada.jsx';
 import ExamesNutri from './_Exames.jsx';
 import OrientacoesPaciente from './_OrientacoesPaciente.jsx';
 import DocumentosNutri from './_DocumentosPaciente.jsx';
+import MapaMetabolicoNutri from './_MapaMetabolico.jsx';
 import DicaJSON from '../../components/DicaJSON.jsx';
 
 export default function PacientePerfil() {
@@ -331,6 +332,7 @@ export default function PacientePerfil() {
           // { id: 'ebooks', label: 'E-books', icon: 'book-2' },
           { id: 'avaliacao',   label: 'Avaliação',    icon: 'ruler-measure' },
           { id: 'checkin',     label: 'Check-in',     icon: 'clipboard-check' },
+          { id: 'mapa',        label: 'Mapa Metabólico',   icon: 'map'  },
           { id: 'ciclo',       label: 'Ciclo & Hormônios', icon: 'moon' },
           { id: 'jornada',     label: 'Jornada',           icon: 'route' },
           { id: 'exames',        label: 'Exames',      icon: 'flask'    },
@@ -368,6 +370,7 @@ export default function PacientePerfil() {
       {/* {tab === 'ebooks' && <EbooksDaPaciente pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />} */}
       {tab === 'avaliacao' && <RegistrarAvaliacao pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'checkin' && <CheckinPersonalizado pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
+      {tab === 'mapa'     && <MapaMetabolicoNutri pacienteId={paciente.id} pacienteNome={paciente.nome} nutriId={user.id} />}
       {tab === 'ciclo'    && <CicloHormonios pacienteId={paciente.id} pacienteNome={paciente.nome} />}
       {tab === 'jornada'  && <Jornada pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'exames'      && <ExamesNutri pacienteId={paciente.id} nutriId={user.id} />}

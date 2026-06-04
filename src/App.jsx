@@ -41,6 +41,7 @@ import Checkin from './app/paciente/Checkin.jsx';
 import SuplementosPaciente from './app/paciente/Suplementos.jsx';
 import HabitosPaciente from './app/paciente/Habitos.jsx';
 import CicloPaciente from './app/paciente/Ciclo.jsx';
+import MapaMetabolico from './app/paciente/MapaMetabolico.jsx';
 import JornadaPaciente from './app/paciente/Jornada.jsx';
 import ExamesPaciente from './app/paciente/Exames.jsx';
 import OrientacoesPaciente from './app/paciente/Orientacoes.jsx';
@@ -96,6 +97,7 @@ export default function App() {
             <Route path="/paciente/suplementos" element={<SuplementosPaciente />} />
             <Route path="/paciente/habitos" element={<HabitosPaciente />} />
             <Route path="/paciente/checkin/:envioId" element={<Checkin />} />
+            <Route path="/paciente/mapa" element={<MapaMetabolico />} />
             <Route path="/paciente/ciclo" element={<CicloPaciente />} />
             <Route path="/paciente/jornada" element={<JornadaPaciente />} />
             <Route path="/paciente/exames" element={<ExamesPaciente />} />

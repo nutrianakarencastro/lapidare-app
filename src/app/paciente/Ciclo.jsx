@@ -684,6 +684,7 @@ function novoSintoma() {
     fluxo_muito_maior: false, fluxo_muito_menor: false,
     secura_vaginal: false, palpitacoes: false, queda_cabelo: false,
     insonia: false, acorda_madrugada: false,
+    lentidao: false, frio_excessivo: false, pele_seca: false, queda_sobrancelhas: false,
     sangramento_dia: '', cor_sangue_dia: '',
     intensidade_fluxo_dia: '', coagulos_dia: 'nao',
     absorventes_dia: null, notas_sangramento_dia: '',
@@ -852,10 +853,17 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
 
         <SL>Sono</SL>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <BtnToggle ativo={form.insonia}          onClick={() => tog('insonia')}          label="Insônia (dificuldade em adormecer)" icon="zzz"   />
-          <BtnToggle ativo={form.queda_cabelo}     onClick={() => tog('queda_cabelo')}     label="Queda de cabelo notada hoje"       icon="scissors" />
+          <BtnToggle ativo={form.insonia}          onClick={() => tog('insonia')}          label="Insônia (dificuldade em adormecer)" icon="zzz"      />
+          <BtnToggle ativo={form.queda_cabelo}     onClick={() => tog('queda_cabelo')}     label="Queda de cabelo notada hoje"        icon="scissors" />
+          <BtnToggle ativo={form.queda_sobrancelhas} onClick={() => tog('queda_sobrancelhas')} label="Queda de sobrancelhas (terço externo)" icon="eye"  />
         </div>
 
+        <SL>Sinais metabólicos</SL>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <BtnToggle ativo={form.lentidao}       onClick={() => tog('lentidao')}       label="Lentidão — corpo e raciocínio lentos" icon="hourglass"   />
+          <BtnToggle ativo={form.frio_excessivo} onClick={() => tog('frio_excessivo')} label="Frio excessivo — mais frio que o normal" icon="snowflake" />
+          <BtnToggle ativo={form.pele_seca}      onClick={() => tog('pele_seca')}      label="Pele muito seca hoje"                 icon="droplet-off" />
+        </div>
 
         <SL>Digestivo &amp; emocional</SL>
         <FL>Intestino</FL>
