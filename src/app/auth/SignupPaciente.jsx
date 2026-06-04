@@ -142,11 +142,6 @@ export default function SignupPaciente() {
 
   // Nutri logada abrindo o link da própria paciente — mostra aviso útil
   if (role === 'nutri') {
-    async function sairETestar() {
-      await supabase.auth.signOut();
-      // recarrega na mesma URL — depois do logout vai mostrar a tela da paciente
-      window.location.reload();
-    }
     return (
       <CenterWrap>
         <Box>
@@ -154,8 +149,7 @@ export default function SignupPaciente() {
           <h1 style={H1}>Link da paciente</h1>
           <p style={P}>
             Este é o link de cadastro de <strong>{nome || 'sua paciente'}</strong>.
-            Você está logada como nutri — envie este link pra ela ou abra em uma
-            janela anônima pra ver como ela vai ver.
+            Você está logada como nutri.
           </p>
 
           <div style={{
@@ -169,34 +163,28 @@ export default function SignupPaciente() {
             {window.location.href}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button onClick={() => navigate('/nutri/cadastrar', { replace: true })}
-              style={{
-                flex: 1, padding: '10px 14px',
-                background: 'var(--ink)', color: 'var(--bg-soft)',
-                borderRadius: 10, fontSize: 12, fontWeight: 500,
-                border: 'none', cursor: 'pointer',
-                fontFamily: 'var(--font-sans)',
-              }}>
-              ← Voltar pro painel
-            </button>
-            <button onClick={sairETestar}
-              style={{
-                flex: 1, padding: '10px 14px',
-                background: 'var(--white)', color: 'var(--ink)',
-                border: '0.5px solid var(--hair, #d9d3c9)',
-                borderRadius: 10, fontSize: 12, fontWeight: 500,
-                cursor: 'pointer',
-                fontFamily: 'var(--font-sans)',
-              }}>
-              Sair e testar como paciente
-            </button>
+          <div style={{
+            background: '#fdf6e3',
+            border: '0.5px solid #e8d9a0',
+            borderRadius: 10, padding: '11px 14px', margin: '0 0 16px',
+            fontSize: 12, textAlign: 'left', lineHeight: 1.6,
+            color: 'var(--ink-soft)',
+          }}>
+            Para testar como paciente, copie o link acima e abra em uma{' '}
+            <strong>janela anônima</strong> (Cmd+Shift+N no Safari/Chrome) ou em{' '}
+            <strong>outro navegador</strong>. Assim sua sessão de nutri permanece ativa.
           </div>
 
-          <p style={{ marginTop: 14, fontSize: 11, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.5 }}>
-            Dica: abrir o link em uma <strong>janela anônima</strong> (Cmd+Shift+N) deixa você
-            testar sem deslogar do painel.
-          </p>
+          <button onClick={() => navigate('/nutri/cadastrar', { replace: true })}
+            style={{
+              width: '100%', padding: '10px 14px',
+              background: 'var(--ink)', color: 'var(--bg-soft)',
+              borderRadius: 10, fontSize: 12, fontWeight: 500,
+              border: 'none', cursor: 'pointer',
+              fontFamily: 'var(--font-sans)',
+            }}>
+            ← Voltar pro painel
+          </button>
         </Box>
       </CenterWrap>
     );
