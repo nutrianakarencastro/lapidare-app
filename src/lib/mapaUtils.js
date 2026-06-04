@@ -3,6 +3,7 @@ import {
   calcularFaseDoCiclo, calcularScoresHormonais, gerarAlertas, detectarCorrelacoes,
   classificarEstagioPeri,
 } from './cicloUtils.js';
+import { calcularScoreIntestinal } from './intestinoUtils.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DISCLAIMER obrigatório para exibição à paciente
@@ -187,7 +188,7 @@ const SCORES_ZERO = {
   androgenico: 0, intestinal: 0, inflamatorio: 0, perimenopausa: 0, tireoidiano: 0,
 };
 
-export function calcularMapaVivo(sintomas, periodos = []) {
+export function calcularMapaVivo(sintomas, periodos = [], intestinoLogs = []) {
   const ultimos30 = (sintomas ?? []).slice(0, 30);
   if (!ultimos30.length) return { scores: SCORES_ZERO, confianca: 0, diasComDados: 0 };
 
@@ -207,6 +208,12 @@ export function calcularMapaVivo(sintomas, periodos = []) {
   const scores = Object.fromEntries(
     Object.entries(acumulado).map(([k, v]) => [k, Math.round(v)])
   );
+
+  // Enriquece o eixo intestinal com score refinado de intestino_logs quando há dados suficientes
+  const scoreIntestinalRefinado = calcularScoreIntestinal(intestinoLogs);
+  if (scoreIntestinalRefinado !== null && (intestinoLogs ?? []).filter(l => l.tipo === 'diario').length >= 5) {
+    scores.intestinal = scoreIntestinalRefinado;
+  }
 
   // Confiança: 100% com 30 dias, proporcional abaixo disso
   const confianca = Math.min(100, Math.round((ultimos30.length / 30) * 100));

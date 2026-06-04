@@ -85,12 +85,13 @@ export default function MapaMetabolico() {
   const { user } = useSession();
   const [sintomas, setSintomas] = useState(null);
   const [periodos, setPeriodos] = useState([]);
+  const [intestinoLogs, setIntestinoLogs] = useState([]);
 
   useEffect(() => {
     if (!user?.id) return;
     let active = true;
     async function carregar() {
-      const [sRes, pRes] = await Promise.all([
+      const [sRes, pRes, iRes] = await Promise.all([
         supabase.from('ciclo_sintomas_diarios')
           .select('*').eq('paciente_id', user.id)
           .gte('data', dataInicioMapaVivo())
@@ -98,10 +99,15 @@ export default function MapaMetabolico() {
         supabase.from('ciclo_periodos')
           .select('id, inicio, fim').eq('paciente_id', user.id)
           .order('inicio', { ascending: false }),
+        supabase.from('intestino_logs')
+          .select('*').eq('paciente_id', user.id)
+          .gte('data', dataInicioMapaVivo())
+          .order('data', { ascending: false }),
       ]);
       if (!active) return;
       setSintomas(sRes.data ?? []);
       setPeriodos(pRes.data ?? []);
+      setIntestinoLogs(iRes.data ?? []);
     }
     carregar();
     return () => { active = false; };
@@ -109,8 +115,8 @@ export default function MapaMetabolico() {
 
   const mapa = useMemo(() => {
     if (sintomas === null) return null;
-    return calcularMapaVivo(sintomas, periodos);
-  }, [sintomas, periodos]);
+    return calcularMapaVivo(sintomas, periodos, intestinoLogs);
+  }, [sintomas, periodos, intestinoLogs]);
 
   if (sintomas === null) {
     return (
