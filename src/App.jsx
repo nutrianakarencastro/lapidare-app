@@ -56,7 +56,9 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<RootRedirect />} />
-          <Route path="/login" element={<Login />} />
+          <Route path="/login"          element={<Login />} />
+          <Route path="/nutri/login"    element={<Login context="nutri" />} />
+          <Route path="/paciente/login" element={<Login context="paciente" />} />
           <Route path="/auth/callback" element={<Callback />} />
           <Route path="/signup-paciente/:nutriId" element={<SignupPaciente />} />
           <Route path="/signup-paciente/:nutriId/:token" element={<SignupPaciente />} />

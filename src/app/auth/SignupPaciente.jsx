@@ -279,7 +279,7 @@ export default function SignupPaciente() {
         </form>
 
         <p style={{ marginTop: 16, fontSize: 11, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.5 }}>
-          Já tem conta? <a href="/login" style={{ color: 'var(--gold-deep)', textDecoration: 'none' }}>Entrar</a>
+          Já tem conta? <a href="/paciente/login" style={{ color: 'var(--gold-deep)', textDecoration: 'none' }}>Entrar</a>
         </p>
       </Box>
     </CenterWrap>

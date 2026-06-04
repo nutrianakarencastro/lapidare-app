@@ -20,7 +20,10 @@ export default function RequireAuth({ children, role }) {
   if (loading) return <Loading />;
 
   if (!session) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    const loginPath = role === 'nutri' ? '/nutri/login'
+      : role === 'paciente' ? '/paciente/login'
+      : '/login';
+    return <Navigate to={loginPath} replace state={{ from: location.pathname }} />;
   }
 
   if (role && userRole && userRole !== role) {
