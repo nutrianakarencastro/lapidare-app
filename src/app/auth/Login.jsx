@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { useTheme } from '../../lib/theme.jsx';
@@ -18,7 +18,7 @@ export default function Login() {
   const [crn, setCrn] = useState('');
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState(null);
-  const [aviso, setAviso] = useState(null);
+  const [aviso, setAviso] = useState(location.state?.aviso ?? null);
 
   // Redireciona automaticamente após login bem-sucedido
   useEffect(() => {
@@ -172,6 +172,16 @@ export default function Login() {
           )}
           <Field label="Email" type="email" value={email} onChange={setEmail} required autoFocus={mode === 'signin'} />
           <Field label="Senha" type="password" value={senha} onChange={setSenha} required minLength={6} />
+
+          {mode === 'signin' && (
+            <div style={{ textAlign: 'right', marginTop: -6, marginBottom: 14 }}>
+              <Link to="/auth/esqueci-senha" style={{
+                fontSize: 12, color: 'var(--muted)', textDecoration: 'none',
+              }}>
+                Esqueci minha senha
+              </Link>
+            </div>
+          )}
 
           {erro && (
             <div style={{
