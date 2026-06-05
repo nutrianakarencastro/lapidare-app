@@ -49,6 +49,8 @@ import ExamesPaciente from './app/paciente/Exames.jsx';
 import OrientacoesPaciente from './app/paciente/Orientacoes.jsx';
 import DocumentosPaciente from './app/paciente/Documentos.jsx';
 import IntestinoPaciente from './app/paciente/Intestino.jsx';
+import AlemNutricaoPaciente from './app/paciente/AlemNutricao.jsx';
+import AlemNutricaoNutri from './app/nutri/AlemNutricao.jsx';
 
 export default function App() {
   return (
@@ -84,7 +86,8 @@ export default function App() {
             <Route path="/nutri/previsibilidade" element={<Previsibilidade />} />
             <Route path="/nutri/financeiro" element={<Financeiro />} />
             <Route path="/nutri/biblioteca" element={<Biblioteca />} />
-            <Route path="/nutri/personalizacao" element={<Personalizacao />} />
+            <Route path="/nutri/personalizacao"  element={<Personalizacao />} />
+            <Route path="/nutri/alem-nutricao"  element={<AlemNutricaoNutri />} />
           </Route>
 
           {/* App da Paciente */}
@@ -110,7 +113,8 @@ export default function App() {
             <Route path="/paciente/exames" element={<ExamesPaciente />} />
             <Route path="/paciente/orientacoes" element={<OrientacoesPaciente />} />
             <Route path="/paciente/documentos"  element={<DocumentosPaciente />} />
-            <Route path="/paciente/intestino"   element={<IntestinoPaciente />} />
+            <Route path="/paciente/intestino"     element={<IntestinoPaciente />} />
+            <Route path="/paciente/alem-nutricao" element={<AlemNutricaoPaciente />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
