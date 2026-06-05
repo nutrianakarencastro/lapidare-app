@@ -3,36 +3,47 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { brl, dataBR, iniciais, statusParcela } from '../../lib/utils.js';
+import { calcularMapaVivo, dataInicioMapaVivo, EIXOS_ORDEM } from '../../lib/mapaUtils.js';
+import { EIXOS } from '../../lib/cicloUtils.js';
 
-// Nº esperado de consultas por tipo de plano (para alertar planos chegando ao fim)
 const CONSULTAS_POR_PLANO = {
-  trimestral:     6,
-  semestral:      12,
-  consultoria:    1,
-  // 'acompanhamento' = contínuo, sem alerta de fim
+  trimestral:  6,
+  semestral:   12,
+  consultoria: 1,
 };
 
 const STORAGE_OCULTAR_META = 'lapidare:ocultarMeta';
+const LIMIAR_ATENCAO   = 55;
+const DIAS_SEM_REGISTRO = 14;
+const MIN_CONFIANCA     = 30;
 
 export default function Visao() {
   const navigate = useNavigate();
   const { user, profile } = useSession();
-  const [carregando, setCarregando] = useState(true);
-  const [pacientes, setPacientes] = useState([]);
-  const [consultasSemana, setConsultasSemana] = useState([]);
-  const [parcelasSemana, setParcelasSemana] = useState([]);
-  const [checkinsPendentes, setCheckinsPendentes] = useState([]);
-  const [planosTerminando, setPlanosTerminando] = useState([]);
-  const [alertasRelacionais, setAlertasRelacionais] = useState([]);
+  const [carregando, setCarregando]                     = useState(true);
+  const [pacientes, setPacientes]                       = useState([]);
+  const [consultasSemana, setConsultasSemana]           = useState([]);
+  const [parcelasSemana, setParcelasSemana]             = useState([]);
+  const [checkinsPendentes, setCheckinsPendentes]       = useState([]);
+  const [planosTerminando, setPlanosTerminando]         = useState([]);
+  const [alertasRelacionais, setAlertasRelacionais]     = useState([]);
   const [orientacoesTotal,      setOrientacoesTotal]      = useState(0);
   const [orientacoesAtribuidas, setOrientacoesAtribuidas] = useState(0);
   const [orientacoesNaoVistas,  setOrientacoesNaoVistas]  = useState(0);
   const [orientacoesConcluidas, setOrientacoesConcluidas] = useState(0);
-  const [receitaMes, setReceitaMes] = useState(0);
-  const [metaMensal, setMetaMensal] = useState(null);
-  const [ocultarMeta, setOcultarMeta] = useState(() => {
+  const [receitaMes, setReceitaMes]                     = useState(0);
+  const [metaMensal, setMetaMensal]                     = useState(null);
+  const [ocultarMeta, setOcultarMeta]                   = useState(() => {
     return localStorage.getItem(STORAGE_OCULTAR_META) === '1';
   });
+
+  // ── Clínica ──
+  const [examesSolicitados,      setExamesSolicitados]      = useState([]);
+  const [examesAguardando,       setExamesAguardando]       = useState([]);
+  const [rastreiosPendentes,     setRastreiosPendentes]     = useState([]);
+  const [documentosSemAssinatura, setDocumentosSemAssinatura] = useState([]);
+  const [sintomasPorPac,         setSintomasPorPac]         = useState({});
+  const [ultimoRegPorPac,        setUltimoRegPorPac]        = useState({});
 
   function toggleOcultarMeta() {
     const novo = !ocultarMeta;
@@ -45,77 +56,73 @@ export default function Visao() {
     let active = true;
     async function carregar() {
       const hoje = new Date();
-      // Semana: segunda à domingo
       const dow = (hoje.getDay() + 6) % 7;
       const segunda = new Date(hoje); segunda.setDate(hoje.getDate() - dow); segunda.setHours(0, 0, 0, 0);
       const domingo = new Date(segunda); domingo.setDate(segunda.getDate() + 6); domingo.setHours(23, 59, 59, 999);
-      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10);
-      const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
+      const inicioMes  = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10);
+      const fimMes     = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
       const isoSegunda = segunda.toISOString();
       const isoDomingo = domingo.toISOString();
       const dataSegunda = segunda.toISOString().slice(0, 10);
       const dataDomingo = domingo.toISOString().slice(0, 10);
-
-      // Limites pra queries dos alertas relacionais
       const dias30atras = new Date(Date.now() - 30 * 86_400_000).toISOString();
-      const dias7atras  = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+      const dias7atras  = new Date(Date.now() - 7  * 86_400_000).toISOString().slice(0, 10);
 
+      // ── Fase 1: queries independentes de IDs de pacientes ──────────────────
       const [
         pacRes, agSemanaRes, parcRes, checkRes,
         parcelasMesRes, allConsultasRes, nutriRes,
         msgRes, feedRes, supRes, supLogRes,
         orientTotalRes, orientAssignRes,
+        examesSolRes, examesAguRes, rastreiosRes, documentosRes,
       ] = await Promise.all([
-        // pacientes ativas (com nascimento pra aniversário)
         supabase.from('pacientes').select('id, nome, tipo_plano, nascimento').eq('nutri_id', user.id),
-        // consultas da semana
         supabase.from('consultas').select('id, data_hora, tipo, duracao_min, paciente:pacientes(id, nome)')
           .eq('nutri_id', user.id).neq('status', 'cancelada')
           .gte('data_hora', isoSegunda).lte('data_hora', isoDomingo)
           .order('data_hora'),
-        // parcelas vencendo na semana (pendentes ou atrasadas)
         supabase.from('parcelas').select('id, valor, vencimento, status, venda:vendas(servico, paciente:pacientes(id, nome))')
           .eq('nutri_id', user.id).neq('status', 'pago')
           .lte('vencimento', dataDomingo)
           .order('vencimento'),
-        // check-ins pendentes
         supabase.from('checkin_envios').select('id, enviado_em, paciente:pacientes(id, nome)')
           .eq('nutri_id', user.id).is('respondido_em', null)
           .order('enviado_em'),
-        // receita do mês (parcelas pagas)
         supabase.from('parcelas').select('valor, data_pgto')
           .eq('nutri_id', user.id).eq('status', 'pago')
           .gte('data_pgto', inicioMes).lte('data_pgto', fimMes),
-        // todas as consultas não canceladas (para contar por paciente)
         supabase.from('consultas').select('paciente_id, status')
           .eq('nutri_id', user.id).neq('status', 'cancelada'),
-        // perfil da nutri (meta_mensal)
         supabase.from('nutris').select('meta_mensal').eq('id', user.id).maybeSingle(),
-        // mensagens das pacientes (últimos 30 dias) — pra detectar quem sumiu
         supabase.from('mensagens').select('paciente_id, created_at')
           .eq('nutri_id', user.id).eq('de', 'paciente')
           .gte('created_at', dias30atras)
           .order('created_at', { ascending: false }),
-        // posts no feed (últimos 30 dias) — RLS filtra só do nutri logado
         supabase.from('feed_pratos').select('paciente_id, created_at')
           .gte('created_at', dias30atras)
           .order('created_at', { ascending: false }),
-        // suplementos ativos
         supabase.from('suplementos').select('id, paciente_id')
           .eq('nutri_id', user.id).eq('ativo', true),
-        // logs de suplemento últimos 7 dias
         supabase.from('suplementos_logs').select('suplemento_id, paciente_id, data, tomado')
           .gte('data', dias7atras),
-        // orientações criadas (ativas)
         supabase.from('orientacoes').select('id', { count: 'exact', head: true })
           .eq('nutri_id', user.id).eq('ativo', true),
-        // status das atribuições
         supabase.from('orientacoes_pacientes').select('status')
           .eq('nutri_id', user.id),
+        // clínica — pendências
+        supabase.from('exames_arquivos').select('id, titulo, categoria, paciente_id')
+          .eq('nutri_id', user.id).eq('status', 'solicitado'),
+        supabase.from('exames_arquivos').select('id, titulo, categoria, paciente_id')
+          .eq('nutri_id', user.id).eq('status', 'aguardando_resultado'),
+        supabase.from('intestino_rastreio_solicitacoes').select('id, paciente_id, solicitado_em')
+          .eq('nutri_id', user.id).is('respondido_em', null),
+        supabase.from('documentos').select('id, titulo, tipo, paciente_id')
+          .eq('nutri_id', user.id).eq('status', 'enviado'),
       ]);
 
       if (!active) return;
 
+      // ── Processar dados existentes ──────────────────────────────────────────
       setPacientes(pacRes.data ?? []);
       setConsultasSemana(agSemanaRes.data ?? []);
       setParcelasSemana(parcRes.data ?? []);
@@ -123,11 +130,8 @@ export default function Visao() {
 
       const receita = (parcelasMesRes.data ?? []).reduce((a, p) => a + Number(p.valor ?? 0), 0);
       setReceitaMes(receita);
+      setMetaMensal(nutriRes.data?.meta_mensal ?? null);
 
-      const meta = nutriRes.data?.meta_mensal ?? null;
-      setMetaMensal(meta);
-
-      // Planos chegando ao fim
       const contagem = {};
       for (const c of allConsultasRes.data ?? []) {
         contagem[c.paciente_id] = (contagem[c.paciente_id] ?? 0) + 1;
@@ -138,51 +142,42 @@ export default function Visao() {
           if (!esperado) return null;
           const feitas = contagem[p.id] ?? 0;
           const restam = esperado - feitas;
-          if (restam > 2) return null;  // só alerta quando faltam 2 ou menos
-          return {
-            id: p.id, nome: p.nome, tipo_plano: p.tipo_plano,
-            feitas, esperado, restam,
-            vencido: restam <= 0,
-          };
+          if (restam > 2) return null;
+          return { id: p.id, nome: p.nome, tipo_plano: p.tipo_plano, feitas, esperado, restam, vencido: restam <= 0 };
         })
         .filter(Boolean);
       setPlanosTerminando(terminando);
 
-      // ─── ALERTAS RELACIONAIS ───
-      const todasPacientes = pacRes.data ?? [];
-      const ultimaMsgPorPac = {};
+      const todasPacientes    = pacRes.data ?? [];
+      const ultimaMsgPorPac   = {};
       for (const m of msgRes.data ?? []) {
         if (!ultimaMsgPorPac[m.paciente_id]) ultimaMsgPorPac[m.paciente_id] = m.created_at;
       }
-      const ultimoFeedPorPac = {};
+      const ultimoFeedPorPac  = {};
       for (const f of feedRes.data ?? []) {
         if (!ultimoFeedPorPac[f.paciente_id]) ultimoFeedPorPac[f.paciente_id] = f.created_at;
       }
-
-      // Aderência aos suplementos por paciente nos últimos 7 dias
-      const supAtivosPorPac = {};
+      const supAtivosPorPac   = {};
       for (const s of supRes.data ?? []) {
         supAtivosPorPac[s.paciente_id] = (supAtivosPorPac[s.paciente_id] ?? 0) + 1;
       }
-      const supTomadosPorPac = {};
+      const supTomadosPorPac  = {};
       for (const l of supLogRes.data ?? []) {
         if (l.tomado) supTomadosPorPac[l.paciente_id] = (supTomadosPorPac[l.paciente_id] ?? 0) + 1;
       }
 
-      const hojeMD = new Date();
+      const hojeMD  = new Date();
       const hojeMes = hojeMD.getMonth() + 1;
       const hojeDia = hojeMD.getDate();
 
       const alertas = [];
       for (const p of todasPacientes) {
-        // 🎂 Aniversário hoje
         if (p.nascimento) {
           const n = new Date(p.nascimento + 'T12:00:00');
           if (n.getMonth() + 1 === hojeMes && n.getDate() === hojeDia) {
             const idade = hojeMD.getFullYear() - n.getFullYear();
             alertas.push({
-              tipo: 'aniversario',
-              paciente_id: p.id, nome: p.nome,
+              tipo: 'aniversario', paciente_id: p.id, nome: p.nome,
               emoji: '🎂', cor: 'var(--gold-deep, #a08456)',
               titulo: `Aniversário de ${p.nome.split(' ')[0]}`,
               descricao: `Faz ${idade} anos hoje — mande uma mensagem!`,
@@ -190,40 +185,28 @@ export default function Visao() {
             });
           }
         }
-
-        // 🔕 Sem mensagem da paciente há 7+ dias
-        const ultMsg = ultimaMsgPorPac[p.id];
-        const diasSemMsg = ultMsg
-          ? Math.floor((Date.now() - new Date(ultMsg).getTime()) / 86_400_000)
-          : null;
+        const ultMsg     = ultimaMsgPorPac[p.id];
+        const diasSemMsg = ultMsg ? Math.floor((Date.now() - new Date(ultMsg).getTime()) / 86_400_000) : null;
         if (diasSemMsg !== null && diasSemMsg >= 7) {
           alertas.push({
-            tipo: 'chat',
-            paciente_id: p.id, nome: p.nome,
+            tipo: 'chat', paciente_id: p.id, nome: p.nome,
             emoji: '🔕', cor: 'var(--orange)',
             titulo: `${p.nome.split(' ')[0]} sumiu do chat`,
             descricao: `Não responde há ${diasSemMsg} dias`,
             prioridade: 3,
           });
         }
-
-        // 📷 Sem post no feed há 14+ dias
-        const ultFeed = ultimoFeedPorPac[p.id];
-        const diasSemFeed = ultFeed
-          ? Math.floor((Date.now() - new Date(ultFeed).getTime()) / 86_400_000)
-          : null;
+        const ultFeed      = ultimoFeedPorPac[p.id];
+        const diasSemFeed  = ultFeed ? Math.floor((Date.now() - new Date(ultFeed).getTime()) / 86_400_000) : null;
         if (diasSemFeed !== null && diasSemFeed >= 14) {
           alertas.push({
-            tipo: 'feed',
-            paciente_id: p.id, nome: p.nome,
+            tipo: 'feed', paciente_id: p.id, nome: p.nome,
             emoji: '📷', cor: 'var(--blue)',
             titulo: `${p.nome.split(' ')[0]} parou de postar pratos`,
             descricao: `Último post há ${diasSemFeed} dias`,
             prioridade: 4,
           });
         }
-
-        // 💊 Baixa aderência aos suplementos (<40% nos últimos 7 dias)
         const ativos = supAtivosPorPac[p.id] ?? 0;
         if (ativos > 0) {
           const esperado = ativos * 7;
@@ -231,8 +214,7 @@ export default function Visao() {
           const pct = Math.round((cumprido / esperado) * 100);
           if (pct < 40) {
             alertas.push({
-              tipo: 'suplementos',
-              paciente_id: p.id, nome: p.nome,
+              tipo: 'suplementos', paciente_id: p.id, nome: p.nome,
               emoji: '💊', cor: 'var(--red)',
               titulo: `${p.nome.split(' ')[0]} com baixa aderência`,
               descricao: `${pct}% nos suplementos (últimos 7 dias)`,
@@ -250,20 +232,139 @@ export default function Visao() {
       setOrientacoesNaoVistas(assigns.filter(a => a.status === 'nao_visualizada').length);
       setOrientacoesConcluidas(assigns.filter(a => a.status === 'concluida').length);
 
+      // ── Clínica — pendências ─────────────────────────────────────────────────
+      setExamesSolicitados(examesSolRes.data ?? []);
+      setExamesAguardando(examesAguRes.data ?? []);
+      setRastreiosPendentes(rastreiosRes.data ?? []);
+      setDocumentosSemAssinatura(documentosRes.data ?? []);
+
+      // ── Fase 2: dados clínicos que precisam dos IDs de pacientes ────────────
+      const ids = (pacRes.data ?? []).map(p => p.id);
+      if (ids.length > 0) {
+        const dataMapa = dataInicioMapaVivo();
+        const data60   = new Date(Date.now() - 60 * 86_400_000).toISOString().slice(0, 10);
+
+        const [sintomasRes, intestinoRes] = await Promise.all([
+          supabase.from('ciclo_sintomas_diarios')
+            .select('*')
+            .in('paciente_id', ids)
+            .gte('data', dataMapa)
+            .order('data', { ascending: false }),
+          supabase.from('intestino_logs')
+            .select('paciente_id, data')
+            .in('paciente_id', ids)
+            .gte('data', data60)
+            .order('data', { ascending: false }),
+        ]);
+
+        if (!active) return;
+
+        const sintPorPac = {};
+        for (const s of sintomasRes.data ?? []) {
+          if (!sintPorPac[s.paciente_id]) sintPorPac[s.paciente_id] = [];
+          sintPorPac[s.paciente_id].push(s);
+        }
+
+        const ultimoReg = {};
+        for (const pid of ids) ultimoReg[pid] = sintPorPac[pid]?.[0]?.data ?? null;
+        for (const log of intestinoRes.data ?? []) {
+          const cur = ultimoReg[log.paciente_id];
+          if (!cur || log.data > cur) ultimoReg[log.paciente_id] = log.data;
+        }
+
+        setSintomasPorPac(sintPorPac);
+        setUltimoRegPorPac(ultimoReg);
+      }
+
       setCarregando(false);
     }
     carregar();
     return () => { active = false; };
   }, [user]);
 
-  // Cálculos derivados
+  // ── Cálculos derivados — visão geral ──────────────────────────────────────
   const totalParcelas = parcelasSemana.reduce((a, p) => a + Number(p.valor ?? 0), 0);
-  const atrasadas = parcelasSemana.filter(p => statusParcela(p) === 'atrasado').length;
-  const semNome = profile?.nome?.split(' ')[0] ?? '';
+  const atrasadas     = parcelasSemana.filter(p => statusParcela(p) === 'atrasado').length;
+  const semNome       = profile?.nome?.split(' ')[0] ?? '';
+  const pctMeta       = metaMensal && metaMensal > 0 ? Math.min(100, (receitaMes / metaMensal) * 100) : 0;
+  const faltaMeta     = metaMensal ? Math.max(0, metaMensal - receitaMes) : 0;
 
-  // Barra de meta
-  const pctMeta = metaMensal && metaMensal > 0 ? Math.min(100, (receitaMes / metaMensal) * 100) : 0;
-  const faltaMeta = metaMensal ? Math.max(0, metaMensal - receitaMes) : 0;
+  // ── Cálculos derivados — clínica ─────────────────────────────────────────
+  const hojeStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const nomePorPac = useMemo(
+    () => Object.fromEntries(pacientes.map(p => [p.id, p.nome])),
+    [pacientes],
+  );
+
+  const mapasPorPac = useMemo(() => {
+    const result = {};
+    for (const p of pacientes) {
+      const sintomas = sintomasPorPac[p.id] ?? [];
+      result[p.id] = sintomas.length > 0 ? calcularMapaVivo(sintomas, []) : null;
+    }
+    return result;
+  }, [pacientes, sintomasPorPac]);
+
+  const dadosClinicos = useMemo(() => {
+    return pacientes.map(p => {
+      const mapa   = mapasPorPac[p.id];
+      const scores = mapa?.scores ?? null;
+
+      const eixosElevados = scores
+        ? EIXOS_ORDEM
+            .filter(k => (scores[k] ?? 0) >= LIMIAR_ATENCAO)
+            .sort((a, b) => (scores[b] ?? 0) - (scores[a] ?? 0))
+        : [];
+
+      const maxScore = scores ? Math.max(...Object.values(scores)) : 0;
+
+      const ultimoReg       = ultimoRegPorPac[p.id] ?? null;
+      const diasSemRegistro = ultimoReg
+        ? Math.floor(
+            (new Date(hojeStr + 'T00:00:00') - new Date(ultimoReg + 'T00:00:00')) / 86_400_000,
+          )
+        : null;
+
+      return {
+        ...p,
+        mapa,
+        scores,
+        eixosElevados,
+        maxScore,
+        ultimoReg,
+        diasSemRegistro,
+        temDados:  !!mapa,
+        confianca: mapa?.confianca ?? 0,
+      };
+    });
+  }, [pacientes, mapasPorPac, ultimoRegPorPac, hojeStr]);
+
+  const precisamAtencao = useMemo(
+    () => dadosClinicos
+      .filter(p => p.temDados && p.eixosElevados.length > 0)
+      .sort((a, b) => b.maxScore - a.maxScore),
+    [dadosClinicos],
+  );
+
+  const semRegistroRecente = useMemo(
+    () => dadosClinicos
+      .filter(p => p.diasSemRegistro === null || p.diasSemRegistro >= DIAS_SEM_REGISTRO)
+      .sort((a, b) => {
+        if (a.diasSemRegistro === null && b.diasSemRegistro === null) return 0;
+        if (a.diasSemRegistro === null) return -1;
+        if (b.diasSemRegistro === null) return 1;
+        return b.diasSemRegistro - a.diasSemRegistro;
+      }),
+    [dadosClinicos],
+  );
+
+  const semDadosSuficientes = useMemo(
+    () => dadosClinicos
+      .filter(p => p.temDados && p.confianca < MIN_CONFIANCA)
+      .sort((a, b) => a.confianca - b.confianca),
+    [dadosClinicos],
+  );
 
   return (
     <>
@@ -302,19 +403,12 @@ export default function Visao() {
             </span>
             <button onClick={toggleOcultarMeta}
               title={ocultarMeta ? 'Mostrar valores' : 'Ocultar valores'}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--text3)', padding: 2, display: 'inline-flex',
-              }}>
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: 2, display: 'inline-flex' }}>
               <i className={`ti ti-${ocultarMeta ? 'eye-off' : 'eye'}`} style={{ fontSize: 15 }} aria-hidden="true"></i>
             </button>
           </div>
           <button onClick={() => navigate('/nutri/previsibilidade')}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 12, color: 'var(--gold-deep, #a08456)', fontWeight: 500,
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-            }}>
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--gold-deep, #a08456)', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <i className="ti ti-calculator" style={{ fontSize: 13 }} aria-hidden="true"></i>
             {metaMensal ? 'Ajustar em Previsibilidade →' : 'Definir em Previsibilidade →'}
           </button>
@@ -322,10 +416,7 @@ export default function Visao() {
 
         {metaMensal ? (
           <>
-            <div style={{
-              height: 12, borderRadius: 6, background: 'var(--bg3, #eae4dc)',
-              overflow: 'hidden', position: 'relative',
-            }}>
+            <div style={{ height: 12, borderRadius: 6, background: 'var(--bg3, #eae4dc)', overflow: 'hidden', position: 'relative' }}>
               <div style={{
                 height: '100%', width: `${pctMeta}%`,
                 background: pctMeta >= 100
@@ -334,20 +425,12 @@ export default function Visao() {
                 borderRadius: 6, transition: 'width .4s ease',
               }} />
             </div>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', marginTop: 8,
-              fontSize: 13, color: 'var(--text2)',
-            }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 13, color: 'var(--text2)' }}>
               {ocultarMeta ? (
-                <>
-                  <span>•••• de ••••</span>
-                  <span style={{ color: 'var(--text3)' }}>—</span>
-                </>
+                <><span>•••• de ••••</span><span style={{ color: 'var(--text3)' }}>—</span></>
               ) : (
                 <>
-                  <span>
-                    <strong>{brl(receitaMes)}</strong> de {brl(metaMensal)}
-                  </span>
+                  <span><strong>{brl(receitaMes)}</strong> de {brl(metaMensal)}</span>
                   <span style={{ color: pctMeta >= 100 ? 'var(--green)' : 'var(--text3)' }}>
                     {pctMeta >= 100
                       ? `✓ meta superada em ${brl(receitaMes - metaMensal)}`
@@ -367,10 +450,7 @@ export default function Visao() {
 
       {/* ─── ALERTAS DA SEMANA ─── */}
       <div className="section-label" style={{ marginTop: 8 }}>Atenção esta semana</div>
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: 10, marginBottom: 18,
-      }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 18 }}>
         <NotifCard
           icon="clipboard-check"
           color="var(--orange)"
@@ -379,28 +459,21 @@ export default function Visao() {
           descricao={checkinsPendentes.length === 0
             ? 'Tudo respondido ✓'
             : `${checkinsPendentes.length} paciente${checkinsPendentes.length === 1 ? '' : 's'} ainda não respondeu`}
-          itens={checkinsPendentes.slice(0, 3).map(c => ({
-            label: c.paciente?.nome ?? '—',
-            sub: `enviado ${dataBR(c.enviado_em)}`,
-          }))}
+          itens={checkinsPendentes.slice(0, 3).map(c => ({ label: c.paciente?.nome ?? '—', sub: `enviado ${dataBR(c.enviado_em)}` }))}
           onClick={() => navigate('/nutri/checkins')}
         />
-
         <NotifCard
           icon="calendar"
           color="var(--blue)"
           titulo="Consultas da semana"
           count={consultasSemana.length}
-          descricao={consultasSemana.length === 0
-            ? 'Agenda livre'
-            : `${consultasSemana.length} agendada${consultasSemana.length === 1 ? '' : 's'}`}
+          descricao={consultasSemana.length === 0 ? 'Agenda livre' : `${consultasSemana.length} agendada${consultasSemana.length === 1 ? '' : 's'}`}
           itens={consultasSemana.slice(0, 3).map(c => ({
             label: c.paciente?.nome ?? '—',
             sub: new Date(c.data_hora).toLocaleString('pt-BR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }).replace('.', ''),
           }))}
           onClick={() => navigate('/nutri/agenda')}
         />
-
         <NotifCard
           icon="cash"
           color={atrasadas > 0 ? 'var(--red)' : 'var(--green)'}
@@ -415,7 +488,6 @@ export default function Visao() {
           }))}
           onClick={() => navigate('/nutri/financeiro')}
         />
-
         <NotifCard
           icon="notebook"
           color="var(--gold-deep, #a08456)"
@@ -428,15 +500,12 @@ export default function Visao() {
                 ? 'Tudo visualizado ✓'
                 : `${orientacoesNaoVistas} aguardam visualização`
           }
-          itens={orientacoesTotal > 0 ? [
-            {
-              label: `${orientacoesTotal} criada${orientacoesTotal === 1 ? '' : 's'}`,
-              sub: `${orientacoesAtribuidas} atribuída${orientacoesAtribuidas === 1 ? '' : 's'} · ${orientacoesConcluidas} concluída${orientacoesConcluidas === 1 ? '' : 's'}`,
-            },
-          ] : []}
+          itens={orientacoesTotal > 0 ? [{
+            label: `${orientacoesTotal} criada${orientacoesTotal === 1 ? '' : 's'}`,
+            sub: `${orientacoesAtribuidas} atribuída${orientacoesAtribuidas === 1 ? '' : 's'} · ${orientacoesConcluidas} concluída${orientacoesConcluidas === 1 ? '' : 's'}`,
+          }] : []}
           onClick={() => navigate('/nutri/biblioteca')}
         />
-
         <NotifCard
           icon="alert-triangle"
           color="var(--gold-deep, #a08456)"
@@ -458,36 +527,25 @@ export default function Visao() {
       {/* ─── ALERTAS RELACIONAIS ─── */}
       {alertasRelacionais.length > 0 && (
         <>
-          <div className="section-label" style={{ marginTop: 8 }}>
-            Acompanhamento das pacientes
-          </div>
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 10, marginBottom: 18,
-          }}>
+          <div className="section-label" style={{ marginTop: 8 }}>Acompanhamento das pacientes</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10, marginBottom: 18 }}>
             {alertasRelacionais.map((a, i) => (
               <button key={i}
                 onClick={() => navigate(`/nutri/pacientes/${a.paciente_id}`)}
                 style={{
                   display: 'flex', alignItems: 'flex-start', gap: 12,
                   padding: 14, borderRadius: 12,
-                  background: 'var(--white)',
-                  border: `0.5px solid var(--border)`,
+                  background: 'var(--white)', border: `0.5px solid var(--border)`,
                   borderLeft: `3px solid ${a.cor}`,
-                  cursor: 'pointer', textAlign: 'left',
-                  fontFamily: 'var(--font-sans)',
+                  cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-sans)',
                   transition: 'all .15s ease',
                 }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--bg2)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'var(--white)'}>
                 <span style={{ fontSize: 22, lineHeight: 1 }}>{a.emoji}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)', marginBottom: 2 }}>
-                    {a.titulo}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                    {a.descricao}
-                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)', marginBottom: 2 }}>{a.titulo}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>{a.descricao}</div>
                 </div>
                 <i className="ti ti-chevron-right" style={{ fontSize: 14, color: 'var(--text3)', marginTop: 4 }} aria-hidden="true"></i>
               </button>
@@ -496,7 +554,185 @@ export default function Visao() {
         </>
       )}
 
-      {/* Estado de boas-vindas se zero pacientes */}
+      {/* ─── CLÍNICA — PENDÊNCIAS ─── */}
+      {pacientes.length > 0 && (
+        <>
+          <div className="section-label" style={{ marginTop: 8 }}>Clínica — pendências</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginBottom: 18 }}>
+            <NotifCard
+              icon="test-pipe"
+              color="var(--blue)"
+              titulo="Exames solicitados"
+              count={examesSolicitados.length}
+              descricao={examesSolicitados.length === 0
+                ? 'Nenhum aguardando coleta'
+                : `${examesSolicitados.length} exame${examesSolicitados.length === 1 ? '' : 's'} aguardando coleta`}
+              itens={examesSolicitados.slice(0, 3).map(e => ({ label: nomePorPac[e.paciente_id] ?? '—', sub: e.titulo || e.categoria || '—' }))}
+              onClick={() => navigate('/nutri/pacientes')}
+            />
+            <NotifCard
+              icon="clock-hour-4"
+              color="var(--orange)"
+              titulo="Aguardando resultado"
+              count={examesAguardando.length}
+              descricao={examesAguardando.length === 0
+                ? 'Nenhum sem resultado'
+                : `${examesAguardando.length} exame${examesAguardando.length === 1 ? '' : 's'} sem resultado`}
+              itens={examesAguardando.slice(0, 3).map(e => ({ label: nomePorPac[e.paciente_id] ?? '—', sub: e.titulo || e.categoria || '—' }))}
+              onClick={() => navigate('/nutri/pacientes')}
+            />
+            <NotifCard
+              icon="microscope"
+              color="var(--green)"
+              titulo="Rastreios intestinais"
+              count={rastreiosPendentes.length}
+              descricao={rastreiosPendentes.length === 0
+                ? 'Nenhum rastreio pendente'
+                : `${rastreiosPendentes.length} rastreio${rastreiosPendentes.length === 1 ? '' : 's'} sem resposta`}
+              itens={rastreiosPendentes.slice(0, 3).map(r => ({ label: nomePorPac[r.paciente_id] ?? '—', sub: `Solicitado ${dataBR(r.solicitado_em)}` }))}
+              onClick={() => navigate('/nutri/pacientes')}
+            />
+            <NotifCard
+              icon="writing"
+              color="var(--red)"
+              titulo="Documentos sem assinatura"
+              count={documentosSemAssinatura.length}
+              descricao={documentosSemAssinatura.length === 0
+                ? 'Tudo assinado ✓'
+                : `${documentosSemAssinatura.length} documento${documentosSemAssinatura.length === 1 ? '' : 's'} aguardando`}
+              itens={documentosSemAssinatura.slice(0, 3).map(d => ({ label: nomePorPac[d.paciente_id] ?? '—', sub: d.titulo || d.tipo || '—' }))}
+              onClick={() => navigate('/nutri/pacientes')}
+            />
+            <NotifCard
+              icon="chart-radar"
+              color="var(--gold-deep, #a08456)"
+              titulo="Mapa sem dados suficientes"
+              count={semDadosSuficientes.length}
+              descricao={semDadosSuficientes.length === 0
+                ? 'Todas com dados suficientes ✓'
+                : `${semDadosSuficientes.length} paciente${semDadosSuficientes.length === 1 ? '' : 's'} com Mapa incompleto`}
+              itens={semDadosSuficientes.slice(0, 3).map(p => ({ label: p.nome.split(' ')[0], sub: `${p.confianca}% de dados (mín. ${MIN_CONFIANCA}%)` }))}
+              onClick={() => navigate('/nutri/pacientes')}
+            />
+          </div>
+        </>
+      )}
+
+      {/* ─── PACIENTES QUE PRECISAM DE ATENÇÃO ─── */}
+      {pacientes.length > 0 && (
+        <>
+          <div className="section-label" style={{ marginTop: 8 }}>Pacientes que precisam de atenção</div>
+          {precisamAtencao.length === 0 ? (
+            <div className="card" style={{ padding: '16px 18px', marginBottom: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <span style={{ fontSize: 16, color: 'var(--green)', lineHeight: 1.5 }}>✓</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--dark)', marginBottom: 3 }}>
+                    Todas as pacientes estão em acompanhamento.
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+                    Nenhuma paciente exige ação imediata.
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10, marginBottom: 18 }}>
+              {precisamAtencao.map(p => (
+                <button key={p.id}
+                  onClick={() => navigate(`/nutri/pacientes/${p.id}`)}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 12,
+                    padding: 14, borderRadius: 12,
+                    background: 'var(--white)', border: '0.5px solid var(--border)',
+                    borderLeft: `3px solid ${EIXOS[p.eixosElevados[0]]?.cor ?? 'var(--orange)'}`,
+                    cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-sans)',
+                    transition: 'background .15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg2)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--white)'}>
+                  <div style={{
+                    width: 34, height: 34, borderRadius: '50%',
+                    background: 'var(--bg2)', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, fontWeight: 600, color: 'var(--dark)',
+                  }}>
+                    {iniciais(p.nome)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)', marginBottom: 5 }}>
+                      {p.nome.split(' ')[0]}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {p.eixosElevados.slice(0, 3).map(k => (
+                        <span key={k} style={{
+                          fontSize: 10, padding: '2px 7px', borderRadius: 4,
+                          background: EIXOS[k]?.corSoft ?? 'var(--bg2)',
+                          color: EIXOS[k]?.cor ?? 'var(--text2)',
+                          fontWeight: 500,
+                        }}>
+                          {EIXOS[k]?.label ?? k}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <i className="ti ti-chevron-right"
+                    style={{ fontSize: 14, color: 'var(--text3)', marginTop: 4, flexShrink: 0 }}
+                    aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─── PACIENTES SEM REGISTROS CLÍNICOS RECENTES ─── */}
+      {semRegistroRecente.length > 0 && (
+        <>
+          <div className="section-label" style={{ marginTop: 8 }}>Pacientes sem registros clínicos recentes</div>
+          <div className="card" style={{ padding: 0, marginBottom: 18 }}>
+            {semRegistroRecente.map((p, i) => (
+              <button key={p.id}
+                onClick={() => navigate(`/nutri/pacientes/${p.id}`)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 16px', width: '100%',
+                  borderBottom: i < semRegistroRecente.length - 1
+                    ? '0.5px solid var(--border)' : 'none',
+                  background: 'none', cursor: 'pointer', textAlign: 'left',
+                  fontFamily: 'var(--font-sans)', transition: 'background .15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg2)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <div style={{
+                  width: 30, height: 30, borderRadius: '50%',
+                  background: 'var(--bg2)', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 600, color: 'var(--dark)',
+                }}>
+                  {iniciais(p.nome)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>
+                    {p.nome.split(' ')[0]}
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--text3)', margin: '0 5px' }}>—</span>
+                  <span style={{ fontSize: 13, color: 'var(--text3)' }}>
+                    {p.diasSemRegistro === null
+                      ? 'nunca registrou'
+                      : `último registro há ${p.diasSemRegistro} dia${p.diasSemRegistro === 1 ? '' : 's'}`}
+                  </span>
+                </div>
+                <i className="ti ti-chevron-right"
+                  style={{ fontSize: 14, color: 'var(--text3)', flexShrink: 0 }}
+                  aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ─── EMPTY STATE — zero pacientes ─── */}
       {!carregando && pacientes.length === 0 && (
         <div className="card empty-card">
           <i className="ti ti-sparkles empty-icon" style={{ color: 'var(--amber)' }} aria-hidden="true"></i>
@@ -529,10 +765,8 @@ function NotifCard({ icon, color, titulo, count, descricao, itens, onClick }) {
       style={{
         background: 'var(--white)',
         border: '0.5px solid ' + (ativo ? color : 'var(--border)'),
-        borderRadius: 8,
-        padding: '14px 16px',
-        textAlign: 'left',
-        cursor: 'pointer',
+        borderRadius: 8, padding: '14px 16px',
+        textAlign: 'left', cursor: 'pointer',
         fontFamily: 'var(--font-sans)',
         transition: 'transform .15s, box-shadow .15s',
         boxShadow: ativo ? `0 1px 0 ${color}` : 'none',
@@ -563,10 +797,7 @@ function NotifCard({ icon, color, titulo, count, descricao, itens, onClick }) {
       {itens.length > 0 && (
         <div style={{ borderTop: '0.5px solid #f5f0e8', paddingTop: 8 }}>
           {itens.map((it, i) => (
-            <div key={i} style={{
-              fontSize: 12, color: 'var(--text2)',
-              padding: '3px 0', display: 'flex', justifyContent: 'space-between', gap: 6,
-            }}>
+            <div key={i} style={{ fontSize: 12, color: 'var(--text2)', padding: '3px 0', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
               <span style={{ color: 'var(--text3)', flexShrink: 0 }}>{it.sub}</span>
             </div>
