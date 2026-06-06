@@ -45,6 +45,10 @@ export default function Visao() {
   const [sintomasPorPac,         setSintomasPorPac]         = useState({});
   const [ultimoRegPorPac,        setUltimoRegPorPac]        = useState({});
 
+  // ── Agenda como gatilho ──
+  const [checkinsRespondidos,   setCheckinsRespondidos]    = useState([]);
+  const [ultimoFollowupPorPac,  setUltimoFollowupPorPac]  = useState({});
+
   function toggleOcultarMeta() {
     const novo = !ocultarMeta;
     setOcultarMeta(novo);
@@ -67,6 +71,7 @@ export default function Visao() {
       const dataDomingo = domingo.toISOString().slice(0, 10);
       const dias30atras = new Date(Date.now() - 30 * 86_400_000).toISOString();
       const dias7atras  = new Date(Date.now() - 7  * 86_400_000).toISOString().slice(0, 10);
+      const dias3atras  = new Date(Date.now() - 3  * 86_400_000).toISOString();
 
       // ── Fase 1: queries independentes de IDs de pacientes ──────────────────
       const [
@@ -75,6 +80,7 @@ export default function Visao() {
         msgRes, feedRes, supRes, supLogRes,
         orientTotalRes, orientAssignRes,
         examesSolRes, examesAguRes, rastreiosRes, documentosRes,
+        checkinsRecentesRes, followupsDataRes,
       ] = await Promise.all([
         supabase.from('pacientes').select('id, nome, tipo_plano, nascimento').eq('nutri_id', user.id),
         supabase.from('consultas').select('id, data_hora, tipo, duracao_min, paciente:pacientes(id, nome)')
@@ -118,6 +124,14 @@ export default function Visao() {
           .eq('nutri_id', user.id).is('respondido_em', null),
         supabase.from('documentos').select('id, titulo, tipo, paciente_id')
           .eq('nutri_id', user.id).eq('status', 'enviado'),
+        supabase.from('checkin_envios')
+          .select('id, respondido_em, paciente:pacientes(id, nome)')
+          .eq('nutri_id', user.id).not('respondido_em', 'is', null)
+          .gte('respondido_em', dias3atras).order('respondido_em', { ascending: false }),
+        supabase.from('followups')
+          .select('paciente_id, data, created_at')
+          .eq('nutri_id', user.id)
+          .order('data', { ascending: false }).order('created_at', { ascending: false }),
       ]);
 
       if (!active) return;
@@ -238,6 +252,16 @@ export default function Visao() {
       setRastreiosPendentes(rastreiosRes.data ?? []);
       setDocumentosSemAssinatura(documentosRes.data ?? []);
 
+      setCheckinsRespondidos(checkinsRecentesRes.data ?? []);
+
+      const ultFup = {};
+      for (const f of followupsDataRes.data ?? []) {
+        if (!ultFup[f.paciente_id]) {
+          ultFup[f.paciente_id] = f.data ?? f.created_at.slice(0, 10);
+        }
+      }
+      setUltimoFollowupPorPac(ultFup);
+
       // ── Fase 2: dados clínicos que precisam dos IDs de pacientes ────────────
       const ids = (pacRes.data ?? []).map(p => p.id);
       if (ids.length > 0) {
@@ -291,6 +315,12 @@ export default function Visao() {
 
   // ── Cálculos derivados — clínica ─────────────────────────────────────────
   const hojeStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const amanhaStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }, []);
 
   const nomePorPac = useMemo(
     () => Object.fromEntries(pacientes.map(p => [p.id, p.nome])),
@@ -365,6 +395,61 @@ export default function Visao() {
       .sort((a, b) => a.confianca - b.confianca),
     [dadosClinicos],
   );
+
+  // ── P1: pacientes com consulta hoje ou amanhã ─────────────────────────────
+  const pacientesHojeAmanha = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    for (const c of consultasSemana) {
+      const dc = new Date(c.data_hora).toISOString().slice(0, 10);
+      if ((dc === hojeStr || dc === amanhaStr) && c.paciente?.id && !seen.has(c.paciente.id)) {
+        seen.add(c.paciente.id);
+        result.push({ id: c.paciente.id, nome: c.paciente.nome, consultaData: c.data_hora, consultaTipo: c.tipo });
+      }
+    }
+    return result.sort((a, b) => new Date(a.consultaData) - new Date(b.consultaData));
+  }, [consultasSemana, hojeStr, amanhaStr]);
+
+  // ── P2: pacientes com check-in pendente ou respondido ≤3 dias ────────────
+  const pacientesCheckinRecente = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    for (const c of checkinsPendentes) {
+      if (c.paciente?.id && !seen.has(c.paciente.id)) {
+        seen.add(c.paciente.id);
+        result.push({ id: c.paciente.id, nome: c.paciente.nome, checkinStatus: 'pendente', checkinData: c.enviado_em });
+      }
+    }
+    for (const c of checkinsRespondidos) {
+      if (c.paciente?.id && !seen.has(c.paciente.id)) {
+        seen.add(c.paciente.id);
+        result.push({ id: c.paciente.id, nome: c.paciente.nome, checkinStatus: 'respondido', checkinData: c.respondido_em });
+      }
+    }
+    return result;
+  }, [checkinsPendentes, checkinsRespondidos]);
+
+  // ── P3: revisão periódica — pacientes não em P1/P2 sem followup há >15 dias ──
+  const pacientesRevisaoPendente = useMemo(() => {
+    const p1Ids = new Set(pacientesHojeAmanha.map(p => p.id));
+    const p2Ids = new Set(pacientesCheckinRecente.map(p => p.id));
+    return pacientes
+      .filter(p => !p1Ids.has(p.id) && !p2Ids.has(p.id))
+      .map(p => {
+        const ultimo = ultimoFollowupPorPac[p.id] ?? null;
+        const dias = ultimo
+          ? Math.floor((Date.now() - new Date(ultimo + 'T00:00:00').getTime()) / 86_400_000)
+          : null;
+        return { ...p, ultimaRevisao: ultimo, diasSemRevisao: dias };
+      })
+      .filter(p => p.diasSemRevisao === null || p.diasSemRevisao > 15)
+      .sort((a, b) => {
+        if (a.diasSemRevisao === null && b.diasSemRevisao === null) return 0;
+        if (a.diasSemRevisao === null) return -1;
+        if (b.diasSemRevisao === null) return 1;
+        return b.diasSemRevisao - a.diasSemRevisao;
+      });
+  }, [pacientes, pacientesHojeAmanha, pacientesCheckinRecente, ultimoFollowupPorPac]);
 
   return (
     <>
@@ -523,6 +608,45 @@ export default function Visao() {
           onClick={() => navigate('/nutri/pacientes')}
         />
       </div>
+
+      {/* ─── P1: PARA REVISAR HOJE / AMANHÃ ─── */}
+      {pacientesHojeAmanha.length > 0 && (
+        <>
+          <div className="section-label" style={{ marginTop: 8 }}>Para revisar hoje / amanhã</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10, marginBottom: 14 }}>
+            {pacientesHojeAmanha.map(p => (
+              <PacienteAgendaCard key={p.id} paciente={p} tipo="consulta" hojeStr={hojeStr}
+                onClick={() => navigate(`/nutri/pacientes/${p.id}`)} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ─── P2: CHECK-IN RECENTE ─── */}
+      {pacientesCheckinRecente.length > 0 && (
+        <>
+          <div className="section-label" style={{ marginTop: 8 }}>Check-in recente</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10, marginBottom: 14 }}>
+            {pacientesCheckinRecente.map(p => (
+              <PacienteAgendaCard key={p.id} paciente={p} tipo="checkin"
+                onClick={() => navigate(`/nutri/pacientes/${p.id}`)} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ─── P3: REVISÃO PERIÓDICA ─── */}
+      {pacientesRevisaoPendente.length > 0 && (
+        <>
+          <div className="section-label" style={{ marginTop: 8 }}>Revisão periódica</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10, marginBottom: 18 }}>
+            {pacientesRevisaoPendente.map(p => (
+              <PacienteAgendaCard key={p.id} paciente={p} tipo="revisao"
+                onClick={() => navigate(`/nutri/pacientes/${p.id}`)} />
+            ))}
+          </div>
+        </>
+      )}
 
       {/* ─── ALERTAS RELACIONAIS ─── */}
       {alertasRelacionais.length > 0 && (
@@ -752,6 +876,73 @@ export default function Visao() {
         </div>
       )}
     </>
+  );
+}
+
+/* ============================================================
+   CARD DE PACIENTE — AGENDA COMO GATILHO
+   ============================================================ */
+function tipoConsultaLabel(tipo) {
+  if (!tipo) return '—';
+  if (tipo === 'primeira') return '1ª consulta';
+  if (tipo === 'avaliacao') return 'Avaliação';
+  const m = tipo.match(/^consulta_(\d+)$/);
+  if (m) return `Consulta ${m[1]}`;
+  return tipo;
+}
+
+function PacienteAgendaCard({ paciente, tipo, hojeStr, onClick }) {
+  let iconColor, sub;
+
+  if (tipo === 'consulta') {
+    const dc = new Date(paciente.consultaData).toISOString().slice(0, 10);
+    const isHoje = dc === hojeStr;
+    iconColor = 'var(--blue)';
+    const hora = new Date(paciente.consultaData).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    sub = `${isHoje ? 'Hoje' : 'Amanhã'} · ${hora} · ${tipoConsultaLabel(paciente.consultaTipo)}`;
+  } else if (tipo === 'checkin') {
+    iconColor = paciente.checkinStatus === 'pendente' ? 'var(--orange)' : 'var(--green)';
+    sub = paciente.checkinStatus === 'pendente'
+      ? `Pendente · enviado ${dataBR(paciente.checkinData)}`
+      : `Respondido em ${dataBR(paciente.checkinData)}`;
+  } else {
+    iconColor = 'var(--gold-deep, #a08456)';
+    sub = paciente.diasSemRevisao === null
+      ? 'Nunca revisada'
+      : `Último follow-up há ${paciente.diasSemRevisao} dia${paciente.diasSemRevisao === 1 ? '' : 's'}`;
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '11px 14px', borderRadius: 10,
+        background: 'var(--white)', border: '0.5px solid var(--border)',
+        borderLeft: `3px solid ${iconColor}`,
+        cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-sans)',
+        transition: 'background .15s',
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg2)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'var(--white)'}>
+      <div style={{
+        width: 30, height: 30, borderRadius: '50%',
+        background: iconColor + '1a', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 11, fontWeight: 600, color: 'var(--dark)',
+      }}>
+        {iniciais(paciente.nome)}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)', marginBottom: 1 }}>
+          {paciente.nome.split(' ')[0]}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {sub}
+        </div>
+      </div>
+      <i className="ti ti-chevron-right" style={{ fontSize: 14, color: 'var(--text3)', flexShrink: 0 }} aria-hidden="true"></i>
+    </button>
   );
 }
 

@@ -20,6 +20,7 @@ import OrientacoesPaciente from './_OrientacoesPaciente.jsx';
 import DocumentosNutri from './_DocumentosPaciente.jsx';
 import MapaMetabolicoNutri from './_MapaMetabolico.jsx';
 import IntestinoNutri from './_Intestino.jsx';
+import ResumoClinico from './_ResumoClinico.jsx';
 import DicaJSON from '../../components/DicaJSON.jsx';
 
 export default function PacientePerfil() {
@@ -27,7 +28,7 @@ export default function PacientePerfil() {
   const navigate = useNavigate();
   const { user } = useSession();
   const [paciente, setPaciente] = useState(null);
-  const [tab, setTab] = useState('plano');
+  const [tab, setTab] = useState('resumo');
   const [editandoNasc, setEditandoNasc] = useState(false);
   const [novoNasc, setNovoNasc] = useState('');
   const [salvandoNasc, setSalvandoNasc] = useState(false);
@@ -320,6 +321,7 @@ export default function PacientePerfil() {
         overflowX: 'auto', scrollbarWidth: 'thin',
       }}>
         {[
+          { id: 'resumo',      label: 'Resumo Clínico', icon: 'report-medical' },
           { id: 'evolucao',    label: 'Evolução',     icon: 'chart-line' },
           { id: 'anamnese',    label: 'Anamnese',     icon: 'clipboard-text' },
           { id: 'followup',    label: 'Follow-up',    icon: 'notebook' },
@@ -361,6 +363,7 @@ export default function PacientePerfil() {
         ))}
       </div>
 
+      {tab === 'resumo' && <ResumoClinico pacienteId={paciente.id} nutriId={user.id} onIrParaTab={setTab} />}
       {tab === 'evolucao' && <Evolucao pacienteId={paciente.id} paciente={paciente} nutriId={user.id} />}
       {tab === 'anamnese' && <Anamnese pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'followup' && <FollowUp pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
