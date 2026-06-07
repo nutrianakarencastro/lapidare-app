@@ -109,13 +109,16 @@ function normalizarEventos({ consultas, exames, periodos, rastreios, checkins, d
   // Consultas realizadas
   for (const c of consultas) {
     const subtipo = tipoConsultaLabel(c.tipo);
+    const descResumo = c.resumo
+      ? (c.resumo.length > 70 ? c.resumo.slice(0, 70) + '…' : c.resumo)
+      : null;
     ev.push({
       id: `consulta-${c.id}`,
       tipo: 'consulta',
       icone: '🩺',
       cor: 'var(--blue)',
       titulo: 'Consulta realizada',
-      descricao: [subtipo, c.obs ? `"${c.obs}"` : null].filter(Boolean).join(' · ') || null,
+      descricao: [subtipo, descResumo ?? (c.obs ? `"${c.obs}"` : null)].filter(Boolean).join('  ·  ') || null,
       data: c.data_hora.slice(0, 10),
       automatico: false,
     });
@@ -322,7 +325,7 @@ export default function LinhaTempo({ pacienteId, nutriId }) {
         rastreiosRes, checkinsRes, documentosRes, marcosRes, condutasRes, metasRes,
       ] = await Promise.all([
         supabase.from('consultas')
-          .select('id, data_hora, tipo, obs')
+          .select('id, data_hora, tipo, obs, resumo')
           .eq('paciente_id', pacienteId).eq('status', 'realizada')
           .gte('data_hora', corteIso + 'T00:00:00')
           .order('data_hora', { ascending: false }),

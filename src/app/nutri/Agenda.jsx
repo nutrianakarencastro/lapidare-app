@@ -381,6 +381,7 @@ function ConsultaRow({ c, isLast, isPast, isCanceled, onClick }) {
         <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
           {dataConsultaBR(c.data_hora)} · {c.duracao_min}min
           {isPast && c.status === 'agendada' && ' · sem status'}
+          {c.status === 'em_andamento' && ' · em andamento'}
           {c.status === 'realizada' && ' · ✓ realizada'}
         </div>
       </div>

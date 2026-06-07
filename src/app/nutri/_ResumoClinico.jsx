@@ -117,17 +117,25 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
         </div>
 
         <div className="card" style={{ padding: '14px 16px' }}>
-          <div style={labelSub}>Última consulta</div>
-          {ultCons ? (
-            <>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--dark)' }}>
-                {dataBR(ultCons.data_hora)}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{tipoConsulta(ultCons.tipo)}</div>
-            </>
-          ) : (
-            <div style={{ fontSize: 13, color: 'var(--text3)' }}>Nenhuma realizada ainda</div>
-          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={labelSub}>Última consulta</div>
+              {ultCons ? (
+                <>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--dark)' }}>
+                    {dataBR(ultCons.data_hora)}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{tipoConsulta(ultCons.tipo)}</div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--text3)' }}>Nenhuma realizada ainda</div>
+              )}
+            </div>
+            <button className="btn-outline" style={{ fontSize: 11, padding: '3px 9px', flexShrink: 0, marginTop: 2 }}
+              onClick={() => onIrParaTab?.('consultas')}>
+              <i className="ti ti-stethoscope" aria-hidden="true"></i> Ver
+            </button>
+          </div>
         </div>
       </div>
 
