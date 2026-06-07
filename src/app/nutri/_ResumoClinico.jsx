@@ -33,12 +33,14 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
   const [followup, setFollowup] = useState(undefined);
   const [avaliacao, setAvaliacao] = useState(undefined);
   const [anamnese, setAnamnese] = useState(undefined);
+  const [condutaAtual, setCondutaAtual] = useState(undefined);
+  const [metas, setMetas]               = useState(undefined);
 
   useEffect(() => {
     let active = true;
     async function load() {
       const agora = new Date().toISOString();
-      const [proxRes, ultConsRes, checkinRes, followupRes, avalRes, anamRes] = await Promise.all([
+      const [proxRes, ultConsRes, checkinRes, followupRes, avalRes, anamRes, condutaRes, metasRes] = await Promise.all([
         supabase.from('consultas').select('id, data_hora, tipo')
           .eq('paciente_id', pacienteId).neq('status', 'cancelada')
           .gte('data_hora', agora).order('data_hora').limit(1).maybeSingle(),
@@ -59,6 +61,12 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
           .eq('paciente_id', pacienteId)
           .order('data', { ascending: false }).order('created_at', { ascending: false })
           .limit(1).maybeSingle(),
+        supabase.from('condutas').select('id, titulo, objetivo_principal, data')
+          .eq('paciente_id', pacienteId).eq('is_atual', true)
+          .order('data', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('metas_terapeuticas').select('id, prioridade, status')
+          .eq('paciente_id', pacienteId)
+          .in('status', ['ativa', 'em_evolucao']),
       ]);
       if (!active) return;
       setProx(proxRes.data ?? null);
@@ -67,6 +75,8 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
       setFollowup(followupRes.data ?? null);
       setAvaliacao(avalRes.data ?? null);
       setAnamnese(anamRes.data ?? null);
+      setCondutaAtual(condutaRes.data ?? null);
+      setMetas(metasRes.data ?? []);
     }
     load();
     return () => { active = false; };
@@ -202,6 +212,55 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
           </button>
         </div>
       </div>
+
+      {/* ── Conduta atual ── */}
+      {condutaAtual && (
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={labelSub}>Conduta atual</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dark)', marginBottom: 2 }}>
+                {condutaAtual.titulo}
+              </div>
+              {condutaAtual.objetivo_principal && (
+                <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2, lineHeight: 1.5 }}>
+                  {condutaAtual.objetivo_principal}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                {dataBR(condutaAtual.data)}
+              </div>
+            </div>
+            <button className="btn-outline" style={{ fontSize: 11, padding: '3px 9px', flexShrink: 0 }}
+              onClick={() => onIrParaTab?.('condutas')}>
+              <i className="ti ti-clipboard-list" aria-hidden="true"></i> Ver condutas
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Metas terapêuticas ── */}
+      {metas && metas.length > 0 && (
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={labelSub}>Metas terapêuticas</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dark)', marginBottom: 2 }}>
+                {metas.length} {metas.length === 1 ? 'meta ativa' : 'metas ativas'}
+              </div>
+              {metas.some(m => m.prioridade === 'alta') && (
+                <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 2 }}>
+                  {metas.filter(m => m.prioridade === 'alta').length} de alta prioridade
+                </div>
+              )}
+            </div>
+            <button className="btn-outline" style={{ fontSize: 11, padding: '3px 9px', flexShrink: 0 }}
+              onClick={() => onIrParaTab?.('metas')}>
+              <i className="ti ti-target" aria-hidden="true"></i> Ver metas
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Última anamnese ── */}
       {anamnese && (

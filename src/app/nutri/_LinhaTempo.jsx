@@ -5,6 +5,8 @@ import { EIXOS } from '../../lib/cicloUtils.js';
 // ── Filtros explícitos ─────────────────────────────────────────────────────
 const FILTROS = [
   { id: 'todos',     label: 'Tudo'        },
+  { id: 'conduta',   label: 'Condutas'    },
+  { id: 'meta',      label: 'Metas'       },
   { id: 'consulta',  label: 'Consultas'   },
   { id: 'exame',     label: 'Exames'      },
   { id: 'ciclo',     label: 'Ciclo'       },
@@ -12,10 +14,11 @@ const FILTROS = [
   { id: 'checkin',   label: 'Check-ins'   },
   { id: 'documento', label: 'Documentos'  },
   { id: 'mapa',      label: 'Mapa'        },
-  // 'conduta' reservado — sprint Central de Condutas
 ];
 
 const TIPOS_POR_FILTRO = {
+  conduta:   ['conduta'],
+  meta:      ['meta_criada', 'meta_concluida', 'meta_pausada'],
   consulta:  ['consulta'],
   exame:     ['exame'],
   ciclo:     ['ciclo', 'ciclo_padrao'],
@@ -100,7 +103,7 @@ function detectarMelhorasEixo(marcos) {
 }
 
 // ── Normalização central ───────────────────────────────────────────────────
-function normalizarEventos({ consultas, exames, periodos, rastreios, checkins, documentos, marcos }) {
+function normalizarEventos({ consultas, exames, periodos, rastreios, checkins, documentos, marcos, condutas, metas }) {
   const ev = [];
 
   // Consultas realizadas
@@ -231,7 +234,61 @@ function normalizarEventos({ consultas, exames, periodos, rastreios, checkins, d
   // Melhora de eixo metabólico (automático) — usa TODOS os marcos para comparação
   for (const ms of detectarMelhorasEixo(marcos)) ev.push(ms);
 
-  // 'conduta' reservado — sprint Central de Condutas
+  // Metas terapêuticas
+  for (const m of metas) {
+    ev.push({
+      id: `meta-criada-${m.id}`,
+      tipo: 'meta_criada',
+      icone: '🎯',
+      cor: 'var(--blue)',
+      titulo: `Meta criada — ${m.titulo}`,
+      descricao: m.eixo || null,
+      data: m.criado_em,
+      automatico: false,
+    });
+    if (m.status === 'concluida' && m.concluido_em) {
+      ev.push({
+        id: `meta-concluida-${m.id}`,
+        tipo: 'meta_concluida',
+        icone: '✅',
+        cor: 'var(--green)',
+        titulo: `Meta concluída — ${m.titulo}`,
+        descricao: m.eixo || null,
+        data: m.concluido_em,
+        automatico: false,
+      });
+    }
+    if (m.status === 'pausada' && m.pausado_em) {
+      ev.push({
+        id: `meta-pausada-${m.id}`,
+        tipo: 'meta_pausada',
+        icone: '⏸',
+        cor: 'var(--text3)',
+        titulo: `Meta pausada — ${m.titulo}`,
+        descricao: m.eixo || null,
+        data: m.pausado_em,
+        automatico: false,
+      });
+    }
+  }
+
+  // Condutas registradas
+  for (const c of condutas) {
+    const partes = [];
+    if (c.objetivo_principal) partes.push(c.objetivo_principal);
+    const nItens = c.condutas?.length ?? 0;
+    if (nItens > 0) partes.push(`${nItens} conduta${nItens === 1 ? '' : 's'}`);
+    ev.push({
+      id: `conduta-${c.id}`,
+      tipo: 'conduta',
+      icone: '🎯',
+      cor: 'var(--blue)',
+      titulo: `Conduta registrada — ${c.titulo}`,
+      descricao: partes.join('  ·  ') || null,
+      data: c.data,
+      automatico: false,
+    });
+  }
 
   return ev.sort((a, b) => b.data.localeCompare(a.data));
 }
@@ -262,7 +319,7 @@ export default function LinhaTempo({ pacienteId, nutriId }) {
 
       const [
         consultasRes, examesRes, periodosRes,
-        rastreiosRes, checkinsRes, documentosRes, marcosRes,
+        rastreiosRes, checkinsRes, documentosRes, marcosRes, condutasRes, metasRes,
       ] = await Promise.all([
         supabase.from('consultas')
           .select('id, data_hora, tipo, obs')
@@ -301,6 +358,17 @@ export default function LinhaTempo({ pacienteId, nutriId }) {
           .select('id, nome, scores, obs, criado_em, created_at')
           .eq('paciente_id', pacienteId)
           .order('criado_em', { ascending: false }),
+        supabase.from('condutas')
+          .select('id, titulo, objetivo_principal, condutas, data')
+          .eq('paciente_id', pacienteId)
+          .gte('data', corteIso)
+          .order('data', { ascending: false }),
+        // Metas: sem filtro de data — concluido_em/pausado_em podem ser recentes
+        // mesmo que criado_em seja antigo
+        supabase.from('metas_terapeuticas')
+          .select('id, titulo, eixo, status, criado_em, concluido_em, pausado_em')
+          .eq('paciente_id', pacienteId)
+          .order('criado_em', { ascending: false }),
       ]);
 
       if (!active) return;
@@ -312,6 +380,8 @@ export default function LinhaTempo({ pacienteId, nutriId }) {
         checkins:   checkinsRes.data   ?? [],
         documentos: documentosRes.data ?? [],
         marcos:     marcosRes.data     ?? [],
+        condutas:   condutasRes.data   ?? [],
+        metas:      metasRes.data      ?? [],
       });
     }
     load();
