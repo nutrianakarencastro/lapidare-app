@@ -226,10 +226,10 @@ function CardCorrelacao({ nome, interpretacao, racionalFisiologico, correlacaoFo
 // ─── Salvar marco clínico ─────────────────────────────────────────────────────
 
 function SalvarMarco({ pacienteId, nutriId, scores, onSalvo }) {
-  const [nome, setNome]   = useState('');
-  const [obs, setObs]     = useState('');
-  const [busy, setBusy]   = useState(false);
-  const [erro, setErro]   = useState(null);
+  const [nome, setNome]     = useState('');
+  const [obs, setObs]       = useState('');
+  const [busy, setBusy]     = useState(false);
+  const [erro, setErro]     = useState(null);
   const [aberto, setAberto] = useState(false);
 
   async function salvar() {
@@ -282,6 +282,26 @@ function SalvarMarco({ pacienteId, nutriId, scores, onSalvo }) {
   );
 }
 
+// ─── Helpers para Evolução ────────────────────────────────────────────────────
+
+function hasScore(marco, eixo) {
+  const v = marco.scores?.[eixo];
+  return v !== null && v !== undefined;
+}
+
+function mesAnoLabel(isoTimestamp) {
+  const d = new Date(isoTimestamp);
+  const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return `${MESES[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
+}
+
+function corDot(score) {
+  if (score >= 76) return 'var(--red)';
+  if (score >= 51) return 'var(--orange)';
+  if (score >= 26) return 'var(--amber)';
+  return 'var(--green)';
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function MapaMetabolicoNutri({ pacienteId, pacienteNome, nutriId }) {
@@ -289,6 +309,7 @@ export default function MapaMetabolicoNutri({ pacienteId, pacienteNome, nutriId 
   const [periodos,     setPeriodos]     = useState([]);
   const [marcos,       setMarcos]       = useState([]);
   const [marcoSel,     setMarcoSel]     = useState('');
+  const [subaba,       setSubaba]       = useState('atual');
 
   async function carregar() {
     const [sRes, pRes, mRes] = await Promise.all([
@@ -350,163 +371,399 @@ export default function MapaMetabolicoNutri({ pacienteId, pacienteNome, nutriId 
 
   return (
     <>
-      {/* Cabeçalho com confiança dos dados */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <div style={{ fontSize: 13, color: 'var(--text3)' }}>
-            Mapa Vivo · {mapa.diasComDados} {mapa.diasComDados === 1 ? 'dia' : 'dias'} de dados
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-            <div style={{ height: 5, width: 80, borderRadius: 3, background: 'var(--bg3)', overflow: 'hidden' }}>
-              <div style={{ width: `${mapa.confianca}%`, height: '100%', background: mapa.confianca >= 70 ? 'var(--green)' : 'var(--orange)', transition: 'width .4s' }} />
-            </div>
-            <span style={{ fontSize: 11, color: mapa.confianca >= 70 ? 'var(--green)' : 'var(--orange)', fontWeight: 600 }}>
-              {mapa.confianca}% confiança
-            </span>
-          </div>
-        </div>
-        <SalvarMarco pacienteId={pacienteId} nutriId={nutriId} scores={mapa.scores} onSalvo={carregar} />
+      {/* ── Subabas ── */}
+      <div style={{ display: 'flex', gap: 2, background: 'var(--bg2)', borderRadius: 10, padding: 3, marginBottom: 16 }}>
+        {[
+          { id: 'atual',    label: 'Mapa Atual' },
+          { id: 'evolucao', label: 'Evolução'   },
+        ].map(t => (
+          <button key={t.id} onClick={() => setSubaba(t.id)}
+            style={{
+              flex: '0 0 auto', padding: '7px 14px', fontSize: 13, fontWeight: 500,
+              borderRadius: 8, border: 'none', cursor: 'pointer',
+              color: subaba === t.id ? 'var(--dark)' : 'var(--text3)',
+              background: subaba === t.id ? 'var(--white)' : 'transparent',
+              boxShadow: subaba === t.id ? 'var(--shadow-sm, 0 1px 2px rgba(0,0,0,.05))' : 'none',
+              fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap',
+            }}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Comparação com marco */}
-      {marcos.length > 0 && (
-        <div style={{ marginBottom: 14 }}>
-          <label className="field-label">Comparar com marco clínico</label>
-          <select value={marcoSel} onChange={e => setMarcoSel(e.target.value)} style={{ fontSize: 13 }}>
-            <option value="">— Sem comparação —</option>
-            {marcos.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.nome} · {dataBR(m.criado_em)}
-              </option>
+      {/* ── Mapa Atual ── */}
+      {subaba === 'atual' && (<>
+        {/* Cabeçalho com confiança dos dados */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+              Mapa Vivo · {mapa.diasComDados} {mapa.diasComDados === 1 ? 'dia' : 'dias'} de dados
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+              <div style={{ height: 5, width: 80, borderRadius: 3, background: 'var(--bg3)', overflow: 'hidden' }}>
+                <div style={{ width: `${mapa.confianca}%`, height: '100%', background: mapa.confianca >= 70 ? 'var(--green)' : 'var(--orange)', transition: 'width .4s' }} />
+              </div>
+              <span style={{ fontSize: 11, color: mapa.confianca >= 70 ? 'var(--green)' : 'var(--orange)', fontWeight: 600 }}>
+                {mapa.confianca}% confiança
+              </span>
+            </div>
+          </div>
+          <SalvarMarco pacienteId={pacienteId} nutriId={nutriId} scores={mapa.scores} onSalvo={carregar} />
+        </div>
+
+        {/* Comparação com marco */}
+        {marcos.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <label className="field-label">Comparar com marco clínico</label>
+            <select value={marcoSel} onChange={e => setMarcoSel(e.target.value)} style={{ fontSize: 13 }}>
+              <option value="">— Sem comparação —</option>
+              {marcos.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.nome} · {dataBR(m.criado_em)}
+                </option>
+              ))}
+            </select>
+            {marcoAtual?.obs && (
+              <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
+                "{marcoAtual.obs}"
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Radar SVG */}
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Radar metabólico</div>
+              <div className="card-sub">9 eixos · média dos últimos {mapa.diasComDados} dias{marcoAtual ? ` · comparando com "${marcoAtual.nome}"` : ''}</div>
+            </div>
+          </div>
+          <div className="card-body">
+            <Radar scores={mapa.scores} scoresMarco={marcoAtual?.scores} />
+            {marcoAtual && (
+              <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text3)' }}>
+                  <div style={{ width: 24, height: 3, background: '#c4a882', borderRadius: 2 }} />
+                  Mapa Vivo
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text3)' }}>
+                  <div style={{ width: 24, height: 3, background: '#5b8fa8', borderRadius: 2, borderTop: '2px dashed #5b8fa8', background: 'none', borderBottom: 'none' }} />
+                  {marcoAtual.nome}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Barras com porcentagem */}
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Scores por eixo</div>
+              <div className="card-sub">Linguagem técnica · limiar de alerta: ≥ 55%{delta ? ' · delta vs marco' : ''}</div>
+            </div>
+          </div>
+          <div className="card-body">
+            {EIXOS_ORDEM.map(k => (
+              <BarraMapa
+                key={k}
+                eixoKey={k}
+                score={mapa.scores[k] ?? 0}
+                scoreMarco={marcoAtual ? (marcoAtual.scores[k] ?? 0) : null}
+              />
             ))}
-          </select>
-          {marcoAtual?.obs && (
-            <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
-              "{marcoAtual.obs}"
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Radar SVG */}
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-header">
-          <div>
-            <div className="card-title">Radar metabólico</div>
-            <div className="card-sub">9 eixos · média dos últimos {mapa.diasComDados} dias{marcoAtual ? ` · comparando com "${marcoAtual.nome}"` : ''}</div>
           </div>
         </div>
-        <div className="card-body">
-          <Radar scores={mapa.scores} scoresMarco={marcoAtual?.scores} />
-          {marcoAtual && (
-            <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text3)' }}>
-                <div style={{ width: 24, height: 3, background: '#c4a882', borderRadius: 2 }} />
-                Mapa Vivo
+
+        {/* Alertas clínicos */}
+        {alertas.length > 0 && (
+          <div className="card" style={{ marginBottom: 14 }}>
+            <div className="card-header">
+              <div>
+                <div className="card-title">Alertas clínicos</div>
+                <div className="card-sub">Eixos acima do limiar funcional</div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text3)' }}>
-                <div style={{ width: 24, height: 3, background: '#5b8fa8', borderRadius: 2, borderTop: '2px dashed #5b8fa8', background: 'none', borderBottom: 'none' }} />
-                {marcoAtual.nome}
+              <span style={{
+                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                background: 'var(--red-bg)', color: 'var(--red)',
+                fontSize: 11, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>{alertas.length}</span>
+            </div>
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {alertas.map((a, i) => <CardAlerta key={i} {...a} />)}
+            </div>
+          </div>
+        )}
+
+        {/* Correlações funcionais */}
+        {correlacoes.length > 0 && (
+          <div className="card" style={{ marginBottom: 14 }}>
+            <div className="card-header">
+              <div>
+                <div className="card-title">Correlações funcionais</div>
+                <div className="card-sub">Padrões que se potencializam — Biblioteca Clínica Útera</div>
               </div>
+              <span style={{
+                width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                background: 'var(--blue-bg)', color: 'var(--blue)',
+                fontSize: 11, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>{correlacoes.length}</span>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Barras com porcentagem */}
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-header">
-          <div>
-            <div className="card-title">Scores por eixo</div>
-            <div className="card-sub">Linguagem técnica · limiar de alerta: ≥ 55%{delta ? ' · delta vs marco' : ''}</div>
-          </div>
-        </div>
-        <div className="card-body">
-          {EIXOS_ORDEM.map(k => (
-            <BarraMapa
-              key={k}
-              eixoKey={k}
-              score={mapa.scores[k] ?? 0}
-              scoreMarco={marcoAtual ? (marcoAtual.scores[k] ?? 0) : null}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Alertas clínicos */}
-      {alertas.length > 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="card-header">
-            <div>
-              <div className="card-title">Alertas clínicos</div>
-              <div className="card-sub">Eixos acima do limiar funcional</div>
+            <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {correlacoes.map(c => <CardCorrelacao key={c.id} {...c} />)}
             </div>
-            <span style={{
-              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-              background: 'var(--red-bg)', color: 'var(--red)',
-              fontSize: 11, fontWeight: 700,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>{alertas.length}</span>
           </div>
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {alertas.map((a, i) => <CardAlerta key={i} {...a} />)}
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Correlações funcionais */}
-      {correlacoes.length > 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="card-header">
-            <div>
-              <div className="card-title">Correlações funcionais</div>
-              <div className="card-sub">Padrões que se potencializam — Biblioteca Clínica Útera</div>
-            </div>
-            <span style={{
-              width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-              background: 'var(--blue-bg)', color: 'var(--blue)',
-              fontSize: 11, fontWeight: 700,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>{correlacoes.length}</span>
-          </div>
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {correlacoes.map(c => <CardCorrelacao key={c.id} {...c} />)}
-          </div>
-        </div>
-      )}
-
-      {/* Marcos clínicos salvos */}
-      {marcos.length > 0 && (
-        <>
-          <div className="section-label">Marcos clínicos ({marcos.length})</div>
-          <div className="card" style={{ padding: 0 }}>
-            {marcos.map((m, i) => (
-              <div key={m.id} style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '12px 16px',
-                borderBottom: i === marcos.length - 1 ? 'none' : '0.5px solid var(--border)',
-              }}>
-                <div style={{
-                  width: 34, height: 34, borderRadius: 8,
-                  background: 'var(--bg2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        {/* Marcos clínicos salvos */}
+        {marcos.length > 0 && (
+          <>
+            <div className="section-label">Marcos clínicos ({marcos.length})</div>
+            <div className="card" style={{ padding: 0 }}>
+              {marcos.map((m, i) => (
+                <div key={m.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 16px',
+                  borderBottom: i === marcos.length - 1 ? 'none' : '0.5px solid var(--border)',
                 }}>
-                  <i className="ti ti-bookmark" style={{ fontSize: 15, color: 'var(--text3)' }} aria-hidden="true" />
+                  <div style={{
+                    width: 34, height: 34, borderRadius: 8,
+                    background: 'var(--bg2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    <i className="ti ti-bookmark" style={{ fontSize: 15, color: 'var(--text3)' }} aria-hidden="true" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{m.nome}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{dataBR(m.criado_em)}</div>
+                    {m.obs && <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>"{m.obs}"</div>}
+                  </div>
+                  <button
+                    onClick={() => setMarcoSel(prev => prev === m.id ? '' : m.id)}
+                    className="btn-outline"
+                    style={{ fontSize: 11, padding: '4px 9px', color: marcoSel === m.id ? 'var(--dark)' : 'var(--text3)' }}>
+                    {marcoSel === m.id ? 'Comparando' : 'Comparar'}
+                  </button>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{m.nome}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{dataBR(m.criado_em)}</div>
-                  {m.obs && <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>"{m.obs}"</div>}
-                </div>
-                <button
-                  onClick={() => setMarcoSel(prev => prev === m.id ? '' : m.id)}
-                  className="btn-outline"
-                  style={{ fontSize: 11, padding: '4px 9px', color: marcoSel === m.id ? 'var(--dark)' : 'var(--text3)' }}>
-                  {marcoSel === m.id ? 'Comparando' : 'Comparar'}
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
+          </>
+        )}
+      </>)}
+
+      {/* ── Evolução ── */}
+      {subaba === 'evolucao' && <EvolucaoMapa marcos={marcos} />}
+    </>
+  );
+}
+
+// ─── Aba Evolução ─────────────────────────────────────────────────────────────
+
+const LABEL_TEND = {
+  melhorando: '📉 Melhorando',
+  piorando:   '📈 Atenção',
+  estavel:    '➡ Estável',
+};
+const COR_TEND = {
+  melhorando: 'var(--green)',
+  piorando:   'var(--red)',
+  estavel:    'var(--text3)',
+};
+
+function calcularVariacaoEixo(marcosOrdenados, eixo) {
+  const comScore = marcosOrdenados.filter(m => hasScore(m, eixo));
+  if (comScore.length < 2) return null;
+  // score caiu → positivo → melhora
+  return comScore[0].scores[eixo] - comScore[comScore.length - 1].scores[eixo];
+}
+
+function calcularTendenciaEixo(marcosOrdenados, eixo) {
+  const comScore = marcosOrdenados.filter(m => hasScore(m, eixo));
+  if (comScore.length < 2) return null;
+  const pen   = comScore[comScore.length - 2];
+  const ult   = comScore[comScore.length - 1];
+  const delta = pen.scores[eixo] - ult.scores[eixo];
+  if (delta >= 5)  return 'melhorando';
+  if (delta <= -5) return 'piorando';
+  return 'estavel';
+}
+
+function EvolucaoMapa({ marcos }) {
+  if (marcos.length < 2) {
+    return (
+      <div className="card empty-card">
+        <i className="ti ti-chart-line" style={{ fontSize: 28, color: 'var(--text4)', display: 'block', marginBottom: 8 }} aria-hidden="true" />
+        <div className="empty-sub">
+          {marcos.length === 0
+            ? 'Salve o primeiro marco clínico na aba Mapa Atual para iniciar o histórico.'
+            : 'Salve pelo menos 2 marcos para visualizar a evolução dos eixos.'}
+        </div>
+        {marcos.length === 1 && (
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text3)' }}>
+            Marco atual: <strong>{marcos[0].nome}</strong> · {mesAnoLabel(marcos[0].criado_em)}
           </div>
-        </>
+        )}
+      </div>
+    );
+  }
+
+  // Cronológico: mais antigo primeiro
+  const ordenados = [...marcos].reverse();
+
+  // Exibir no máximo os 6 marcos mais recentes para evitar overflow
+  const exibidos      = ordenados.length > 6 ? ordenados.slice(ordenados.length - 6) : ordenados;
+  const temMaisAntigos = ordenados.length > 6;
+
+  // Stats por eixo
+  const eixoStats = EIXOS_ORDEM.map(k => {
+    const scoreUltValido = [...ordenados].reverse().find(m => hasScore(m, k));
+    return {
+      k,
+      variacao:      calcularVariacaoEixo(ordenados, k),
+      tendencia:     calcularTendenciaEixo(ordenados, k),
+      scoreUltimo:   scoreUltValido ? scoreUltValido.scores[k] : null,
+      pontosValidos: ordenados.filter(m => hasScore(m, k)).length,
+    };
+  });
+
+  // Destaques
+  const validos        = eixoStats.filter(e => e.variacao !== null);
+  const maiorEvolucao  = validos.filter(e => e.variacao > 0).sort((a, b) => b.variacao - a.variacao)[0] ?? null;
+  const maisResistente = validos
+    .filter(e => e.scoreUltimo !== null && e.scoreUltimo >= 35 && e.variacao < 15)
+    .sort((a, b) => a.variacao - b.variacao)[0] ?? null;
+
+  const thStyle = {
+    padding: '8px 10px', fontSize: 10, fontWeight: 600,
+    letterSpacing: 1, textTransform: 'uppercase',
+    color: 'var(--text3)', borderBottom: '0.5px solid var(--border)',
+    whiteSpace: 'nowrap', textAlign: 'center',
+  };
+  const tdStyle = (isLast) => ({
+    padding: '9px 10px', textAlign: 'center',
+    borderBottom: isLast ? 'none' : '0.5px solid var(--border)',
+  });
+
+  return (
+    <>
+      {temMaisAntigos && (
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, fontStyle: 'italic' }}>
+          Exibindo os {exibidos.length} marcos mais recentes de {ordenados.length} totais.
+        </div>
+      )}
+
+      {/* Tabela de evolução */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-header">
+          <div>
+            <div className="card-title">Evolução por eixo</div>
+            <div className="card-sub">{exibidos.length} marcos · cronológico · score alto = sintoma intenso</div>
+          </div>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, textAlign: 'left', minWidth: 110, paddingLeft: 16 }}>Eixo</th>
+                {exibidos.map(m => (
+                  <th key={m.id} style={{ ...thStyle, minWidth: 64 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--dark)', fontSize: 11 }}>{mesAnoLabel(m.criado_em)}</div>
+                    <div style={{ fontSize: 9, fontWeight: 400, marginTop: 1 }}>{m.nome}</div>
+                  </th>
+                ))}
+                <th style={{ ...thStyle, minWidth: 74 }}>Variação</th>
+                <th style={{ ...thStyle, minWidth: 108 }}>Tendência</th>
+              </tr>
+            </thead>
+            <tbody>
+              {eixoStats.map(({ k, variacao, tendencia }, idx) => {
+                const eixo  = EIXOS[k] ?? { label: k };
+                const isLast = idx === eixoStats.length - 1;
+                return (
+                  <tr key={k} style={{ background: idx % 2 === 0 ? 'var(--bg2)' : 'transparent' }}>
+                    <td style={{ ...tdStyle(isLast), textAlign: 'left', fontWeight: 500, color: 'var(--dark)', paddingLeft: 16, whiteSpace: 'nowrap' }}>
+                      {eixo.label}
+                    </td>
+                    {exibidos.map(m => {
+                      const v = hasScore(m, k) ? m.scores[k] : null;
+                      return (
+                        <td key={m.id} style={tdStyle(isLast)}>
+                          {v !== null ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: corDot(v) }} />
+                              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{v}</span>
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text4)' }}>—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td style={tdStyle(isLast)}>
+                      {variacao !== null ? (
+                        <span style={{
+                          fontSize: 11, fontWeight: 700,
+                          color: variacao > 0 ? 'var(--green)' : variacao < 0 ? 'var(--red)' : 'var(--text3)',
+                        }}>
+                          {variacao > 0 ? `↓ ${variacao}` : variacao < 0 ? `↑ ${Math.abs(variacao)}` : '='}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text4)', fontSize: 11 }}>—</span>
+                      )}
+                    </td>
+                    <td style={tdStyle(isLast)}>
+                      {tendencia ? (
+                        <span style={{ fontSize: 10, fontWeight: 500, color: COR_TEND[tendencia] }}>
+                          {LABEL_TEND[tendencia]}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text4)', fontSize: 11 }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Destaques */}
+      {(maiorEvolucao || maisResistente) && (
+        <div className="g2">
+          {maiorEvolucao && (
+            <div className="card" style={{ padding: '14px 16px', borderLeft: '3px solid var(--green)' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>
+                🏆 Maior evolução
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dark)', marginBottom: 4 }}>
+                {EIXOS[maiorEvolucao.k]?.label ?? maiorEvolucao.k}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--green)', fontWeight: 700 }}>
+                ↓ {maiorEvolucao.variacao} pts
+              </div>
+            </div>
+          )}
+          {maisResistente && (
+            <div className="card" style={{ padding: '14px 16px', borderLeft: '3px solid var(--orange)' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>
+                ⚠ Precisa de atenção
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dark)', marginBottom: 4 }}>
+                {EIXOS[maisResistente.k]?.label ?? maisResistente.k}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--orange)', fontWeight: 700 }}>
+                {maisResistente.variacao > 0
+                  ? `↓ ${maisResistente.variacao} pts`
+                  : maisResistente.variacao < 0
+                    ? `↑ ${Math.abs(maisResistente.variacao)} pts`
+                    : '= sem variação'}
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </>
   );
