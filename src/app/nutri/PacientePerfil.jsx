@@ -21,6 +21,7 @@ import DocumentosNutri from './_DocumentosPaciente.jsx';
 import MapaMetabolicoNutri from './_MapaMetabolico.jsx';
 import IntestinoNutri from './_Intestino.jsx';
 import ResumoClinico from './_ResumoClinico.jsx';
+import LinhaTempo from './_LinhaTempo.jsx';
 import DicaJSON from '../../components/DicaJSON.jsx';
 
 export default function PacientePerfil() {
@@ -322,6 +323,7 @@ export default function PacientePerfil() {
       }}>
         {[
           { id: 'resumo',      label: 'Resumo Clínico', icon: 'report-medical' },
+          { id: 'linha-tempo', label: 'Linha do Tempo', icon: 'timeline'        },
           { id: 'evolucao',    label: 'Evolução',     icon: 'chart-line' },
           { id: 'anamnese',    label: 'Anamnese',     icon: 'clipboard-text' },
           { id: 'followup',    label: 'Follow-up',    icon: 'notebook' },
@@ -363,7 +365,8 @@ export default function PacientePerfil() {
         ))}
       </div>
 
-      {tab === 'resumo' && <ResumoClinico pacienteId={paciente.id} nutriId={user.id} onIrParaTab={setTab} />}
+      {tab === 'resumo'      && <ResumoClinico pacienteId={paciente.id} nutriId={user.id} onIrParaTab={setTab} />}
+      {tab === 'linha-tempo' && <LinhaTempo    pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'evolucao' && <Evolucao pacienteId={paciente.id} paciente={paciente} nutriId={user.id} />}
       {tab === 'anamnese' && <Anamnese pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'followup' && <FollowUp pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
