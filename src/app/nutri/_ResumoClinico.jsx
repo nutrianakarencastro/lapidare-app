@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { dataBR } from '../../lib/utils.js';
+import { calcularLeituraConsistencia } from '../../lib/consistenciaUtils.js';
 
 function tipoConsulta(tipo) {
   if (!tipo) return '—';
@@ -25,22 +26,45 @@ function corDias(dias, limOk, limWarn) {
   return 'var(--red)';
 }
 
+const COR_LEITURA = {
+  excelente:     'var(--green)',
+  boa:           'var(--green)',
+  em_construcao: 'var(--amber)',
+  oscilante:     'var(--orange)',
+  retomada:      'var(--orange)',
+};
+
 export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
   const navigate = useNavigate();
-  const [prox, setProx] = useState(undefined);
-  const [ultCons, setUltCons] = useState(undefined);
-  const [checkin, setCheckin] = useState(undefined);
-  const [followup, setFollowup] = useState(undefined);
-  const [avaliacao, setAvaliacao] = useState(undefined);
-  const [anamnese, setAnamnese] = useState(undefined);
+  const [prox,         setProx]         = useState(undefined);
+  const [ultCons,      setUltCons]      = useState(undefined);
+  const [checkin,      setCheckin]      = useState(undefined);
+  const [followup,     setFollowup]     = useState(undefined);
+  const [avaliacao,    setAvaliacao]    = useState(undefined);
+  const [anamnese,     setAnamnese]     = useState(undefined);
   const [condutaAtual, setCondutaAtual] = useState(undefined);
-  const [metas, setMetas]               = useState(undefined);
+  const [metas,        setMetas]        = useState(undefined);
+  const [consistencia, setConsistencia] = useState(undefined);
 
   useEffect(() => {
     let active = true;
     async function load() {
       const agora = new Date().toISOString();
-      const [proxRes, ultConsRes, checkinRes, followupRes, avalRes, anamRes, condutaRes, metasRes] = await Promise.all([
+
+      // Corte de 30 dias para a leitura de consistência
+      const c30 = new Date();
+      c30.setDate(c30.getDate() - 30);
+      const c30str = c30.toISOString().slice(0, 10);
+      const c30ts  = c30.toISOString();
+
+      const [
+        proxRes, ultConsRes, checkinRes, followupRes, avalRes, anamRes, condutaRes, metasRes,
+        cicloRes, intestinoRes,
+        habitosCountRes, habitosLogsRes,
+        checkinsConsRes,
+        suplCountRes, suplLogsRes,
+      ] = await Promise.all([
+        // ── Existentes ────────────────────────────────────────────────────────
         supabase.from('consultas').select('id, data_hora, tipo')
           .eq('paciente_id', pacienteId).neq('status', 'cancelada')
           .gte('data_hora', agora).order('data_hora').limit(1).maybeSingle(),
@@ -67,8 +91,32 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
         supabase.from('metas_terapeuticas').select('id, prioridade, status')
           .eq('paciente_id', pacienteId)
           .in('status', ['ativa', 'em_evolucao']),
+
+        // ── Consistência: registros clínicos ──────────────────────────────────
+        supabase.from('ciclo_sintomas_diarios').select('data')
+          .eq('paciente_id', pacienteId).gte('data', c30str),
+        supabase.from('intestino_logs').select('data')
+          .eq('paciente_id', pacienteId).eq('tipo', 'diario').gte('data', c30str),
+
+        // ── Consistência: hábitos ─────────────────────────────────────────────
+        supabase.from('habitos').select('id', { count: 'exact', head: true })
+          .eq('paciente_id', pacienteId).eq('ativo', true),
+        supabase.from('habitos_logs').select('data')
+          .eq('paciente_id', pacienteId).gte('data', c30str),
+
+        // ── Consistência: check-ins na janela ─────────────────────────────────
+        supabase.from('checkin_envios').select('respondido_em')
+          .eq('paciente_id', pacienteId).gte('enviado_em', c30ts),
+
+        // ── Consistência: suplementação ───────────────────────────────────────
+        supabase.from('suplementos').select('id', { count: 'exact', head: true })
+          .eq('paciente_id', pacienteId).eq('ativo', true),
+        supabase.from('suplementos_logs').select('data')
+          .eq('paciente_id', pacienteId).eq('tomado', true).gte('data', c30str),
       ]);
+
       if (!active) return;
+
       setProx(proxRes.data ?? null);
       setUltCons(ultConsRes.data ?? null);
       setCheckin(checkinRes.data ?? null);
@@ -77,6 +125,25 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
       setAnamnese(anamRes.data ?? null);
       setCondutaAtual(condutaRes.data ?? null);
       setMetas(metasRes.data ?? []);
+
+      // Calcular leitura de consistência
+      const datasRegistros = [
+        ...(cicloRes.data ?? []).map(r => r.data),
+        ...(intestinoRes.data ?? []).map(r => r.data),
+      ];
+      const temHabitos = (habitosCountRes.count ?? 0) > 0;
+      const temSupl    = (suplCountRes.count    ?? 0) > 0;
+      const checkinsConsEnviados = checkinsConsRes.data ?? [];
+
+      setConsistencia(calcularLeituraConsistencia({
+        datasRegistros,
+        temHabitos,
+        datasHabitos:        (habitosLogsRes.data ?? []).map(r => r.data),
+        checkinsTotal:       checkinsConsEnviados.length,
+        checkinsRespondidos: checkinsConsEnviados.filter(c => c.respondido_em !== null).length,
+        temSupl,
+        datasSupl:           (suplLogsRes.data ?? []).map(r => r.data),
+      }));
     }
     load();
     return () => { active = false; };
@@ -86,7 +153,7 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
     return <div className="card empty-card"><div className="empty-sub">Carregando…</div></div>;
   }
 
-  const diasFollowup = diasDesde(followup?.data ?? followup?.created_at);
+  const diasFollowup  = diasDesde(followup?.data ?? followup?.created_at);
   const diasAvaliacao = diasDesde(avaliacao?.data);
 
   const labelSub = { fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 500, marginBottom: 8 };
@@ -173,6 +240,47 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
           </button>
         </div>
       </div>
+
+      {/* ── Leitura de Consistência ── */}
+      {consistencia !== undefined && (
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 12 }}>
+          <div style={labelSub}>Consistência clínica · últimos 30 dias</div>
+          {consistencia.aguardando ? (
+            <>
+              <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text3)', marginBottom: 4 }}>
+                Aguardando dados iniciais
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.55 }}>
+                Ainda não há registros suficientes para uma leitura confiável.
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                <span style={{
+                  fontSize: 14, fontWeight: 600,
+                  color: COR_LEITURA[consistencia.classificacao] ?? 'var(--text2)',
+                }}>
+                  {consistencia.label}
+                </span>
+                {consistencia.queda7d && (
+                  <span style={{ fontSize: 11, color: 'var(--orange)', fontWeight: 500 }}>
+                    ↘ Queda recente (7d)
+                  </span>
+                )}
+              </div>
+              {consistencia.explicacao && (
+                <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 6 }}>
+                  {consistencia.explicacao}
+                </div>
+              )}
+            </>
+          )}
+          <div style={{ fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', marginTop: 2 }}>
+            Baseado nos registros disponíveis no app.
+          </div>
+        </div>
+      )}
 
       {/* ── Avaliação + Follow-up ── */}
       <div className="g2">
