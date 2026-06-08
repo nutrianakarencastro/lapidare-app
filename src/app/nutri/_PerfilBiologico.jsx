@@ -51,6 +51,77 @@ function AssociacaoCard({ assoc: a, isLast }) {
     </div>
   );
 }
+// ── Mapa de Gatilhos ──────────────────────────────────────────────────────────
+const COR_FORCA_MAPA   = { forte: 'var(--green)', moderada: 'var(--amber)' };
+const BG_FORCA_MAPA    = { forte: 'var(--green-bg)', moderada: '#fef9e7' };
+const LABEL_FORCA_MAPA = { forte: 'Associação consistente', moderada: 'Associação observada' };
+
+function FatorCard({ fator, isLast }) {
+  const cor = COR_FORCA_MAPA[fator.forca];
+  return (
+    <div style={{ padding: '12px 0', borderBottom: isLast ? 'none' : '0.5px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5, flexWrap: 'wrap' }}>
+        <span style={{
+          fontSize: 9, fontWeight: 600, letterSpacing: .4,
+          background: BG_FORCA_MAPA[fator.forca], color: cor,
+          padding: '2px 7px', borderRadius: 20,
+        }}>
+          {LABEL_FORCA_MAPA[fator.forca]}
+        </span>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 4 }}>
+        "{fator.narrativa}"
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text4)' }}>
+        {fator.nCom} dias com a condição · {fator.nSem} sem a condição
+      </div>
+    </div>
+  );
+}
+
+function MapaGatilhosCard({ mapa }) {
+  const { fatores, influenciaCiclo } = mapa;
+  const temFatores = fatores && fatores.length > 0;
+  if (!temFatores && !influenciaCiclo) return null;
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-header">
+        <div>
+          <div className="card-title">Fatores Associados a Dias Difíceis</div>
+          <div className="card-sub">Condições mais presentes nos dias de maior carga sintomática nos registros</div>
+        </div>
+      </div>
+      <div className="card-body" style={{ paddingTop: 0 }}>
+        {temFatores && fatores.map((f, i) => (
+          <FatorCard key={f.id} fator={f} isLast={i === fatores.length - 1 && !influenciaCiclo} />
+        ))}
+        {influenciaCiclo && (
+          <>
+            {temFatores && <div style={{ height: '0.5px', background: 'var(--border)', margin: '6px 0 12px' }} />}
+            <div>
+              <div style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+                color: 'var(--text4)', marginBottom: 6,
+              }}>
+                Influência do ciclo observada
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 4 }}>
+                "{influenciaCiclo.narrativa}"
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text4)' }}>
+                {influenciaCiclo.nLutea} dias em fase lútea analisados
+              </div>
+            </div>
+          </>
+        )}
+        <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
+          Associações calculadas nos dias com registro completo dos campos relevantes. Não indicam relação causal. A fase lútea é um contexto fisiológico, não um fator modificável.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Convergências Clínicas ─────────────────────────────────────────────────────
 function ConvergenciaCard({ conv, isLast }) {
   return (
@@ -336,7 +407,7 @@ export default function PerfilBiologico({ pacienteId }) {
     return <div className="card empty-card"><div className="empty-sub">Carregando…</div></div>;
   }
 
-  const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao } = resultado;
+  const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao, mapaGatilhos } = resultado;
 
   // ── Insuficiente ─────────────────────────────────────────────────────────────
   if (dadosBase.estagio === 'insuficiente') {
@@ -521,6 +592,9 @@ export default function PerfilBiologico({ pacienteId }) {
           </div>
         </div>
       )}
+
+      {/* ── Mapa de Gatilhos ── */}
+      {mapaGatilhos?.disponivel && <MapaGatilhosCard mapa={mapaGatilhos} />}
 
       {/* ── Convergências Clínicas ── */}
       {convergencias?.length > 0 && (

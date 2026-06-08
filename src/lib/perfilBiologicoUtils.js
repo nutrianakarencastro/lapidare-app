@@ -511,13 +511,168 @@ export function calcularPriorizacao({ convergencias, candidatos }) {
   };
 }
 
+// ── Mapa de Gatilhos Individual — Sprint 12 ──────────────────────────────────
+// Identifica fatores mais associados a dias de maior carga sintomática.
+// Fatores modificáveis (até 3) + influência do ciclo em bloco separado.
+
+// Campos downstream usados como outcome composite — sem overlap com os gatilhos
+const OUTCOME_CAMPOS_MAPA = [
+  { id: 'humor',          altFn: s => s.humor          != null ? s.humor          <= 2 : null },
+  { id: 'acne',           altFn: s => s.acne           != null ? s.acne           >= 1 : null },
+  { id: 'retencao',       altFn: s => s.retencao       != null ? s.retencao       >= 1 : null },
+  { id: 'inchaco',        altFn: s => s.inchaco        != null ? s.inchaco        >= 1 : null },
+  { id: 'dor_cabeca',     altFn: s => s.dor_cabeca     != null ? s.dor_cabeca     >= 2 : null },
+  { id: 'dor_pelvica',    altFn: s => s.dor_pelvica    != null ? s.dor_pelvica    >= 1 : null },
+  { id: 'irritabilidade', altFn: s => s.irritabilidade != null ? s.irritabilidade >= 2 : null },
+];
+
+// Fatores modificáveis — sem energia/compulsão (circular com o outcome composite)
+const GATILHOS_MAPA = [
+  { id: 'sono_ruim',
+    label: 'o sono estava difícil',
+    altFn: (s) => s.sono     != null ? s.sono     <= 2 : null },
+  { id: 'ansiedade',
+    label: 'a ansiedade estava elevada',
+    altFn: (s) => s.ansiedade != null ? s.ansiedade >= 2 : null },
+  { id: 'intestino',
+    label: 'o intestino estava alterado',
+    altFn: (s, altSet) => {
+      const temDado = s.intestino != null || altSet.has(s.data);
+      if (!temDado) return null;
+      return altSet.has(s.data) || s.intestino !== 'normal';
+    },
+  },
+];
+
+// Dia de piora: ≥2 dos campos de outcome com dado estão alterados
+function ehPioraDia(s) {
+  let comDado = 0, alterados = 0;
+  for (const c of OUTCOME_CAMPOS_MAPA) {
+    const v = c.altFn(s);
+    if (v !== null) { comDado++; if (v) alterados++; }
+  }
+  return comDado >= 3 ? alterados >= 2 : null;
+}
+
+function analisarGatilhoMapa(gatilho, sintomas, altSet) {
+  const analisados = sintomas.filter(s => {
+    const g = gatilho.altFn(s, altSet);
+    const p = ehPioraDia(s);
+    return g !== null && p !== null;
+  });
+
+  if (analisados.length < 20) return null;
+
+  const comG = analisados.filter(s => gatilho.altFn(s, altSet) === true);
+  const semG = analisados.filter(s => gatilho.altFn(s, altSet) === false);
+
+  const nCom = comG.length;
+  const nSem = semG.length;
+  if (nCom < 10 || nSem < 5) return null;
+
+  const pioraCom = comG.filter(s => ehPioraDia(s) === true).length / nCom;
+  const pioraSem = semG.filter(s => ehPioraDia(s) === true).length / nSem;
+  const delta    = pioraCom - pioraSem;
+  const ratio    = pioraSem < 0.01
+    ? (pioraCom >= 0.20 ? 5.0 : 1.0)
+    : pioraCom / pioraSem;
+
+  if (delta < 0.15 || pioraCom < 0.20 || ratio < 1.4) return null;
+
+  const pioraCom_pp = Math.round(pioraCom * 100);
+  const pioraSem_pp = Math.round(pioraSem * 100);
+  const delta_pp    = Math.round(delta    * 100);
+  const forca       = delta >= 0.25 ? 'forte' : 'moderada';
+
+  return {
+    id:       gatilho.id,
+    label:    gatilho.label,
+    pioraCom: pioraCom_pp,
+    pioraSem: pioraSem_pp,
+    delta:    delta_pp,
+    ratio:    Math.round(ratio * 10) / 10,
+    nCom, nSem, forca,
+    narrativa: `Nos dias em que ${gatilho.label}, múltiplos sintomas alterados foram observados em ${pioraCom_pp}% dos registros — contra ${pioraSem_pp}% nos outros dias (${delta_pp} pontos percentuais acima).`,
+  };
+}
+
+function analisarFaseLuteaMapa(sintomas, periodos) {
+  const diasComFase = sintomas
+    .map(s => {
+      const { fase } = calcularFaseDoCiclo(periodos, s.data);
+      const piora    = ehPioraDia(s);
+      return fase !== null && piora !== null ? { fase, piora } : null;
+    })
+    .filter(Boolean);
+
+  if (diasComFase.length < 20) return null;
+
+  const lutea  = diasComFase.filter(d => d.fase === 'lutea');
+  const outras = diasComFase.filter(d => d.fase !== 'lutea');
+
+  if (lutea.length < 8 || outras.length < 5) return null;
+
+  const pioraLutea  = lutea.filter(d => d.piora).length  / lutea.length;
+  const pioraOutras = outras.filter(d => d.piora).length / outras.length;
+  const delta = pioraLutea - pioraOutras;
+  const ratio = pioraOutras < 0.01
+    ? (pioraLutea >= 0.20 ? 5.0 : 1.0)
+    : pioraLutea / pioraOutras;
+
+  if (delta < 0.15 || pioraLutea < 0.20 || ratio < 1.4) return null;
+
+  const pL_pp = Math.round(pioraLutea  * 100);
+  const pO_pp = Math.round(pioraOutras * 100);
+  const d_pp  = Math.round(delta       * 100);
+
+  return {
+    pioraLutea:  pL_pp,
+    pioraOutras: pO_pp,
+    delta:       d_pp,
+    nLutea:      lutea.length,
+    nOutras:     outras.length,
+    narrativa: `Nos dias em fase lútea, múltiplos sintomas alterados foram observados em ${pL_pp}% dos registros — contra ${pO_pp}% nas demais fases (${d_pp} pontos percentuais acima).`,
+  };
+}
+
+export function calcularMapaGatilhos({ sintomas, intestinoLogs, periodos, ciclosCompletos }) {
+  const diasRegistrados = new Set((sintomas ?? []).map(s => s.data)).size;
+  if (diasRegistrados < 30) return { disponivel: false };
+
+  const altSet = new Set(
+    (intestinoLogs ?? [])
+      .filter(l =>
+        l.tipo === 'diario' && (
+          (l.bristol && l.bristol !== 4 && l.bristol !== 5) ||
+          l.esvaziamento_incompleto ||
+          (l.dor_abdominal ?? 0) >= 2
+        )
+      )
+      .map(l => l.data)
+  );
+
+  // Fatores modificáveis — ranqueados por delta desc → ratio desc → nCom desc
+  const fatores = GATILHOS_MAPA
+    .map(g => analisarGatilhoMapa(g, sintomas ?? [], altSet))
+    .filter(Boolean)
+    .sort((a, b) => b.delta - a.delta || b.ratio - a.ratio || b.nCom - a.nCom)
+    .slice(0, 3);
+
+  // Influência do ciclo — bloco separado, só com ≥2 ciclos completos
+  const influenciaCiclo = ciclosCompletos >= 2
+    ? analisarFaseLuteaMapa(sintomas ?? [], periodos ?? [])
+    : null;
+
+  return { disponivel: true, fatores, influenciaCiclo };
+}
+
 // ── Ponto de entrada principal ────────────────────────────────────────────────
 
 export function calcularPerfilBiologico({ sintomas, periodos, intestinoLogs }) {
   const dadosBase = determinarEstagio({ sintomas, periodos });
 
   if (dadosBase.estagio === 'insuficiente') {
-    return { dadosBase, principalPadrao: null, padroes: [], padroesEmFormacao: [], intestinoCiclo: [], corpoComportamento: { disponivel: false }, convergencias: [], priorizacao: null };
+    return { dadosBase, principalPadrao: null, padroes: [], padroesEmFormacao: [], intestinoCiclo: [], corpoComportamento: { disponivel: false }, convergencias: [], priorizacao: null, mapaGatilhos: null };
   }
 
   // Classificar cada dia de sintoma pela fase do ciclo
@@ -544,8 +699,9 @@ export function calcularPerfilBiologico({ sintomas, periodos, intestinoLogs }) {
   const principalPadrao    = padroes.find(p => p.confianca === 'alta') ?? null;
   const intestinoCiclo     = calcularTendenciasClinicas(intestinoLogs ?? [], sintomas ?? []);
   const corpoComportamento = calcularCorpoComportamento({ sintomas, intestinoLogs });
-  const convergencias = calcularConvergencias({ candidatos: corpoComportamento.candidatos ?? [] });
-  const priorizacao   = calcularPriorizacao({ convergencias, candidatos: corpoComportamento.candidatos ?? [] });
+  const convergencias  = calcularConvergencias({ candidatos: corpoComportamento.candidatos ?? [] });
+  const priorizacao    = calcularPriorizacao({ convergencias, candidatos: corpoComportamento.candidatos ?? [] });
+  const mapaGatilhos   = calcularMapaGatilhos({ sintomas, intestinoLogs, periodos, ciclosCompletos: dadosBase.ciclosCompletos });
 
-  return { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao };
+  return { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao, mapaGatilhos };
 }
