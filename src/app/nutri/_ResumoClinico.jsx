@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { dataBR } from '../../lib/utils.js';
 import { calcularLeituraConsistencia } from '../../lib/consistenciaUtils.js';
+import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
+import { gerarPontosAtencao } from '../../lib/visaoProspectiva.js';
 
 function tipoConsulta(tipo) {
   if (!tipo) return '—';
@@ -45,6 +47,35 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
   const [condutaAtual, setCondutaAtual] = useState(undefined);
   const [metas,        setMetas]        = useState(undefined);
   const [consistencia, setConsistencia] = useState(undefined);
+  const [perfilResult, setPerfilResult] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    async function loadPerfil() {
+      const corte = new Date();
+      corte.setDate(corte.getDate() - 180);
+      const c180 = corte.toISOString().slice(0, 10);
+      const [sintomasRes, periodosRes, intestinoRes] = await Promise.all([
+        supabase.from('ciclo_sintomas_diarios')
+          .select('data, humor, energia, sono, foco, libido, irritabilidade, ansiedade, compulsao, acne, retencao, inchaco, dor_cabeca, dor_pelvica, insonia, acorda_madrugada, choro, intestino')
+          .eq('paciente_id', pacienteId).gte('data', c180).order('data', { ascending: false }),
+        supabase.from('ciclo_periodos')
+          .select('id, inicio, fim')
+          .eq('paciente_id', pacienteId).order('inicio', { ascending: false }),
+        supabase.from('intestino_logs')
+          .select('data, tipo, bristol, evacuou, esvaziamento_incompleto, dor_abdominal, estufamento')
+          .eq('paciente_id', pacienteId).eq('tipo', 'diario').gte('data', c180),
+      ]);
+      if (!active) return;
+      setPerfilResult(calcularPerfilBiologico({
+        sintomas:      sintomasRes.data  ?? [],
+        periodos:      periodosRes.data  ?? [],
+        intestinoLogs: intestinoRes.data ?? [],
+      }));
+    }
+    loadPerfil();
+    return () => { active = false; };
+  }, [pacienteId]);
 
   useEffect(() => {
     let active = true;
@@ -158,6 +189,8 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
 
   const labelSub = { fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 500, marginBottom: 8 };
   const btnAcao  = { fontSize: 11, padding: '3px 9px', marginTop: 10 };
+
+  const pontosAtencao = perfilResult ? gerarPontosAtencao(perfilResult) : [];
 
   return (
     <>
@@ -378,6 +411,11 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
         </div>
       )}
 
+      {/* ── Pontos de Atenção ── */}
+      {pontosAtencao.length > 0 && (
+        <PontosAtencaoCard pontos={pontosAtencao} />
+      )}
+
       {/* ── Última anamnese ── */}
       {anamnese && (
         <div className="card" style={{ padding: '14px 16px', marginBottom: 12 }}>
@@ -397,5 +435,40 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
         </div>
       )}
     </>
+  );
+}
+
+// ── Pontos de Atenção ─────────────────────────────────────────────────────────
+function PontosAtencaoCard({ pontos }) {
+  return (
+    <div className="card" style={{ padding: '14px 16px', marginBottom: 12 }}>
+      <div style={{ fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 500, marginBottom: 4 }}>
+        Pontos de Atenção
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.4 }}>
+        Padrões observados nos registros que tendem a se repetir.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {pontos.map(p => (
+          <div key={p.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%',
+              background: 'var(--amber)', flexShrink: 0, marginTop: 5,
+            }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.55 }}>
+                {p.texto}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text4)', marginTop: 2 }}>
+                {p.fonte}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
+        Baseado nos padrões observados nos registros. Não representa prognóstico clínico.
+      </div>
+    </div>
   );
 }
