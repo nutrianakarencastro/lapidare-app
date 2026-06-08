@@ -51,6 +51,61 @@ function AssociacaoCard({ assoc: a, isLast }) {
     </div>
   );
 }
+// ── Convergências Clínicas ─────────────────────────────────────────────────────
+function ConvergenciaCard({ conv, isLast }) {
+  return (
+    <div style={{
+      paddingBottom: isLast ? 0 : 16,
+      marginBottom:  isLast ? 0 : 16,
+      borderBottom:  isLast ? 'none' : '0.5px solid var(--border)',
+    }}>
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--dark)', marginBottom: 2 }}>
+          Padrões compatíveis com o {conv.eixoNome}
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
+          {conv.eixoSubtitulo}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: conv.pares.length > 0 ? 10 : 0 }}>
+        <div style={{
+          fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+          color: 'var(--text4)', marginBottom: 5,
+        }}>
+          Campos convergentes
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {conv.campos.map(c => (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--text2)' }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--amber)', flexShrink: 0 }} />
+              {c.label}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {conv.pares.length > 0 && (
+        <div>
+          <div style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+            color: 'var(--text4)', marginBottom: 5,
+          }}>
+            Associação reforçada
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {conv.pares.map((par, i) => (
+              <div key={i} style={{ fontSize: 12, color: 'var(--text2)' }}>
+                {par.labelA.charAt(0).toUpperCase() + par.labelA.slice(1)} ↔ {par.labelB}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const BG_CONF = {
   alta:     'var(--green-bg)',
   moderada: '#fef9e7',
@@ -211,7 +266,7 @@ export default function PerfilBiologico({ pacienteId }) {
     return <div className="card empty-card"><div className="empty-sub">Carregando…</div></div>;
   }
 
-  const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento } = resultado;
+  const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias } = resultado;
 
   // ── Insuficiente ─────────────────────────────────────────────────────────────
   if (dadosBase.estagio === 'insuficiente') {
@@ -392,6 +447,31 @@ export default function PerfilBiologico({ pacienteId }) {
             ))}
             <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
               Associações calculadas nos dias com registro completo de ambos os campos. Não indicam relação causal. O motor não controla a fase do ciclo.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Convergências Clínicas ── */}
+      {convergencias?.length > 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Convergências Clínicas</div>
+              <div className="card-sub">Quais padrões os registros vêm apontando ao longo do tempo</div>
+            </div>
+          </div>
+          <div className="card-body" style={{ paddingTop: 0 }}>
+            {convergencias.map((conv, i) => (
+              <ConvergenciaCard
+                key={conv.eixoId}
+                conv={conv}
+                isLast={i === convergencias.length - 1}
+              />
+            ))}
+            <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.6 }}>
+              Convergências identificadas a partir de associações observadas nos registros.
+              Não representam diagnóstico funcional. A interpretação clínica é da nutricionista.
             </div>
           </div>
         </div>

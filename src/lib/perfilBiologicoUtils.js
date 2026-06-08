@@ -6,6 +6,7 @@
 
 import { calcularFaseDoCiclo } from './cicloUtils.js';
 import { calcularTendenciasClinicas } from './intestinoUtils.js';
+import { EIXOS } from './clinical/eixos.js';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -322,7 +323,102 @@ export function calcularCorpoComportamento({ sintomas, intestinoLogs }) {
     }
   }
 
-  return { disponivel: true, associacoes: selecionados, cobertura, coberturaBaixa, diasRegistrados };
+  return { disponivel: true, associacoes: selecionados, candidatos, cobertura, coberturaBaixa, diasRegistrados };
+}
+
+// ── Convergências Clínicas — Sprint 10 ───────────────────────────────────────
+// Mapeia associações validadas do V2 para eixos clínicos do Método ÚTERA.
+// Observacional: padrões que os registros apontam — não diagnóstico funcional.
+
+// Perimenopausa é intencionalmente excluído: seus campos-chave (calorons,
+// suor_noturno, despertar_noturno) são booleanos fora do pool do motor.
+const MAPEAMENTO_CAMPO_EIXO = {
+  sono:          [{ eixo: 'adrenal', peso: 3 }, { eixo: 'progesterona', peso: 2 }],
+  energia:       [{ eixo: 'adrenal', peso: 3 }, { eixo: 'tireoidiano', peso: 3 }, { eixo: 'glicemico', peso: 2 }, { eixo: 'progesterona', peso: 1 }],
+  humor:         [{ eixo: 'progesterona', peso: 2 }, { eixo: 'estrogenico', peso: 1 }],
+  foco:          [{ eixo: 'tireoidiano', peso: 2 }, { eixo: 'adrenal', peso: 1 }, { eixo: 'glicemico', peso: 1 }],
+  libido:        [{ eixo: 'androgenico', peso: 1 }, { eixo: 'adrenal', peso: 1 }],
+  ansiedade:     [{ eixo: 'adrenal', peso: 2 }, { eixo: 'progesterona', peso: 2 }, { eixo: 'glicemico', peso: 2 }],
+  irritabilidade:[{ eixo: 'glicemico', peso: 3 }, { eixo: 'progesterona', peso: 2 }, { eixo: 'adrenal', peso: 2 }, { eixo: 'estrogenico', peso: 1 }],
+  compulsao:     [{ eixo: 'glicemico', peso: 3 }, { eixo: 'adrenal', peso: 2 }, { eixo: 'progesterona', peso: 2 }],
+  acne:          [{ eixo: 'intestinal', peso: 2 }, { eixo: 'estrogenico', peso: 1 }, { eixo: 'inflamatorio', peso: 1 }, { eixo: 'androgenico', peso: 1 }],
+  retencao:      [{ eixo: 'estrogenico', peso: 3 }],
+  inchaco:       [{ eixo: 'estrogenico', peso: 2 }, { eixo: 'inflamatorio', peso: 1 }, { eixo: 'intestinal', peso: 1 }],
+  dor_cabeca:    [{ eixo: 'estrogenico', peso: 2 }, { eixo: 'inflamatorio', peso: 2 }],
+  dor_pelvica:   [{ eixo: 'estrogenico', peso: 2 }, { eixo: 'inflamatorio', peso: 2 }, { eixo: 'intestinal', peso: 1 }],
+  intestino:     [{ eixo: 'intestinal', peso: 3 }, { eixo: 'tireoidiano', peso: 1 }, { eixo: 'estrogenico', peso: 1 }],
+};
+
+const SCORE_MINIMO_EIXO = 6;
+
+function pesoCampoEixo(campoId, eixoId) {
+  const mapeamentos = MAPEAMENTO_CAMPO_EIXO[campoId];
+  if (!mapeamentos) return 0;
+  return mapeamentos.find(e => e.eixo === eixoId)?.peso ?? 0;
+}
+
+export function calcularConvergencias({ candidatos }) {
+  if (!candidatos || candidatos.length === 0) return [];
+
+  // Coletar campos ativos e seus labels a partir dos candidatos
+  const camposAtivos = new Set();
+  const labelsDoCampo = {};
+  for (const c of candidatos) {
+    camposAtivos.add(c.campoA);
+    camposAtivos.add(c.campoB);
+    labelsDoCampo[c.campoA] = c.labelA;
+    labelsDoCampo[c.campoB] = c.labelB;
+  }
+
+  const resultados = [];
+
+  for (const eixoId of Object.keys(EIXOS)) {
+    // Campos ativos que apontam para este eixo
+    const camposDoEixo = [...camposAtivos].filter(id => pesoCampoEixo(id, eixoId) > 0);
+    if (camposDoEixo.length < 3) continue;
+
+    // Candidatos onde AMBOS os campos apontam para este eixo (reforço duplo)
+    const paresReforco = candidatos.filter(c =>
+      pesoCampoEixo(c.campoA, eixoId) > 0 && pesoCampoEixo(c.campoB, eixoId) > 0
+    );
+    if (paresReforco.length === 0) continue;
+
+    // Score: pares reforçados × 1.5, campos solo × 1.0
+    // Um campo que aparece em múltiplos pares soma seu peso em cada par —
+    // intencionalmente: mais pares validados = evidência mais robusta do eixo.
+    let score = 0;
+    const camposPontuados = new Set();
+    for (const par of paresReforco) {
+      score += (pesoCampoEixo(par.campoA, eixoId) + pesoCampoEixo(par.campoB, eixoId)) * 1.5;
+      camposPontuados.add(par.campoA);
+      camposPontuados.add(par.campoB);
+    }
+    for (const id of camposDoEixo) {
+      if (!camposPontuados.has(id)) score += pesoCampoEixo(id, eixoId);
+    }
+
+    if (score < SCORE_MINIMO_EIXO) continue;
+
+    // Cobertura: campos ativos / total de campos do motor mapeados para este eixo
+    const totalMapeados = Object.keys(MAPEAMENTO_CAMPO_EIXO)
+      .filter(id => pesoCampoEixo(id, eixoId) > 0).length;
+    const cobertura = Math.round((camposDoEixo.length / totalMapeados) * 100);
+
+    resultados.push({
+      eixoId,
+      eixoNome:      EIXOS[eixoId].nome,
+      eixoSubtitulo: EIXOS[eixoId].subtitulo,
+      campos:  camposDoEixo.map(id => ({ id, label: labelsDoCampo[id] ?? id })),
+      pares:   paresReforco.map(p => ({ labelA: p.labelA, labelB: p.labelB })),
+      score,
+      cobertura,
+    });
+  }
+
+  // Ordenar por score; desempate por cobertura
+  resultados.sort((a, b) => b.score - a.score || b.cobertura - a.cobertura);
+
+  return resultados.slice(0, 2);
 }
 
 // ── Ponto de entrada principal ────────────────────────────────────────────────
@@ -331,7 +427,7 @@ export function calcularPerfilBiologico({ sintomas, periodos, intestinoLogs }) {
   const dadosBase = determinarEstagio({ sintomas, periodos });
 
   if (dadosBase.estagio === 'insuficiente') {
-    return { dadosBase, principalPadrao: null, padroes: [], padroesEmFormacao: [], intestinoCiclo: [], corpoComportamento: { disponivel: false } };
+    return { dadosBase, principalPadrao: null, padroes: [], padroesEmFormacao: [], intestinoCiclo: [], corpoComportamento: { disponivel: false }, convergencias: [] };
   }
 
   // Classificar cada dia de sintoma pela fase do ciclo
@@ -355,9 +451,10 @@ export function calcularPerfilBiologico({ sintomas, periodos, intestinoLogs }) {
     .filter(r => r.confianca === 'formacao')
     .sort((a, b) => b.nObs - a.nObs);
 
-  const principalPadrao   = padroes.find(p => p.confianca === 'alta') ?? null;
-  const intestinoCiclo    = calcularTendenciasClinicas(intestinoLogs ?? [], sintomas ?? []);
+  const principalPadrao    = padroes.find(p => p.confianca === 'alta') ?? null;
+  const intestinoCiclo     = calcularTendenciasClinicas(intestinoLogs ?? [], sintomas ?? []);
   const corpoComportamento = calcularCorpoComportamento({ sintomas, intestinoLogs });
+  const convergencias      = calcularConvergencias({ candidatos: corpoComportamento.candidatos ?? [] });
 
-  return { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento };
+  return { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias };
 }
