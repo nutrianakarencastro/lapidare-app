@@ -2,26 +2,21 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { dataBR } from '../../lib/utils.js';
-
-const OBJETIVOS = ['Emagrecimento', 'Hipertrofia', 'Reeducação alimentar', 'Saúde geral', 'Performance esportiva'];
-const PLANOS    = [
-  { v: 'trimestral',     l: 'Trimestral' },
-  { v: 'semestral',      l: 'Semestral' },
-  { v: 'consultoria',    l: 'Consultoria' },
-  { v: 'acompanhamento', l: 'Acompanhamento' },
-];
-const MODALIDADES = ['Presencial', 'Online', 'Híbrido'];
+import { PLANOS, OBJETIVOS, MODALIDADES } from '../../lib/opcoesClinicas.js';
 
 export default function Cadastrar() {
   const { user } = useSession();
 
-  const [nome, setNome] = useState('');
-  const [email, setEmail] = useState('');
-  const [nascimento, setNascimento] = useState('');
-  const [objetivo, setObjetivo] = useState('Emagrecimento');
-  const [tipoPlano, setTipoPlano] = useState('trimestral');
-  const [modalidade, setModalidade] = useState('Online');
-  const [obs, setObs] = useState('');
+  const [nome,          setNome]          = useState('');
+  const [email,         setEmail]         = useState('');
+  const [nascimento,    setNascimento]    = useState('');
+  const [telefone,      setTelefone]      = useState('');
+  const [cpf,           setCpf]           = useState('');
+  const [objetivo,      setObjetivo]      = useState('Emagrecimento');
+  const [tipoPlano,     setTipoPlano]     = useState('trimestral');
+  const [tipoPlanoLivre, setTipoPlanoLivre] = useState('');
+  const [modalidade,    setModalidade]    = useState('Online');
+  const [obs,           setObs]           = useState('');
 
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState(null);
@@ -42,7 +37,8 @@ export default function Cadastrar() {
 
   function resetForm() {
     setNome(''); setEmail(''); setNascimento('');
-    setObjetivo('Emagrecimento'); setTipoPlano('trimestral');
+    setTelefone(''); setCpf('');
+    setObjetivo('Emagrecimento'); setTipoPlano('trimestral'); setTipoPlanoLivre('');
     setModalidade('Online'); setObs('');
   }
 
@@ -54,16 +50,21 @@ export default function Cadastrar() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setErro('Email inválido.');
 
     setBusy(true);
+    const tipoPlanoFinal = tipoPlano === 'outro_livre'
+      ? (tipoPlanoLivre.trim() || null)
+      : tipoPlano;
     const payload = {
-      nutri_id: user.id,
-      nome: nome.trim(),
-      email: email.trim().toLowerCase(),
-      nascimento: nascimento || null,
+      nutri_id:   user.id,
+      nome:       nome.trim(),
+      email:      email.trim().toLowerCase(),
+      nascimento: nascimento  || null,
+      telefone:   telefone.trim() || null,
+      cpf:        cpf.trim()      || null,
       objetivo,
-      tipo_plano: tipoPlano,
+      tipo_plano: tipoPlanoFinal,
       modalidade,
-      obs: obs.trim() || null,
-      status: 'pendente',
+      obs:        obs.trim()  || null,
+      status:     'pendente',
     };
     // upsert (caso já exista pendente com mesmo email, atualiza dados)
     const { data, error } = await supabase
@@ -122,12 +123,26 @@ export default function Cadastrar() {
             <Field label="Email *" type="email" value={email} onChange={setEmail} required />
             <Field label="Data de nascimento" type="date" value={nascimento} onChange={setNascimento} />
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Field label="Telefone" value={telefone} onChange={setTelefone} />
+            <Field label="CPF" value={cpf} onChange={v => {
+              const raw = v.replace(/\D/g, '').slice(0, 11);
+              const fmt = raw.length <= 3 ? raw
+                : raw.length <= 6 ? `${raw.slice(0,3)}.${raw.slice(3)}`
+                : raw.length <= 9 ? `${raw.slice(0,3)}.${raw.slice(3,6)}.${raw.slice(6)}`
+                : `${raw.slice(0,3)}.${raw.slice(3,6)}.${raw.slice(6,9)}-${raw.slice(9)}`;
+              setCpf(fmt);
+            }} />
+          </div>
 
           <SelectField label="Objetivo" value={objetivo} onChange={setObjetivo} options={OBJETIVOS} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <SelectField label="Tipo de plano" value={tipoPlano} onChange={setTipoPlano} options={PLANOS} />
+            <SelectField label="Tipo de plano" value={tipoPlano} onChange={v => { setTipoPlano(v); setTipoPlanoLivre(''); }} options={PLANOS} />
             <SelectField label="Modalidade" value={modalidade} onChange={setModalidade} options={MODALIDADES} />
           </div>
+          {tipoPlano === 'outro_livre' && (
+            <Field label="Descreva o plano" value={tipoPlanoLivre} onChange={setTipoPlanoLivre} />
+          )}
 
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{

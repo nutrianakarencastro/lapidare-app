@@ -6,6 +6,7 @@ import {
   dataBR, iniciais,
   validarPlano, validarLista, contarItensLista,
 } from '../../lib/utils.js';
+import { PLANOS, OBJETIVOS, MODALIDADES } from '../../lib/opcoesClinicas.js';
 import { TEMPLATE_PADRAO } from '../../lib/checkinDefault.js';
 import CheckinForm from '../../components/CheckinForm.jsx';
 import Evolucao from './_Evolucao.jsx';
@@ -41,6 +42,10 @@ export default function PacientePerfil() {
   const [excluindo, setExcluindo] = useState(false);
   const [erroExclusao, setErroExclusao] = useState(null);
   const [msgLink, setMsgLink] = useState(null);
+  const [editandoPerfil,  setEditandoPerfil]  = useState(false);
+  const [formEdit,        setFormEdit]        = useState({});
+  const [salvandoEdit,    setSalvandoEdit]    = useState(false);
+  const [erroEdit,        setErroEdit]        = useState(null);
 
   async function carregar() {
     const { data } = await supabase
@@ -109,6 +114,52 @@ export default function PacientePerfil() {
     setTimeout(() => setMsgLink(null), 4000);
   }
 
+  function mascaraCPF(cpf) {
+    if (!cpf) return null;
+    const d = cpf.replace(/\D/g, '');
+    if (d.length !== 11) return cpf;
+    return `***.${d.slice(3, 6)}.***-${d.slice(9)}`;
+  }
+
+  function abrirEdicaoPerfil() {
+    const planoConhecido = PLANOS.find(p => p.v === paciente.tipo_plano && p.v !== 'outro_livre');
+    setFormEdit({
+      nome:             paciente.nome         ?? '',
+      email:            paciente.email        ?? '',
+      telefone:         paciente.telefone     ?? '',
+      cpf:              paciente.cpf          ?? '',
+      objetivo:         paciente.objetivo     ?? '',
+      tipo_plano:       planoConhecido
+                          ? paciente.tipo_plano
+                          : (paciente.tipo_plano ? 'outro_livre' : ''),
+      tipo_plano_livre: planoConhecido ? '' : (paciente.tipo_plano ?? ''),
+      modalidade:       paciente.modalidade   ?? '',
+    });
+    setErroEdit(null);
+    setEditandoPerfil(true);
+  }
+
+  async function salvarEdicaoPerfil() {
+    if (!formEdit.nome?.trim()) { setErroEdit('Nome é obrigatório.'); return; }
+    setSalvandoEdit(true);
+    const tipoPlanoFinal = formEdit.tipo_plano === 'outro_livre'
+      ? (formEdit.tipo_plano_livre?.trim() || null)
+      : (formEdit.tipo_plano || null);
+    const { error } = await supabase.from('pacientes').update({
+      nome:       formEdit.nome.trim(),
+      email:      formEdit.email?.trim()    || null,
+      telefone:   formEdit.telefone?.trim() || null,
+      cpf:        formEdit.cpf?.trim()      || null,
+      objetivo:   formEdit.objetivo         || null,
+      tipo_plano: tipoPlanoFinal,
+      modalidade: formEdit.modalidade       || null,
+    }).eq('id', id);
+    setSalvandoEdit(false);
+    if (error) { setErroEdit(error.message); return; }
+    setEditandoPerfil(false);
+    carregar();
+  }
+
   function calcularIdade(iso) {
     if (!iso) return null;
     const n = new Date(iso + 'T12:00:00');
@@ -156,6 +207,14 @@ export default function PacientePerfil() {
             title="Copiar link de acesso da paciente"
           >
             <i className="ti ti-link" aria-hidden="true"></i> Copiar link
+          </button>
+          <button
+            onClick={abrirEdicaoPerfil}
+            className="btn-outline"
+            style={{ fontSize: 12, padding: '4px 10px' }}
+            title="Editar dados da paciente"
+          >
+            <i className="ti ti-edit" aria-hidden="true"></i> Editar
           </button>
           <button
             onClick={() => { setConfirmandoExclusao(true); setErroExclusao(null); }}
@@ -245,6 +304,205 @@ export default function PacientePerfil() {
         </div>
       )}
 
+      {/* ── Modal de edição ──────────────────────────────────────────────── */}
+      {editandoPerfil && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(28,23,18,.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 100, padding: 24,
+        }}>
+          <div style={{
+            background: 'var(--white)', borderRadius: 14, padding: 24,
+            maxWidth: 480, width: '100%',
+            border: '0.5px solid var(--border)',
+            boxShadow: '0 8px 32px rgba(28,23,18,.12)',
+            maxHeight: '90vh', overflowY: 'auto',
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--dark)', marginBottom: 18 }}>
+              Editar paciente
+            </div>
+
+            {[
+              { key: 'nome',     label: 'Nome *',    placeholder: 'Nome completo' },
+            ].map(({ key, label, placeholder }) => (
+              <div key={key} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{label}</div>
+                <input
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '8px 10px', borderRadius: 7,
+                    border: '0.5px solid var(--border)', fontSize: 13,
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                  placeholder={placeholder}
+                  value={formEdit[key] ?? ''}
+                  onChange={e => setFormEdit(f => ({ ...f, [key]: e.target.value }))}
+                />
+              </div>
+            ))}
+
+            {/* Email com aviso */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Email</div>
+              <input
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '8px 10px', borderRadius: 7,
+                  border: '0.5px solid var(--border)', fontSize: 13,
+                  fontFamily: 'var(--font-sans)',
+                }}
+                type="email"
+                placeholder="email@exemplo.com"
+                value={formEdit.email ?? ''}
+                onChange={e => setFormEdit(f => ({ ...f, email: e.target.value }))}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text4)', marginTop: 4, lineHeight: 1.4 }}>
+                Este campo é apenas cadastral. A alteração não modifica o email de acesso da paciente.
+              </div>
+            </div>
+
+            {/* Telefone e CPF lado a lado */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Telefone</div>
+                <input
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '8px 10px', borderRadius: 7,
+                    border: '0.5px solid var(--border)', fontSize: 13,
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                  placeholder="(11) 99999-9999"
+                  value={formEdit.telefone ?? ''}
+                  onChange={e => setFormEdit(f => ({ ...f, telefone: e.target.value }))}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>CPF</div>
+                <input
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '8px 10px', borderRadius: 7,
+                    border: '0.5px solid var(--border)', fontSize: 13,
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                  placeholder="000.000.000-00"
+                  value={formEdit.cpf ?? ''}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/\D/g, '').slice(0, 11);
+                    const fmt = raw.length <= 3 ? raw
+                      : raw.length <= 6 ? `${raw.slice(0,3)}.${raw.slice(3)}`
+                      : raw.length <= 9 ? `${raw.slice(0,3)}.${raw.slice(3,6)}.${raw.slice(6)}`
+                      : `${raw.slice(0,3)}.${raw.slice(3,6)}.${raw.slice(6,9)}-${raw.slice(9)}`;
+                    setFormEdit(f => ({ ...f, cpf: fmt }));
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Objetivo */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Objetivo</div>
+              <select
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '8px 10px', borderRadius: 7,
+                  border: '0.5px solid var(--border)', fontSize: 13,
+                  fontFamily: 'var(--font-sans)', background: 'var(--white)',
+                }}
+                value={formEdit.objetivo ?? ''}
+                onChange={e => setFormEdit(f => ({ ...f, objetivo: e.target.value }))}>
+                <option value="">— selecione —</option>
+                {OBJETIVOS.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+
+            {/* Tipo de plano + campo livre */}
+            <div style={{ marginBottom: formEdit.tipo_plano === 'outro_livre' ? 6 : 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Tipo de plano</div>
+              <select
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '8px 10px', borderRadius: 7,
+                  border: '0.5px solid var(--border)', fontSize: 13,
+                  fontFamily: 'var(--font-sans)', background: 'var(--white)',
+                }}
+                value={formEdit.tipo_plano ?? ''}
+                onChange={e => setFormEdit(f => ({ ...f, tipo_plano: e.target.value, tipo_plano_livre: '' }))}>
+                <option value="">— selecione —</option>
+                {PLANOS.map(p => <option key={p.v} value={p.v}>{p.l}</option>)}
+              </select>
+            </div>
+            {formEdit.tipo_plano === 'outro_livre' && (
+              <div style={{ marginBottom: 12 }}>
+                <input
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '8px 10px', borderRadius: 7,
+                    border: '0.5px solid var(--border)', fontSize: 13,
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                  placeholder="Descreva o tipo de plano"
+                  value={formEdit.tipo_plano_livre ?? ''}
+                  onChange={e => setFormEdit(f => ({ ...f, tipo_plano_livre: e.target.value }))}
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {/* Modalidade */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Modalidade</div>
+              <select
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '8px 10px', borderRadius: 7,
+                  border: '0.5px solid var(--border)', fontSize: 13,
+                  fontFamily: 'var(--font-sans)', background: 'var(--white)',
+                }}
+                value={formEdit.modalidade ?? ''}
+                onChange={e => setFormEdit(f => ({ ...f, modalidade: e.target.value }))}>
+                <option value="">— selecione —</option>
+                {MODALIDADES.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+
+            {erroEdit && (
+              <div style={{
+                marginBottom: 14, padding: '8px 12px', borderRadius: 7, fontSize: 12,
+                background: 'var(--red-bg, #fff0f0)', color: 'var(--red)',
+              }}>
+                {erroEdit}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setEditandoPerfil(false)}
+                className="btn-outline"
+                style={{ flex: 1, justifyContent: 'center' }}
+                disabled={salvandoEdit}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={salvarEdicaoPerfil}
+                disabled={salvandoEdit}
+                style={{
+                  flex: 1, padding: '9px 0', borderRadius: 8,
+                  background: salvandoEdit ? 'var(--text4)' : 'var(--dark)',
+                  color: '#fff', border: 'none',
+                  cursor: salvandoEdit ? 'default' : 'pointer',
+                  fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-sans)',
+                }}
+              >
+                {salvandoEdit ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
         <div style={{
           width: 52, height: 52, borderRadius: '50%',
@@ -254,9 +512,15 @@ export default function PacientePerfil() {
         }}>{iniciais(paciente.nome)}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="page-title" style={{ marginBottom: 2 }}>{paciente.nome}</div>
-          <div className="page-sub" style={{ marginBottom: 4 }}>
+          <div className="page-sub" style={{ marginBottom: 2 }}>
             {paciente.email} · cadastrada em {dataBR(paciente.created_at)}
           </div>
+          {(paciente.telefone || paciente.cpf) && (
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              {paciente.telefone && <span>📞 {paciente.telefone}</span>}
+              {paciente.cpf && <span>CPF {mascaraCPF(paciente.cpf)}</span>}
+            </div>
+          )}
           {editandoNasc ? (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
               <input type="date" value={novoNasc} onChange={e => setNovoNasc(e.target.value)}
