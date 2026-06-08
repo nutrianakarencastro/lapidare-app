@@ -116,10 +116,10 @@ export default function Visao() {
         supabase.from('orientacoes_pacientes').select('status')
           .eq('nutri_id', user.id),
         // clínica — pendências
-        supabase.from('exames_arquivos').select('id, titulo, categoria, paciente_id')
+        supabase.from('exames_pedidos').select('id, titulo, categoria, paciente_id')
           .eq('nutri_id', user.id).eq('status', 'solicitado'),
-        supabase.from('exames_arquivos').select('id, titulo, categoria, paciente_id')
-          .eq('nutri_id', user.id).eq('status', 'aguardando_resultado'),
+        supabase.from('exames_pedidos').select('id, titulo, categoria, paciente_id')
+          .eq('nutri_id', user.id).eq('status', 'recebido').is('avaliacao_id', null),
         supabase.from('intestino_rastreio_solicitacoes').select('id, paciente_id, solicitado_em')
           .eq('nutri_id', user.id).is('respondido_em', null),
         supabase.from('documentos').select('id, titulo, tipo, paciente_id')
@@ -697,11 +697,11 @@ export default function Visao() {
             <NotifCard
               icon="clock-hour-4"
               color="var(--orange)"
-              titulo="Aguardando resultado"
+              titulo="Resultados sem avaliação"
               count={examesAguardando.length}
               descricao={examesAguardando.length === 0
-                ? 'Nenhum sem resultado'
-                : `${examesAguardando.length} exame${examesAguardando.length === 1 ? '' : 's'} sem resultado`}
+                ? 'Todos avaliados'
+                : `${examesAguardando.length} resultado${examesAguardando.length === 1 ? '' : 's'} sem avaliação`}
               itens={examesAguardando.slice(0, 3).map(e => ({ label: nomePorPac[e.paciente_id] ?? '—', sub: e.titulo || e.categoria || '—' }))}
               onClick={() => navigate('/nutri/pacientes')}
             />

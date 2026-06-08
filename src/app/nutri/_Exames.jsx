@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { dataBR } from '../../lib/utils.js';
 
@@ -16,7 +16,13 @@ const CATEGORIAS = [
   { id: 'outro',      label: 'Outro',      emoji: '📄' },
 ];
 
-const STATUS_OPTS = [
+const STATUS_PEDIDO_OPTS = [
+  { id: 'solicitado', label: 'Solicitado' },
+  { id: 'recebido',   label: 'Recebido' },
+  { id: 'avaliado',   label: 'Avaliado' },
+];
+
+const STATUS_RESULTADO_OPTS = [
   { id: 'solicitado',           label: 'Solicitado' },
   { id: 'aguardando_resultado', label: 'Aguardando resultado' },
   { id: 'recebido',             label: 'Recebido' },
@@ -30,7 +36,6 @@ const inpSt = {
   fontSize: 13, fontFamily: 'var(--font-sans)',
   background: 'var(--white)', color: 'var(--dark)',
 };
-
 const taSt = { ...inpSt, resize: 'vertical', minHeight: 72 };
 
 function SecLabel({ children }) {
@@ -43,11 +48,44 @@ function SecLabel({ children }) {
   );
 }
 
+function SectionHeader({ children }) {
+  return (
+    <div style={{
+      fontSize: 11, letterSpacing: '.12em', textTransform: 'uppercase',
+      fontWeight: 600, color: 'var(--text3)', marginBottom: 10, marginTop: 4,
+    }}>{children}</div>
+  );
+}
+
 function catEmoji(cat) {
   return CATEGORIAS.find(c => c.id === cat)?.emoji ?? '📄';
 }
 
+function novoPedidoVazio() {
+  return {
+    titulo: '', descricao: '', categoria: 'sangue',
+    data_pedido: new Date().toISOString().slice(0, 10),
+  };
+}
+
+function arqVazio() {
+  return { categoria: 'sangue', titulo: '', status: 'solicitado', data_recebimento: '', file: null };
+}
+
+function today() { return new Date().toISOString().slice(0, 10); }
+
 export default function Exames({ pacienteId, nutriId }) {
+  // ── Pedidos ────────────────────────────────────────────────────────────────
+  const [pedidos,        setPedidos]        = useState([]);
+  const [criandoPedido,  setCriandoPedido]  = useState(false);
+  const [novoPedido,     setNovoPedido]     = useState(novoPedidoVazio());
+  const [pedidoFile,     setPedidoFile]     = useState(null);
+  const [pedidoFileKey,  setPedidoFileKey]  = useState(0);
+  const [salvandoPedido, setSalvandoPedido] = useState(false);
+  const [abrindoPdf,     setAbrindoPdf]     = useState(new Set());
+  const uploadInputRefs = useRef({});
+
+  // ── Avaliações ─────────────────────────────────────────────────────────────
   const [avaliacoes, setAvaliacoes]   = useState([]);
   const [loading, setLoading]         = useState(true);
   const [openId, setOpenId]           = useState(null);
@@ -60,17 +98,118 @@ export default function Exames({ pacienteId, nutriId }) {
   const [salvando, setSalvando]       = useState(false);
   const [feedback, setFeedback]       = useState(null);
 
-  function today() { return new Date().toISOString().slice(0, 10); }
-  function arqVazio() {
-    return { tipo: 'pedido', categoria: 'sangue', titulo: '', status: 'solicitado', data_recebimento: '', file: null };
-  }
-
-  function ok(msg) { setFeedback({ tipo: 'ok', msg }); setTimeout(() => setFeedback(null), 3000); }
+  function ok(msg)   { setFeedback({ tipo: 'ok',   msg }); setTimeout(() => setFeedback(null), 3000); }
   function erro(msg) { setFeedback({ tipo: 'erro', msg }); }
 
-  useEffect(() => { carregar(); }, [pacienteId]);
+  useEffect(() => {
+    carregarPedidos();
+    carregarAvaliacoes();
+  }, [pacienteId]);
 
-  async function carregar() {
+  // ── Pedidos: funções ───────────────────────────────────────────────────────
+
+  async function carregarPedidos() {
+    const { data } = await supabase
+      .from('exames_pedidos')
+      .select('id, titulo, descricao, categoria, data_pedido, data_resultado_recebido, status, storage_path, nome_arquivo, avaliacao_id')
+      .eq('paciente_id', pacienteId)
+      .order('data_pedido', { ascending: false });
+    setPedidos(data ?? []);
+  }
+
+  async function criarPedido() {
+    if (!novoPedido.titulo.trim()) { erro('Informe o título do pedido.'); return; }
+    setSalvandoPedido(true);
+
+    let storagePath = null;
+    let nomeArquivo = null;
+
+    if (pedidoFile) {
+      if (pedidoFile.size > 10 * 1024 * 1024) { erro('Tamanho máximo: 10 MB.'); setSalvandoPedido(false); return; }
+      const path = `${pacienteId}/pedidos/${Date.now()}-pedido.pdf`;
+      const { error: upErr } = await supabase.storage.from('exames').upload(path, pedidoFile);
+      if (upErr) { erro(upErr.message); setSalvandoPedido(false); return; }
+      storagePath = path;
+      nomeArquivo = pedidoFile.name;
+    }
+
+    const { data, error } = await supabase
+      .from('exames_pedidos')
+      .insert({
+        paciente_id:  pacienteId,
+        nutri_id:     nutriId,
+        titulo:       novoPedido.titulo.trim(),
+        descricao:    novoPedido.descricao.trim() || null,
+        categoria:    novoPedido.categoria,
+        data_pedido:  novoPedido.data_pedido,
+        storage_path: storagePath,
+        nome_arquivo: nomeArquivo,
+      })
+      .select()
+      .single();
+
+    setSalvandoPedido(false);
+    if (error) {
+      if (storagePath) await supabase.storage.from('exames').remove([storagePath]);
+      erro(error.message); return;
+    }
+
+    setPedidos(prev => [data, ...prev]);
+    setCriandoPedido(false);
+    setNovoPedido(novoPedidoVazio());
+    setPedidoFile(null);
+    setPedidoFileKey(k => k + 1);
+    ok('Pedido criado.');
+  }
+
+  async function excluirPedido(p) {
+    if (!window.confirm(`Excluir pedido "${p.titulo}"?`)) return;
+    if (p.storage_path) await supabase.storage.from('exames').remove([p.storage_path]);
+    await supabase.from('exames_pedidos').delete().eq('id', p.id);
+    setPedidos(prev => prev.filter(x => x.id !== p.id));
+  }
+
+  async function alterarStatusPedido(p, novoStatus) {
+    const updates = { status: novoStatus };
+    if (novoStatus === 'recebido' && !p.data_resultado_recebido) {
+      updates.data_resultado_recebido = today();
+    }
+    const { error } = await supabase.from('exames_pedidos').update(updates).eq('id', p.id);
+    if (error) { erro(error.message); return; }
+    setPedidos(prev => prev.map(x => x.id === p.id ? { ...x, ...updates } : x));
+  }
+
+  async function adicionarPdfPedido(pedidoId, file) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { erro('Tamanho máximo: 10 MB.'); return; }
+    const path = `${pacienteId}/pedidos/${Date.now()}-pedido.pdf`;
+    const { error: upErr } = await supabase.storage.from('exames').upload(path, file);
+    if (upErr) { erro(upErr.message); return; }
+    const { error } = await supabase.from('exames_pedidos')
+      .update({ storage_path: path, nome_arquivo: file.name })
+      .eq('id', pedidoId);
+    if (error) { await supabase.storage.from('exames').remove([path]); erro(error.message); return; }
+    setPedidos(prev => prev.map(x =>
+      x.id === pedidoId ? { ...x, storage_path: path, nome_arquivo: file.name } : x
+    ));
+    ok('PDF adicionado.');
+  }
+
+  async function abrirPdfPedido(p) {
+    if (!p.storage_path) return;
+    setAbrindoPdf(s => new Set(s).add(p.id));
+    const win = window.open('', '_blank');
+    const { data: signed, error } = await supabase.storage
+      .from('exames').createSignedUrl(p.storage_path, 120);
+    setAbrindoPdf(s => { const n = new Set(s); n.delete(p.id); return n; });
+    if (error || !signed?.signedUrl) { win?.close(); return; }
+    if (win) win.location.href = signed.signedUrl;
+    else window.location.href = signed.signedUrl;
+  }
+
+  // ── Avaliações: funções (inalteradas) ─────────────────────────────────────
+
+  async function carregarAvaliacoes() {
     setLoading(true);
     const { data } = await supabase
       .from('exames_avaliacoes')
@@ -170,21 +309,21 @@ export default function Exames({ pacienteId, nutriId }) {
   }
 
   async function adicionarArquivo(avaliacaoId) {
-    const { file, tipo, categoria, titulo, status, data_recebimento } = novoArq;
+    const { file, categoria, titulo, status, data_recebimento } = novoArq;
     if (!file) { erro('Selecione um arquivo PDF.'); return; }
     if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
       erro('Apenas arquivos PDF são aceitos.'); return;
     }
     if (file.size > 10 * 1024 * 1024) { erro('Tamanho máximo: 10 MB.'); return; }
     setUploadando(true);
-    const path = `${pacienteId}/${avaliacaoId}/${Date.now()}-${tipo}.pdf`;
+    const path = `${pacienteId}/${avaliacaoId}/${Date.now()}-resultado.pdf`;
     const { error: upErr } = await supabase.storage.from('exames').upload(path, file);
     if (upErr) { setUploadando(false); erro(upErr.message); return; }
     const { data: row, error: dbErr } = await supabase
       .from('exames_arquivos')
       .insert({
         avaliacao_id: avaliacaoId, paciente_id: pacienteId, nutri_id: nutriId,
-        tipo, categoria, titulo: titulo || null, status,
+        tipo: 'resultado', categoria, titulo: titulo || null, status,
         data_recebimento: data_recebimento || null,
         storage_path: path, nome_arquivo: file.name,
       })
@@ -227,10 +366,13 @@ export default function Exames({ pacienteId, nutriId }) {
     ));
   }
 
-  if (loading) return <div style={{ padding: 16, color: 'var(--text3)' }}>Carregando…</div>;
+  if (loading && pedidos.length === 0 && avaliacoes.length === 0) {
+    return <div style={{ padding: 16, color: 'var(--text3)' }}>Carregando…</div>;
+  }
 
   return (
     <div style={{ padding: '12px 0' }}>
+
       {/* Feedback */}
       {feedback && (
         <div style={{
@@ -243,7 +385,173 @@ export default function Exames({ pacienteId, nutriId }) {
         </div>
       )}
 
-      {/* Botão nova avaliação */}
+      {/* ── SEÇÃO: PEDIDOS DE EXAME ────────────────────────────────────────── */}
+      <SectionHeader>Pedidos de exame</SectionHeader>
+
+      {!criandoPedido && (
+        <button
+          className="btn"
+          onClick={() => { setCriandoPedido(true); }}
+          style={{ marginBottom: 12 }}>
+          + Novo pedido
+        </button>
+      )}
+
+      {criandoPedido && (
+        <div style={{
+          background: 'var(--paper, var(--bg-soft))',
+          border: '0.5px solid var(--border, #e0dbd4)',
+          borderRadius: 10, padding: 14, marginBottom: 14,
+        }}>
+          <SecLabel>Novo pedido de exame</SecLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <input
+              style={inpSt}
+              placeholder="Título * (ex: Hemograma completo)"
+              value={novoPedido.titulo}
+              onChange={e => setNovoPedido(f => ({ ...f, titulo: e.target.value }))}
+            />
+            <input
+              type="date" style={inpSt}
+              value={novoPedido.data_pedido}
+              onChange={e => setNovoPedido(f => ({ ...f, data_pedido: e.target.value }))}
+            />
+            <select style={inpSt} value={novoPedido.categoria}
+              onChange={e => setNovoPedido(f => ({ ...f, categoria: e.target.value }))}>
+              {CATEGORIAS.map(c => (
+                <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
+              ))}
+            </select>
+            <input
+              style={inpSt}
+              placeholder="Descrição (opcional)"
+              value={novoPedido.descricao}
+              onChange={e => setNovoPedido(f => ({ ...f, descricao: e.target.value }))}
+            />
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
+            PDF do pedido (opcional — pode adicionar depois)
+          </div>
+          <input
+            key={pedidoFileKey}
+            type="file"
+            accept="application/pdf,.pdf"
+            style={{ fontSize: 12, marginBottom: 10, display: 'block' }}
+            onChange={e => setPedidoFile(e.target.files[0] ?? null)}
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn" onClick={criarPedido} disabled={salvandoPedido}>
+              {salvandoPedido ? 'Criando…' : 'Criar pedido'}
+            </button>
+            <button className="btn ghost" onClick={() => {
+              setCriandoPedido(false);
+              setNovoPedido(novoPedidoVazio());
+              setPedidoFile(null);
+              setPedidoFileKey(k => k + 1);
+            }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pedidos.length === 0 && !criandoPedido && (
+        <div style={{ color: 'var(--text3)', fontSize: 13, marginBottom: 20 }}>
+          Nenhum pedido de exame ainda.
+        </div>
+      )}
+
+      {pedidos.map(p => {
+        const abrindoEste = abrindoPdf.has(p.id);
+        return (
+          <div key={p.id} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 12px', borderRadius: 10, marginBottom: 8,
+            background: 'var(--white)',
+            border: '0.5px solid var(--border, #e0dbd4)',
+          }}>
+            <span style={{ fontSize: 18, flexShrink: 0 }}>{catEmoji(p.categoria)}</span>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>
+                {p.titulo}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                {dataBR(p.data_pedido)}
+                {p.data_resultado_recebido && ` · Recebido ${dataBR(p.data_resultado_recebido)}`}
+                {p.descricao && ` · ${p.descricao}`}
+              </div>
+            </div>
+
+            <select
+              style={{ ...inpSt, width: 'auto', fontSize: 11, padding: '4px 6px' }}
+              value={p.status}
+              onChange={e => alterarStatusPedido(p, e.target.value)}>
+              {STATUS_PEDIDO_OPTS.map(s => (
+                <option key={s.id} value={s.id}>{s.label}</option>
+              ))}
+            </select>
+
+            {p.storage_path ? (
+              <button
+                onClick={() => abrirPdfPedido(p)}
+                disabled={abrindoEste}
+                style={{
+                  background: 'var(--paper, var(--bg-soft))', border: '0.5px solid var(--border)',
+                  borderRadius: 6, padding: '4px 8px', cursor: abrindoEste ? 'default' : 'pointer',
+                  fontSize: 11, color: 'var(--dark)', fontFamily: 'var(--font-sans)',
+                  display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                  opacity: abrindoEste ? 0.6 : 1,
+                }}>
+                <i className="ti ti-file-type-pdf" style={{ color: '#e05252', fontSize: 13 }} aria-hidden="true" />
+                {abrindoEste ? 'Abrindo…' : 'PDF'}
+              </button>
+            ) : (
+              <>
+                <label style={{
+                  background: 'var(--paper, var(--bg-soft))', border: '0.5px dashed var(--border)',
+                  borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
+                  fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--font-sans)',
+                  display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                }}>
+                  <i className="ti ti-upload" style={{ fontSize: 12 }} aria-hidden="true" />
+                  PDF
+                  <input
+                    ref={el => { uploadInputRefs.current[p.id] = el; }}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    style={{ display: 'none' }}
+                    onChange={e => {
+                      const f = e.target.files[0];
+                      if (f) adicionarPdfPedido(p.id, f);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+              </>
+            )}
+
+            <button
+              onClick={() => excluirPedido(p)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--red)', fontSize: 14, padding: 4, flexShrink: 0,
+              }}>
+              <i className="ti ti-trash" aria-hidden="true" />
+            </button>
+          </div>
+        );
+      })}
+
+      {/* ── DIVISOR ────────────────────────────────────────────────────────── */}
+      <div style={{
+        borderTop: '0.5px solid var(--border, #e0dbd4)',
+        margin: '20px 0 16px',
+      }} />
+
+      {/* ── SEÇÃO: AVALIAÇÕES ──────────────────────────────────────────────── */}
+      <SectionHeader>Avaliações</SectionHeader>
+
       {!criando && (
         <button
           className="btn"
@@ -253,7 +561,6 @@ export default function Exames({ pacienteId, nutriId }) {
         </button>
       )}
 
-      {/* Form de criação */}
       {criando && (
         <div style={{
           background: 'var(--paper, var(--bg-soft))',
@@ -283,7 +590,6 @@ export default function Exames({ pacienteId, nutriId }) {
         </div>
       )}
 
-      {/* Lista de avaliações */}
       {avaliacoes.length === 0 && !criando && (
         <div style={{ color: 'var(--text3)', fontSize: 13 }}>
           Nenhuma avaliação de exames ainda.
@@ -301,7 +607,6 @@ export default function Exames({ pacienteId, nutriId }) {
             border: `0.5px solid ${isOpen ? 'var(--dark)' : 'var(--border, #e0dbd4)'}`,
             borderRadius: 10, marginBottom: 10, overflow: 'hidden',
           }}>
-            {/* Cabeçalho do card */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '10px 14px',
@@ -321,7 +626,7 @@ export default function Exames({ pacienteId, nutriId }) {
                   marginTop: 2,
                 }}>
                   {av.data_avaliacao && dataBR(av.data_avaliacao)}
-                  {arquivos.length > 0 && ` · ${arquivos.length} arquivo${arquivos.length !== 1 ? 's' : ''}`}
+                  {arquivos.length > 0 && ` · ${arquivos.length} resultado${arquivos.length !== 1 ? 's' : ''}`}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -348,11 +653,8 @@ export default function Exames({ pacienteId, nutriId }) {
               </div>
             </div>
 
-            {/* Painel de edição */}
             {isOpen && (
               <div style={{ padding: 14, background: 'var(--white)' }}>
-
-                {/* Campos básicos */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 4 }}>
                   <div>
                     <SecLabel>Título</SecLabel>
@@ -372,7 +674,6 @@ export default function Exames({ pacienteId, nutriId }) {
                   </div>
                 </div>
 
-                {/* Campos clínicos */}
                 {[
                   { key: 'conquistas',           label: 'Conquistas (linguagem da paciente)' },
                   { key: 'impacto_nos_sintomas',  label: 'Impacto nos sintomas' },
@@ -397,10 +698,10 @@ export default function Exames({ pacienteId, nutriId }) {
                   {salvando ? 'Salvando…' : 'Salvar campos'}
                 </button>
 
-                {/* Arquivos existentes */}
+                {/* Resultados existentes */}
                 {arquivos.length > 0 && (
                   <div style={{ marginTop: 20 }}>
-                    <SecLabel>Arquivos</SecLabel>
+                    <SecLabel>Resultados</SecLabel>
                     {arquivos.map(arq => (
                       <div key={arq.id} style={{
                         display: 'flex', alignItems: 'center', gap: 8,
@@ -415,7 +716,7 @@ export default function Exames({ pacienteId, nutriId }) {
                             {arq.titulo || arq.nome_arquivo}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                            {arq.tipo} · {arq.categoria}
+                            {arq.categoria}
                             {arq.data_recebimento && ` · Recebido em ${dataBR(arq.data_recebimento)}`}
                           </div>
                         </div>
@@ -423,7 +724,7 @@ export default function Exames({ pacienteId, nutriId }) {
                           style={{ ...inpSt, width: 'auto', fontSize: 11 }}
                           value={arq.status}
                           onChange={e => alterarStatus(arq, e.target.value, av.id)}>
-                          {STATUS_OPTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                          {STATUS_RESULTADO_OPTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                         </select>
                         <button
                           onClick={() => excluirArquivo(arq, av.id)}
@@ -438,19 +739,14 @@ export default function Exames({ pacienteId, nutriId }) {
                   </div>
                 )}
 
-                {/* Formulário de upload */}
+                {/* Upload de resultado */}
                 <div style={{
                   marginTop: 16, padding: 12, borderRadius: 8,
                   border: '0.5px dashed var(--border, #e0dbd4)',
                   background: 'var(--paper, var(--bg-soft))',
                 }}>
-                  <SecLabel>Adicionar arquivo</SecLabel>
+                  <SecLabel>Adicionar resultado</SecLabel>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                    <select style={inpSt} value={novoArq.tipo}
-                      onChange={e => setNovoArq(a => ({ ...a, tipo: e.target.value }))}>
-                      <option value="pedido">Pedido</option>
-                      <option value="resultado">Resultado</option>
-                    </select>
                     <select style={inpSt} value={novoArq.categoria}
                       onChange={e => setNovoArq(a => ({ ...a, categoria: e.target.value }))}>
                       {CATEGORIAS.map(c => (
@@ -462,20 +758,19 @@ export default function Exames({ pacienteId, nutriId }) {
                       onChange={e => setNovoArq(a => ({ ...a, titulo: e.target.value }))} />
                     <select style={inpSt} value={novoArq.status}
                       onChange={e => setNovoArq(a => ({ ...a, status: e.target.value }))}>
-                      {STATUS_OPTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                      {STATUS_RESULTADO_OPTS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
                     </select>
-                    {(novoArq.tipo === 'resultado') && (
+                    {(novoArq.status === 'recebido' || novoArq.status === 'avaliado') && (
                       <input type="date" style={inpSt}
                         value={novoArq.data_recebimento}
-                        onChange={e => setNovoArq(a => ({ ...a, data_recebimento: e.target.value }))}
-                        placeholder="Data de recebimento" />
+                        onChange={e => setNovoArq(a => ({ ...a, data_recebimento: e.target.value }))} />
                     )}
                   </div>
                   <input key={fileKey} type="file" accept="application/pdf,.pdf"
                     style={{ fontSize: 12, marginBottom: 8, display: 'block' }}
                     onChange={e => setNovoArq(a => ({ ...a, file: e.target.files[0] ?? null }))} />
                   <button className="btn" onClick={() => adicionarArquivo(av.id)} disabled={uploadando}>
-                    {uploadando ? 'Enviando…' : 'Enviar arquivo'}
+                    {uploadando ? 'Enviando…' : 'Enviar resultado'}
                   </button>
                 </div>
               </div>
