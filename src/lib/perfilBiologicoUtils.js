@@ -421,13 +421,103 @@ export function calcularConvergencias({ candidatos }) {
   return resultados.slice(0, 2);
 }
 
+// ── Priorização Clínica — Sprint 11 ──────────────────────────────────────────
+// Sintetiza as convergências em uma área de atenção principal e opcional secundária.
+// Usa 3 dimensões: especificidade dos campos, força das associações V2, cobertura.
+
+function calcularEspecificidadeCampo(campoId) {
+  const mapeamentos = MAPEAMENTO_CAMPO_EIXO[campoId];
+  if (!mapeamentos || mapeamentos.length === 0) return 0;
+  return 1 / mapeamentos.length;
+}
+
+export function calcularPriorizacao({ convergencias, candidatos }) {
+  if (!convergencias || convergencias.length === 0) return null;
+
+  // Pré-calcular força média V2 por eixo e normalizar
+  const forcasMedias = {};
+  let maxForca = 0;
+  for (const conv of convergencias) {
+    const candsEixo = candidatos.filter(c =>
+      pesoCampoEixo(c.campoA, conv.eixoId) > 0 || pesoCampoEixo(c.campoB, conv.eixoId) > 0
+    );
+    const media = candsEixo.length > 0
+      ? candsEixo.reduce((s, c) => s + c.score, 0) / candsEixo.length
+      : 0;
+    forcasMedias[conv.eixoId] = media;
+    if (media > maxForca) maxForca = media;
+  }
+
+  const scored = convergencias.map(conv => {
+    // Dimensão 1: especificidade média dos campos ativos (antídoto à dominância Adrenal)
+    const especificidades = conv.campos.map(c => calcularEspecificidadeCampo(c.id));
+    // conv.campos tem ≥3 itens (garantido por calcularConvergencias) — divisão segura.
+    const especificidadeMedia = especificidades.length > 0
+      ? especificidades.reduce((s, e) => s + e, 0) / especificidades.length
+      : 0;
+
+    // Dimensão 2: força V2 normalizada
+    const forcaNorm = maxForca > 0 ? forcasMedias[conv.eixoId] / maxForca : 0;
+
+    // Dimensão 3: cobertura (0–100 → decimal)
+    const coberturaDecimal = conv.cobertura / 100;
+
+    // Pesos: especificidade lidera (antídoto à dominância de eixos grandes),
+    // força V2 mede profundidade das evidências, cobertura mede densidade de sinais.
+    const priorityScore =
+      especificidadeMedia * 0.45
+      + forcaNorm        * 0.35
+      + coberturaDecimal * 0.20;
+
+    // Top 3 campos por contribuição: especificidade × peso no eixo
+    const camposOrdenados = [...conv.campos].sort((a, b) => {
+      const cA = calcularEspecificidadeCampo(a.id) * pesoCampoEixo(a.id, conv.eixoId);
+      const cB = calcularEspecificidadeCampo(b.id) * pesoCampoEixo(b.id, conv.eixoId);
+      return cB - cA;
+    });
+
+    return {
+      eixoId:        conv.eixoId,
+      eixoNome:      conv.eixoNome,
+      eixoSubtitulo: conv.eixoSubtitulo,
+      priorityScore,
+      top3:          camposOrdenados.slice(0, 3),
+    };
+  });
+
+  scored.sort((a, b) => b.priorityScore - a.priorityScore);
+
+  const principal          = scored[0];
+  const candidataSecundaria = scored[1];
+  const secundaria = candidataSecundaria
+    && candidataSecundaria.priorityScore >= principal.priorityScore * 0.65
+    ? candidataSecundaria
+    : null;
+
+  return {
+    principal: {
+      eixoId:        principal.eixoId,
+      eixoNome:      principal.eixoNome,
+      eixoSubtitulo: principal.eixoSubtitulo,
+      score:         principal.priorityScore,
+      top3:          principal.top3,
+    },
+    secundaria: secundaria ? {
+      eixoId:        secundaria.eixoId,
+      eixoNome:      secundaria.eixoNome,
+      eixoSubtitulo: secundaria.eixoSubtitulo,
+      score:         secundaria.priorityScore,
+    } : null,
+  };
+}
+
 // ── Ponto de entrada principal ────────────────────────────────────────────────
 
 export function calcularPerfilBiologico({ sintomas, periodos, intestinoLogs }) {
   const dadosBase = determinarEstagio({ sintomas, periodos });
 
   if (dadosBase.estagio === 'insuficiente') {
-    return { dadosBase, principalPadrao: null, padroes: [], padroesEmFormacao: [], intestinoCiclo: [], corpoComportamento: { disponivel: false }, convergencias: [] };
+    return { dadosBase, principalPadrao: null, padroes: [], padroesEmFormacao: [], intestinoCiclo: [], corpoComportamento: { disponivel: false }, convergencias: [], priorizacao: null };
   }
 
   // Classificar cada dia de sintoma pela fase do ciclo
@@ -454,7 +544,8 @@ export function calcularPerfilBiologico({ sintomas, periodos, intestinoLogs }) {
   const principalPadrao    = padroes.find(p => p.confianca === 'alta') ?? null;
   const intestinoCiclo     = calcularTendenciasClinicas(intestinoLogs ?? [], sintomas ?? []);
   const corpoComportamento = calcularCorpoComportamento({ sintomas, intestinoLogs });
-  const convergencias      = calcularConvergencias({ candidatos: corpoComportamento.candidatos ?? [] });
+  const convergencias = calcularConvergencias({ candidatos: corpoComportamento.candidatos ?? [] });
+  const priorizacao   = calcularPriorizacao({ convergencias, candidatos: corpoComportamento.candidatos ?? [] });
 
-  return { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias };
+  return { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao };
 }

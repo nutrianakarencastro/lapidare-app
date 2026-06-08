@@ -106,6 +106,76 @@ function ConvergenciaCard({ conv, isLast }) {
   );
 }
 
+// ── Priorização Clínica ────────────────────────────────────────────────────────
+function PriorizacaoCard({ priorizacao }) {
+  const { principal, secundaria } = priorizacao;
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-header">
+        <div>
+          <div className="card-title">Priorização Clínica</div>
+          <div className="card-sub">Síntese dos padrões encontrados neste perfil</div>
+        </div>
+      </div>
+      <div className="card-body" style={{ paddingTop: 0 }}>
+
+        {/* ── Área principal ── */}
+        <div style={{ marginBottom: secundaria ? 14 : 10 }}>
+          <div style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase',
+            color: 'var(--text4)', marginBottom: 6,
+          }}>
+            Área de atenção observada
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--dark)', marginBottom: 2 }}>
+            {principal.eixoNome}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', marginBottom: 10 }}>
+            {principal.eixoSubtitulo}
+          </div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text4)', marginBottom: 5 }}>
+            Baseado principalmente em:
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {principal.top3.map(c => (
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
+                <span style={{ color: 'var(--text4)', flexShrink: 0 }}>•</span>
+                {c.label}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Área secundária (opcional) ── */}
+        {secundaria && (
+          <>
+            <div style={{ height: '0.5px', background: 'var(--border)', marginBottom: 12 }} />
+            <div style={{ marginBottom: 10 }}>
+              <div style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase',
+                color: 'var(--text4)', marginBottom: 5,
+              }}>
+                Área complementar nos registros
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 2 }}>
+                {secundaria.eixoNome}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
+                {secundaria.eixoSubtitulo}
+              </div>
+            </div>
+          </>
+        )}
+
+        <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.6 }}>
+          Síntese observacional baseada nos padrões dos registros.
+          Não representa diagnóstico funcional. A interpretação clínica é da nutricionista.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const BG_CONF = {
   alta:     'var(--green-bg)',
   moderada: '#fef9e7',
@@ -266,7 +336,7 @@ export default function PerfilBiologico({ pacienteId }) {
     return <div className="card empty-card"><div className="empty-sub">Carregando…</div></div>;
   }
 
-  const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias } = resultado;
+  const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao } = resultado;
 
   // ── Insuficiente ─────────────────────────────────────────────────────────────
   if (dadosBase.estagio === 'insuficiente') {
@@ -476,6 +546,9 @@ export default function PerfilBiologico({ pacienteId }) {
           </div>
         </div>
       )}
+
+      {/* ── Priorização Clínica ── */}
+      {priorizacao && <PriorizacaoCard priorizacao={priorizacao} />}
 
       {/* ── Padrões em Formação ── */}
       {padroesEmFormacao.length > 0 && (
