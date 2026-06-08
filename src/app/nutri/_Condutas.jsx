@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase.js';
 import { dataBR } from '../../lib/utils.js';
 import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
 import { mapearEvidencias } from '../../lib/evidenciasConduta.js';
+import { calcularRevisao } from '../../lib/revisaoConduta.js';
 
 const ORIGENS = [
   { v: '',         label: '— sem origem —' },
@@ -39,6 +40,7 @@ export default function Condutas({ pacienteId, nutriId, pacienteNome }) {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [perfilResult, setPerfilResult] = useState(null);
+  const [sintomasRaw,  setSintomasRaw]  = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -58,8 +60,10 @@ export default function Condutas({ pacienteId, nutriId, pacienteNome }) {
           .eq('paciente_id', pacienteId).eq('tipo', 'diario').gte('data', c180),
       ]);
       if (!active) return;
+      const sintomas = sintomasRes.data ?? [];
+      setSintomasRaw(sintomas);
       setPerfilResult(calcularPerfilBiologico({
-        sintomas:      sintomasRes.data  ?? [],
+        sintomas,
         periodos:      periodosRes.data  ?? [],
         intestinoLogs: intestinoRes.data ?? [],
       }));
@@ -300,7 +304,8 @@ export default function Condutas({ pacienteId, nutriId, pacienteNome }) {
             editandoId={editId}
             onEditar={() => abrirEditar(c)}
             onExcluir={() => excluir(c)}
-            perfilResult={c.is_atual ? perfilResult : null}
+            perfilResult={c.is_atual ? perfilResult  : null}
+            sintomasRaw={c.is_atual  ? sintomasRaw   : null}
           />
         ))
       )}
@@ -355,10 +360,70 @@ function EvidenciasBlock({ evidencias, objetivoPrincipal }) {
   );
 }
 
+// ── Revisão de Conduta ────────────────────────────────────────────────────────
+function RevisaoBlock({ revisao }) {
+  if (!revisao?.disponivel) return null;
+  const { sintese, indicadores = [], diasAntes, diasDepois } = revisao;
+  const temComparacao = indicadores.length > 0;
+  return (
+    <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 8, background: 'var(--bg3, #eae4dc)' }}>
+      <div style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+        color: 'var(--text4)', marginBottom: 6,
+      }}>
+        Registros desde esta conduta
+      </div>
+      <div style={{
+        fontSize: 13, color: 'var(--text2)', lineHeight: 1.55,
+        marginBottom: temComparacao ? 12 : 4,
+      }}>
+        {sintese}
+      </div>
+      {temComparacao && (
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 8 }}>
+            {indicadores.map(ind => (
+              <div key={ind.id}>
+                <div style={{
+                  fontSize: 10, fontWeight: 600, letterSpacing: .5, textTransform: 'uppercase',
+                  color: 'var(--text4)', marginBottom: 3,
+                }}>
+                  {ind.label}
+                </div>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: 'var(--text2)', marginBottom: 2 }}>
+                  <span>Antes: <strong style={{ color: 'var(--dark)' }}>{ind.antes}%</strong></span>
+                  <span>Depois: <strong style={{ color: 'var(--dark)' }}>{ind.depois}%</strong></span>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                  Diferença observada: {ind.delta > 0 ? '+' : ''}{ind.delta} pontos percentuais
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 9, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5, marginBottom: 4 }}>
+            Os registros mostram o que foi observado neste período. Mudanças podem ter múltiplas origens.
+          </div>
+        </>
+      )}
+      {diasAntes !== undefined && diasDepois !== undefined && (
+        <div style={{ fontSize: 10, color: 'var(--text4)' }}>
+          {diasAntes} dias analisados antes · {diasDepois} dias após
+        </div>
+      )}
+      {diasDepois !== undefined && diasAntes === undefined && (
+        <div style={{ fontSize: 10, color: 'var(--text4)' }}>
+          {diasDepois} dias após a conduta
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Card de conduta ────────────────────────────────────────────────────────
-function CondutaCard({ conduta: c, editandoId, onEditar, onExcluir, perfilResult }) {
-  const editando  = editandoId === c.id;
+function CondutaCard({ conduta: c, editandoId, onEditar, onExcluir, perfilResult, sintomasRaw }) {
+  const editando   = editandoId === c.id;
   const evidencias = perfilResult ? mapearEvidencias({ conduta: c, perfilResult }) : [];
+  const revisao    = sintomasRaw  ? calcularRevisao({ sintomas: sintomasRaw, conduta: c }) : null;
 
   return (
     <div className="card" style={{
@@ -428,6 +493,7 @@ function CondutaCard({ conduta: c, editandoId, onEditar, onExcluir, perfilResult
           </div>
         )}
         <EvidenciasBlock evidencias={evidencias} objetivoPrincipal={c.objetivo_principal} />
+        <RevisaoBlock revisao={revisao} />
       </div>
     </div>
   );
