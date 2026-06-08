@@ -170,13 +170,137 @@ export function determinarEstagio({ sintomas, periodos }) {
   return { estagio: 'inicial', ciclosCompletos, diasRegistrados, cobertura };
 }
 
+// ── Corpo → Comportamento ─────────────────────────────────────────────────────
+
+const PARES_V1 = [
+  { id: 'sono_compulsao',     gatilho: 'sono',      efeito: 'compulsao',     gatilhoLabel: 'sono difícil',       efeitoLabel: 'compulsão alimentar' },
+  { id: 'sono_energia',       gatilho: 'sono',      efeito: 'energia',       gatilhoLabel: 'sono difícil',       efeitoLabel: 'energia baixa'       },
+  { id: 'sono_irritabilidade',gatilho: 'sono',      efeito: 'irritabilidade',gatilhoLabel: 'sono difícil',       efeitoLabel: 'irritabilidade'      },
+  { id: 'intestino_acne',     gatilho: 'intestino', efeito: 'acne',          gatilhoLabel: 'intestino alterado', efeitoLabel: 'acne'                },
+  { id: 'intestino_energia',  gatilho: 'intestino', efeito: 'energia',       gatilhoLabel: 'intestino alterado', efeitoLabel: 'energia baixa'       },
+  { id: 'intestino_inchaco',  gatilho: 'intestino', efeito: 'inchaco',       gatilhoLabel: 'intestino alterado', efeitoLabel: 'inchaço'             },
+];
+
+function intestinoAlterado(s, altSet) {
+  return altSet.has(s.data) || (s.intestino != null && s.intestino !== 'normal');
+}
+
+function intestinoTemDados(s, altSet) {
+  return s.intestino != null || altSet.has(s.data);
+}
+
+function gatilhoDia(s, par, altSet) {
+  if (par.gatilho === 'sono')      return s.sono != null ? s.sono <= 2 : null;
+  if (par.gatilho === 'intestino') return intestinoTemDados(s, altSet) ? intestinoAlterado(s, altSet) : null;
+  return null;
+}
+
+function efeitoDia(s, par) {
+  switch (par.efeito) {
+    case 'compulsao':     return s.compulsao     != null ? s.compulsao >= 1     : null;
+    case 'energia':       return s.energia       != null ? s.energia <= 2       : null;
+    case 'irritabilidade':return s.irritabilidade!= null ? s.irritabilidade >= 2: null;
+    case 'acne':          return s.acne          != null ? s.acne >= 1          : null;
+    case 'inchaco':       return s.inchaco       != null ? s.inchaco >= 1       : null;
+    default: return null;
+  }
+}
+
+function gerarNarrativaAssociacao({ par, prevCom, prevSem, delta, forca }) {
+  const base = `Nos registros disponíveis, nos dias em que houve ${par.gatilhoLabel}, ${par.efeitoLabel} apareceu em ${prevCom}% dos dias — contra ${prevSem}% nos dias sem ${par.gatilhoLabel} (${delta} pontos percentuais de diferença).`;
+  return forca === 'forte' ? base + ' Pode ser um ponto de atenção clínica.' : base;
+}
+
+function analisarPar({ sintomas, par, altSet }) {
+  // Dias com ambos os campos com dados registrados
+  const analisados = sintomas.filter(s => {
+    const g = gatilhoDia(s, par, altSet);
+    const e = efeitoDia(s, par);
+    return g !== null && e !== null;
+  });
+
+  if (analisados.length < 20) return null;
+
+  const comG = analisados.filter(s => gatilhoDia(s, par, altSet) === true);
+  const semG = analisados.filter(s => gatilhoDia(s, par, altSet) === false);
+
+  const nCom = comG.length;
+  const nSem = semG.length;
+  if (nCom < 10 || nSem < 5) return null;
+
+  const prevCom = comG.filter(s => efeitoDia(s, par)).length / nCom;
+  const prevSem = semG.filter(s => efeitoDia(s, par)).length / nSem;
+  const delta   = prevCom - prevSem;
+  const ratio   = prevSem < 0.01
+    ? (prevCom >= 0.25 ? 5.0 : 1.0)
+    : prevCom / prevSem;
+
+  if (delta < 0.15 || prevCom < 0.20 || ratio < 1.4) return null;
+
+  const forca    = delta >= 0.25 ? 'forte' : 'moderada';
+  const confianca = nCom >= 20   ? 'alta'  : 'moderada';
+  const pCom = Math.round(prevCom * 100);
+  const pSem = Math.round(prevSem * 100);
+  const dlt  = Math.round(delta   * 100);
+
+  return {
+    id: par.id, gatilhoLabel: par.gatilhoLabel, efeitoLabel: par.efeitoLabel,
+    prevCom: pCom, prevSem: pSem, delta: dlt,
+    nCom, nSem, forca, confianca,
+    narrativa: gerarNarrativaAssociacao({ par, prevCom: pCom, prevSem: pSem, delta: dlt, forca }),
+  };
+}
+
+export function calcularCorpoComportamento({ sintomas, intestinoLogs }) {
+  const diasRegistrados = new Set((sintomas ?? []).map(s => s.data)).size;
+  const cobertura       = Math.min(100, Math.round((diasRegistrados / 90) * 100));
+
+  if (diasRegistrados < 30 || cobertura < 30) {
+    return { disponivel: false, diasRegistrados, cobertura };
+  }
+
+  const coberturaBaixa = cobertura < 50;
+
+  // Conjunto de datas com intestino alterado (de intestino_logs)
+  const altSet = new Set(
+    (intestinoLogs ?? [])
+      .filter(l =>
+        l.tipo === 'diario' && (
+          (l.bristol && l.bristol !== 4 && l.bristol !== 5) ||
+          l.esvaziamento_incompleto ||
+          (l.dor_abdominal ?? 0) >= 2
+        )
+      )
+      .map(l => l.data)
+  );
+
+  let associacoes = PARES_V1
+    .map(par => analisarPar({ sintomas, par, altSet }))
+    .filter(Boolean);
+
+  // Cobertura baixa: confiança moderada → não exibir; alta → rebaixar para moderada
+  if (coberturaBaixa) {
+    associacoes = associacoes
+      .map(a => a.confianca === 'moderada' ? null : { ...a, confianca: 'moderada' })
+      .filter(Boolean);
+  }
+
+  // Ordenar: força forte primeiro, depois por delta
+  associacoes.sort((a, b) => {
+    if (a.forca !== b.forca) return a.forca === 'forte' ? -1 : 1;
+    return b.delta - a.delta;
+  });
+
+  return { disponivel: true, associacoes, cobertura, coberturaBaixa, diasRegistrados };
+}
+
 // ── Ponto de entrada principal ────────────────────────────────────────────────
 
 export function calcularPerfilBiologico({ sintomas, periodos, intestinoLogs }) {
   const dadosBase = determinarEstagio({ sintomas, periodos });
 
   if (dadosBase.estagio === 'insuficiente') {
-    return { dadosBase, principalPadrao: null, padroes: [], padroesEmFormacao: [], intestinoCiclo: [] };
+    return { dadosBase, principalPadrao: null, padroes: [], padroesEmFormacao: [], intestinoCiclo: [], corpoComportamento: { disponivel: false } };
   }
 
   // Classificar cada dia de sintoma pela fase do ciclo
@@ -200,10 +324,9 @@ export function calcularPerfilBiologico({ sintomas, periodos, intestinoLogs }) {
     .filter(r => r.confianca === 'formacao')
     .sort((a, b) => b.nObs - a.nObs);
 
-  // Principal padrão: primeiro de 'alta' confiança, com maior delta
-  const principalPadrao = padroes.find(p => p.confianca === 'alta') ?? null;
+  const principalPadrao   = padroes.find(p => p.confianca === 'alta') ?? null;
+  const intestinoCiclo    = calcularTendenciasClinicas(intestinoLogs ?? [], sintomas ?? []);
+  const corpoComportamento = calcularCorpoComportamento({ sintomas, intestinoLogs });
 
-  const intestinoCiclo = calcularTendenciasClinicas(intestinoLogs ?? [], sintomas ?? []);
-
-  return { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo };
+  return { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento };
 }

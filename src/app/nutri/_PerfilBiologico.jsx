@@ -6,6 +6,51 @@ const COR_CONF = {
   alta:     'var(--green)',
   moderada: 'var(--amber)',
 };
+
+// ── Força da associação (Corpo → Comportamento) ────────────────────────────────
+const COR_FORCA   = { forte: 'var(--green)', moderada: 'var(--amber)' };
+const BG_FORCA    = { forte: 'var(--green-bg)', moderada: '#fef9e7' };
+const LABEL_FORCA = { forte: 'Associação forte', moderada: 'Associação moderada' };
+
+function AssociacaoCard({ assoc: a, isLast }) {
+  const cor     = COR_FORCA[a.forca];
+  const isSolid = a.confianca === 'alta';
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 12,
+      padding: '12px 0',
+      borderBottom: isLast ? 'none' : '0.5px solid var(--border)',
+    }}>
+      {/* Dot: sólido = alta confiança; contorno = moderada */}
+      <span style={{
+        width: 9, height: 9, borderRadius: '50%', flexShrink: 0, marginTop: 4,
+        background:   isSolid ? cor : 'transparent',
+        border:       `2px solid ${cor}`,
+      }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)' }}>
+            {a.gatilhoLabel} → {a.efeitoLabel}
+          </span>
+          <span style={{
+            fontSize: 9, fontWeight: 600, letterSpacing: .4,
+            background: BG_FORCA[a.forca], color: cor,
+            padding: '2px 7px', borderRadius: 20,
+          }}>
+            {LABEL_FORCA[a.forca]}
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 4 }}>
+          "{a.narrativa}"
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text4)' }}>
+          Em {a.prevCom}% dos dias com gatilho · {a.prevSem}% sem gatilho · {a.nCom} observações
+        </div>
+      </div>
+    </div>
+  );
+}
 const BG_CONF = {
   alta:     'var(--green-bg)',
   moderada: '#fef9e7',
@@ -136,7 +181,7 @@ export default function PerfilBiologico({ pacienteId }) {
 
       const [sintomasRes, periodosRes, intestinoRes] = await Promise.all([
         supabase.from('ciclo_sintomas_diarios')
-          .select('data, humor, energia, sono, irritabilidade, compulsao, acne, retencao, inchaco, insonia, acorda_madrugada, choro')
+          .select('data, humor, energia, sono, irritabilidade, compulsao, acne, retencao, inchaco, insonia, acorda_madrugada, choro, intestino')
           .eq('paciente_id', pacienteId)
           .gte('data', c90)
           .order('data', { ascending: false }),
@@ -166,7 +211,7 @@ export default function PerfilBiologico({ pacienteId }) {
     return <div className="card empty-card"><div className="empty-sub">Carregando…</div></div>;
   }
 
-  const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo } = resultado;
+  const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento } = resultado;
 
   // ── Insuficiente ─────────────────────────────────────────────────────────────
   if (dadosBase.estagio === 'insuficiente') {
@@ -316,6 +361,38 @@ export default function PerfilBiologico({ pacienteId }) {
                 {t.descricao}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Corpo → Comportamento ── */}
+      {corpoComportamento?.disponivel && corpoComportamento.associacoes.length > 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Corpo → Comportamento</div>
+              <div className="card-sub">Associações observadas nos registros · mesmo dia · 90 dias</div>
+            </div>
+          </div>
+          {corpoComportamento.coberturaBaixa && (
+            <div style={{
+              margin: '0 16px 10px', padding: '7px 11px', borderRadius: 7, fontSize: 11,
+              background: 'var(--orange-bg)', color: 'var(--orange)', lineHeight: 1.5,
+            }}>
+              Cobertura de registros abaixo de 50% — associações têm menor confiabilidade.
+            </div>
+          )}
+          <div className="card-body" style={{ paddingTop: 0 }}>
+            {corpoComportamento.associacoes.map((a, i) => (
+              <AssociacaoCard
+                key={a.id}
+                assoc={a}
+                isLast={i === corpoComportamento.associacoes.length - 1}
+              />
+            ))}
+            <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
+              Associações calculadas nos dias com registro completo de ambos os campos. Não indicam relação causal.
+            </div>
           </div>
         </div>
       )}
