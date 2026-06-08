@@ -666,6 +666,70 @@ export function calcularMapaGatilhos({ sintomas, intestinoLogs, periodos, ciclos
   return { disponivel: true, fatores, influenciaCiclo };
 }
 
+// ── Tempo de Retomada — Sprint 13 ────────────────────────────────────────────
+// Mede quantos dias os registros levam para voltar ao padrão após piora.
+// Reutiliza ehPioraDia e OUTCOME_CAMPOS_MAPA do Sprint 12.
+
+const MIN_EPISODIOS_RESILIENCIA = 7;
+const CAP_RECOVERY_DIAS         = 14;
+
+export function calcularResiliencia({ sintomas }) {
+  const ordenados = [...(sintomas ?? [])].sort((a, b) => a.data.localeCompare(b.data));
+  if (ordenados.length < 30) return { disponivel: false };
+
+  // Classificar cada dia com dados suficientes de outcome
+  const classificados = ordenados
+    .map(s => ({ data: s.data, ehPiora: ehPioraDia(s) }))
+    .filter(d => d.ehPiora !== null);
+
+  if (classificados.length < 20) return { disponivel: false };
+
+  // Identificar inícios de episódio: primeiro piora day de cada sequência
+  const episodios = [];
+  let prevFoiPiora = false;
+  for (const d of classificados) {
+    if (d.ehPiora && !prevFoiPiora) episodios.push({ inicio: d.data });
+    prevFoiPiora = d.ehPiora;
+  }
+
+  if (episodios.length === 0) return { disponivel: false };
+
+  // Para cada episódio, encontrar o primeiro recovery day (≤1 campo alterado)
+  // Recovery time = dias de calendário entre início do episódio e esse dia
+  const recoveryTimes = [];
+  for (const ep of episodios) {
+    const inicioMs = new Date(ep.inicio).getTime();
+    for (const d of classificados) {
+      if (d.data <= ep.inicio) continue;  // antes do episódio
+      if (d.ehPiora) continue;             // ainda em piora
+      // Primeiro dia não-piora encontrado
+      const diffDias = Math.round((new Date(d.data).getTime() - inicioMs) / 86400000);
+      if (diffDias <= CAP_RECOVERY_DIAS) recoveryTimes.push(diffDias);
+      break; // um único non-piora day encerra a busca para este episódio
+    }
+  }
+
+  if (recoveryTimes.length < MIN_EPISODIOS_RESILIENCIA) return { disponivel: false };
+
+  const sorted  = [...recoveryTimes].sort((a, b) => a - b);
+  const mediana = sorted[Math.floor(sorted.length / 2)];
+  const minDias = sorted[0];
+  const maxDias = sorted[sorted.length - 1];
+  const label   = mediana === 1 ? 'dia' : 'dias';
+
+  const narrativa =
+    `Após dias de maior carga sintomática, os registros desta paciente costumam voltar ao padrão em cerca de ${mediana} ${label} — com variação entre ${minDias} e ${maxDias} dias nos períodos analisados.`;
+
+  return {
+    disponivel:  true,
+    mediana,
+    minDias,
+    maxDias,
+    nEpisodios:  recoveryTimes.length,
+    narrativa,
+  };
+}
+
 // ── Ponto de entrada principal ────────────────────────────────────────────────
 
 export function calcularPerfilBiologico({ sintomas, periodos, intestinoLogs }) {
@@ -702,6 +766,7 @@ export function calcularPerfilBiologico({ sintomas, periodos, intestinoLogs }) {
   const convergencias  = calcularConvergencias({ candidatos: corpoComportamento.candidatos ?? [] });
   const priorizacao    = calcularPriorizacao({ convergencias, candidatos: corpoComportamento.candidatos ?? [] });
   const mapaGatilhos   = calcularMapaGatilhos({ sintomas, intestinoLogs, periodos, ciclosCompletos: dadosBase.ciclosCompletos });
+  const tempoRetomada  = calcularResiliencia({ sintomas });
 
-  return { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao, mapaGatilhos };
+  return { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao, mapaGatilhos, tempoRetomada };
 }

@@ -177,6 +177,63 @@ function ConvergenciaCard({ conv, isLast }) {
   );
 }
 
+// ── Tempo de Retomada ─────────────────────────────────────────────────────────
+function TempoRetomadaCard({ tempoRetomada }) {
+  const { mediana, minDias, maxDias, nEpisodios } = tempoRetomada;
+  const labelDias = mediana === 1 ? 'dia' : 'dias';
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-header">
+        <div>
+          <div className="card-title">Tempo de Retomada</div>
+          <div className="card-sub">Tempo observado de retomada após períodos de maior carga sintomática.</div>
+        </div>
+      </div>
+      <div className="card-body" style={{ paddingTop: 0 }}>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
+          <span style={{ fontSize: 28, fontWeight: 700, color: 'var(--dark)', lineHeight: 1 }}>
+            {mediana}
+          </span>
+          <span style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 500 }}>
+            {labelDias}
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+            (mediana observada)
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginBottom: 12 }}>
+          <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+            Variação:{' '}
+            <strong style={{ color: 'var(--text2)' }}>
+              {minDias} a {maxDias} {maxDias === 1 ? 'dia' : 'dias'}
+            </strong>
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+            Baseado em{' '}
+            <strong style={{ color: 'var(--text2)' }}>
+              {nEpisodios} {nEpisodios === 1 ? 'período' : 'períodos'} analisados
+            </strong>
+          </span>
+        </div>
+
+        <div style={{
+          padding: '8px 11px', borderRadius: 7, fontSize: 11,
+          background: 'var(--bg2)', color: 'var(--text3)', lineHeight: 1.55,
+          marginBottom: 10,
+        }}>
+          A fase lútea está incluída no cálculo. Períodos de maior carga nessa fase refletem uma influência fisiológica do ciclo sobre os registros.
+        </div>
+
+        <div style={{ fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
+          Baseado nos registros observados nos últimos 180 dias. Não representa avaliação funcional. A interpretação clínica é da nutricionista.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Priorização Clínica ────────────────────────────────────────────────────────
 function PriorizacaoCard({ priorizacao }) {
   const { principal, secundaria } = priorizacao;
@@ -407,7 +464,7 @@ export default function PerfilBiologico({ pacienteId }) {
     return <div className="card empty-card"><div className="empty-sub">Carregando…</div></div>;
   }
 
-  const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao, mapaGatilhos } = resultado;
+  const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao, mapaGatilhos, tempoRetomada } = resultado;
 
   // ── Insuficiente ─────────────────────────────────────────────────────────────
   if (dadosBase.estagio === 'insuficiente') {
@@ -623,6 +680,9 @@ export default function PerfilBiologico({ pacienteId }) {
 
       {/* ── Priorização Clínica ── */}
       {priorizacao && <PriorizacaoCard priorizacao={priorizacao} />}
+
+      {/* ── Tempo de Retomada ── */}
+      {tempoRetomada?.disponivel && <TempoRetomadaCard tempoRetomada={tempoRetomada} />}
 
       {/* ── Padrões em Formação ── */}
       {padroesEmFormacao.length > 0 && (
