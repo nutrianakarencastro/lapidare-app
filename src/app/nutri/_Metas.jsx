@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { dataBR } from '../../lib/utils.js';
+import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
+import { sugerirMetas } from '../../lib/metasGuiadas.js';
 
 const EIXOS = [
   'Ciclo', 'Intestino', 'Sono', 'Energia', 'Pele',
@@ -65,6 +67,44 @@ export default function Metas({ pacienteId, nutriId, pacienteNome }) {
   const [busy, setBusy]           = useState(false);
   const [feedback, setFeedback]   = useState(null);
   const [filtro, setFiltro]       = useState('todas');
+  const [perfilResult, setPerfilResult] = useState(null);
+  const [condutaAtual, setCondutaAtual] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    async function loadPerfil() {
+      const corte = new Date();
+      corte.setDate(corte.getDate() - 180);
+      const c180 = corte.toISOString().slice(0, 10);
+      const [sintomasRes, periodosRes, intestinoRes, condutaRes] = await Promise.all([
+        supabase.from('ciclo_sintomas_diarios')
+          .select('data, humor, energia, sono, foco, libido, irritabilidade, ansiedade, compulsao, acne, retencao, inchaco, dor_cabeca, dor_pelvica, insonia, acorda_madrugada, choro, intestino')
+          .eq('paciente_id', pacienteId).gte('data', c180).order('data', { ascending: false }),
+        supabase.from('ciclo_periodos')
+          .select('id, inicio, fim')
+          .eq('paciente_id', pacienteId).order('inicio', { ascending: false }),
+        supabase.from('intestino_logs')
+          .select('data, tipo, bristol, evacuou, esvaziamento_incompleto, dor_abdominal, estufamento')
+          .eq('paciente_id', pacienteId).eq('tipo', 'diario').gte('data', c180),
+        supabase.from('condutas')
+          .select('objetivo_principal, objetivos_secundarios')
+          .eq('paciente_id', pacienteId)
+          .eq('nutri_id', nutriId)
+          .eq('is_atual', true)
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (!active) return;
+      setPerfilResult(calcularPerfilBiologico({
+        sintomas:      sintomasRes.data  ?? [],
+        periodos:      periodosRes.data  ?? [],
+        intestinoLogs: intestinoRes.data ?? [],
+      }));
+      setCondutaAtual(condutaRes.data ?? null);
+    }
+    loadPerfil();
+    return () => { active = false; };
+  }, [pacienteId, nutriId]);
 
   async function carregar() {
     const { data } = await supabase.from('metas_terapeuticas')
@@ -135,6 +175,13 @@ export default function Metas({ pacienteId, nutriId, pacienteNome }) {
     setForm(formVazio());
   }
 
+  function abrirNovoComTema(titulo) {
+    setEditId(null);
+    setFeedback(null);
+    setForm({ ...formVazio(), titulo });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   function abrirEditar(m) {
     setEditId(m.id);
     setFeedback(null);
@@ -173,6 +220,11 @@ export default function Metas({ pacienteId, nutriId, pacienteNome }) {
   const visiveis = ordenarMetas(
     filtro === 'todas' ? registros : registros.filter(r => r.status === filtro)
   );
+
+  const metasAtivas = registros.filter(r => r.status === 'ativa' || r.status === 'em_evolucao');
+  const sugestoes   = perfilResult
+    ? sugerirMetas({ perfilResult, metasAtivas, condutaAtual })
+    : [];
 
   return (
     <>
@@ -305,6 +357,11 @@ export default function Metas({ pacienteId, nutriId, pacienteNome }) {
         </div>
       )}
 
+      {/* ── Aspectos não acompanhados ── */}
+      {!form && sugestoes.length > 0 && (
+        <AspectosNaoAcompanhadosCard sugestoes={sugestoes} onSugerirMeta={abrirNovoComTema} />
+      )}
+
       {/* ── Filtros ── */}
       {!form && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -361,6 +418,50 @@ export default function Metas({ pacienteId, nutriId, pacienteNome }) {
         )
       )}
     </>
+  );
+}
+
+// ── Aspectos não acompanhados ─────────────────────────────────────────────────
+function AspectosNaoAcompanhadosCard({ sugestoes, onSugerirMeta }) {
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-header">
+        <div>
+          <div className="card-title">Pontos dos registros sem meta ativa</div>
+          <div className="card-sub">Sinais presentes nos registros sem meta ativa correspondente.</div>
+        </div>
+      </div>
+      <div className="card-body" style={{ paddingTop: 0 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          {sugestoes.map(s => (
+            <button
+              key={s.id}
+              onClick={() => onSugerirMeta(s.label)}
+              style={{
+                background: '#fef9e7',
+                border: '0.5px solid var(--amber)',
+                borderRadius: 20,
+                padding: '6px 14px',
+                fontSize: 13,
+                color: 'var(--dark)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-sans)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                transition: 'background .15s',
+              }}
+            >
+              <i className="ti ti-plus" style={{ fontSize: 12, color: 'var(--amber)', flexShrink: 0 }} aria-hidden="true" />
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
+          Baseado nos registros dos últimos 180 dias. A decisão clínica é da nutricionista.
+        </div>
+      </div>
+    </div>
   );
 }
 
