@@ -159,7 +159,7 @@ function analisarGrupo(porFase, grupo, nCiclos) {
 export function determinarEstagio({ sintomas, periodos }) {
   const diasRegistrados = new Set((sintomas ?? []).map(s => s.data)).size;
   const ciclosCompletos = (periodos ?? []).filter(p => p.inicio && p.fim).length;
-  const cobertura       = Math.min(100, Math.round((diasRegistrados / 90) * 100));
+  const cobertura       = Math.min(100, Math.round((diasRegistrados / 180) * 100));
 
   if (diasRegistrados < 14 || ciclosCompletos < 1) {
     return { estagio: 'insuficiente', ciclosCompletos, diasRegistrados, cobertura };
@@ -170,98 +170,109 @@ export function determinarEstagio({ sintomas, periodos }) {
   return { estagio: 'inicial', ciclosCompletos, diasRegistrados, cobertura };
 }
 
-// ── Corpo → Comportamento ─────────────────────────────────────────────────────
+// ── Motor de Descoberta V2 — Corpo → Comportamento ───────────────────────────
+// Paradigma: Associação ↔ Associação (simétrico, sem gatilho/efeito predefinido)
+// Janela: 180 dias · Método: co-ocorrência em excesso (lift + excesso absoluto)
 
-const PARES_V1 = [
-  { id: 'sono_compulsao',     gatilho: 'sono',      efeito: 'compulsao',     gatilhoLabel: 'sono difícil',       efeitoLabel: 'compulsão alimentar' },
-  { id: 'sono_energia',       gatilho: 'sono',      efeito: 'energia',       gatilhoLabel: 'sono difícil',       efeitoLabel: 'energia baixa'       },
-  { id: 'sono_irritabilidade',gatilho: 'sono',      efeito: 'irritabilidade',gatilhoLabel: 'sono difícil',       efeitoLabel: 'irritabilidade'      },
-  { id: 'intestino_acne',     gatilho: 'intestino', efeito: 'acne',          gatilhoLabel: 'intestino alterado', efeitoLabel: 'acne'                },
-  { id: 'intestino_energia',  gatilho: 'intestino', efeito: 'energia',       gatilhoLabel: 'intestino alterado', efeitoLabel: 'energia baixa'       },
-  { id: 'intestino_inchaco',  gatilho: 'intestino', efeito: 'inchaco',       gatilhoLabel: 'intestino alterado', efeitoLabel: 'inchaço'             },
+const CAMPOS_MOTOR = [
+  { id: 'sono',           label: 'sono difícil',       altFn: (s)       => s.sono           != null ? s.sono           <= 2 : null },
+  { id: 'energia',        label: 'energia baixa',       altFn: (s)       => s.energia        != null ? s.energia        <= 2 : null },
+  { id: 'humor',          label: 'humor baixo',         altFn: (s)       => s.humor          != null ? s.humor          <= 2 : null },
+  { id: 'foco',           label: 'foco reduzido',       altFn: (s)       => s.foco           != null ? s.foco           <= 2 : null },
+  { id: 'libido',         label: 'libido baixa',        altFn: (s)       => s.libido         != null ? s.libido         <= 2 : null },
+  { id: 'ansiedade',      label: 'ansiedade elevada',   altFn: (s)       => s.ansiedade      != null ? s.ansiedade      >= 2 : null },
+  { id: 'irritabilidade', label: 'irritabilidade alta', altFn: (s)       => s.irritabilidade != null ? s.irritabilidade >= 2 : null },
+  { id: 'compulsao',      label: 'compulsão alimentar', altFn: (s)       => s.compulsao      != null ? s.compulsao      >= 1 : null },
+  { id: 'acne',           label: 'acne',                altFn: (s)       => s.acne           != null ? s.acne           >= 1 : null },
+  { id: 'retencao',       label: 'retenção',            altFn: (s)       => s.retencao       != null ? s.retencao       >= 1 : null },
+  { id: 'inchaco',        label: 'inchaço',             altFn: (s)       => s.inchaco        != null ? s.inchaco        >= 1 : null },
+  { id: 'dor_cabeca',     label: 'dor de cabeça',       altFn: (s)       => s.dor_cabeca     != null ? s.dor_cabeca     >= 2 : null },
+  { id: 'dor_pelvica',    label: 'dor pélvica',         altFn: (s)       => s.dor_pelvica    != null ? s.dor_pelvica    >= 1 : null },
+  { id: 'intestino',      label: 'intestino alterado',
+    altFn: (s, altSet) => {
+      const temDado = s.intestino != null || altSet.has(s.data);
+      if (!temDado) return null;
+      return altSet.has(s.data) || s.intestino !== 'normal';
+    },
+  },
 ];
 
-function intestinoAlterado(s, altSet) {
-  return altSet.has(s.data) || (s.intestino != null && s.intestino !== 'normal');
-}
+// Pares semanticamente sobrepostos — excluídos antes do cálculo
+// Chaves em ordem canônica (sort), independente da posição em CAMPOS_MOTOR
+const BLACKLIST_MOTOR = new Set([
+  'inchaco|retencao',
+  'humor|irritabilidade',
+]);
 
-function intestinoTemDados(s, altSet) {
-  return s.intestino != null || altSet.has(s.data);
-}
-
-function gatilhoDia(s, par, altSet) {
-  if (par.gatilho === 'sono')      return s.sono != null ? s.sono <= 2 : null;
-  if (par.gatilho === 'intestino') return intestinoTemDados(s, altSet) ? intestinoAlterado(s, altSet) : null;
-  return null;
-}
-
-function efeitoDia(s, par) {
-  switch (par.efeito) {
-    case 'compulsao':     return s.compulsao     != null ? s.compulsao >= 1     : null;
-    case 'energia':       return s.energia       != null ? s.energia <= 2       : null;
-    case 'irritabilidade':return s.irritabilidade!= null ? s.irritabilidade >= 2: null;
-    case 'acne':          return s.acne          != null ? s.acne >= 1          : null;
-    case 'inchaco':       return s.inchaco       != null ? s.inchaco >= 1       : null;
-    default: return null;
-  }
-}
-
-function gerarNarrativaAssociacao({ par, prevCom, prevSem, delta, forca }) {
-  const base = `Nos registros disponíveis, nos dias em que houve ${par.gatilhoLabel}, ${par.efeitoLabel} apareceu em ${prevCom}% dos dias — contra ${prevSem}% nos dias sem ${par.gatilhoLabel} (${delta} pontos percentuais de diferença).`;
-  return forca === 'forte' ? base + ' Pode ser um ponto de atenção clínica.' : base;
-}
-
-function analisarPar({ sintomas, par, altSet }) {
-  // Dias com ambos os campos com dados registrados
+function analisarParMotor(a, b, sintomas, altSet) {
   const analisados = sintomas.filter(s => {
-    const g = gatilhoDia(s, par, altSet);
-    const e = efeitoDia(s, par);
-    return g !== null && e !== null;
+    const va = a.altFn(s, altSet);
+    const vb = b.altFn(s, altSet);
+    return va !== null && vb !== null;
   });
 
-  if (analisados.length < 20) return null;
+  const n = analisados.length;
+  if (n < 20) return null;
 
-  const comG = analisados.filter(s => gatilhoDia(s, par, altSet) === true);
-  const semG = analisados.filter(s => gatilhoDia(s, par, altSet) === false);
+  const nA  = analisados.filter(s => a.altFn(s, altSet) === true).length;
+  const nB  = analisados.filter(s => b.altFn(s, altSet) === true).length;
+  const nAB = analisados.filter(s =>
+    a.altFn(s, altSet) === true && b.altFn(s, altSet) === true
+  ).length;
 
-  const nCom = comG.length;
-  const nSem = semG.length;
-  if (nCom < 10 || nSem < 5) return null;
+  if (nAB < 8) return null;
 
-  const prevCom = comG.filter(s => efeitoDia(s, par)).length / nCom;
-  const prevSem = semG.filter(s => efeitoDia(s, par)).length / nSem;
-  const delta   = prevCom - prevSem;
-  const ratio   = prevSem < 0.01
-    ? (prevCom >= 0.25 ? 5.0 : 1.0)
-    : prevCom / prevSem;
+  const prevA = nA / n;
+  const prevB = nB / n;
 
-  if (delta < 0.15 || prevCom < 0.20 || ratio < 1.4) return null;
+  // Ambos os campos precisam ter variância real no período
+  if (prevA < 0.15 || prevA > 0.85 || prevB < 0.15 || prevB > 0.85) return null;
 
-  const forca    = delta >= 0.25 ? 'forte' : 'moderada';
-  const confianca = nCom >= 20   ? 'alta'  : 'moderada';
-  const pCom = Math.round(prevCom * 100);
-  const pSem = Math.round(prevSem * 100);
-  const dlt  = Math.round(delta   * 100);
+  const prevAB   = nAB / n;
+  const esperado = prevA * prevB;  // >= 0.15×0.15 = 0.0225 after variance filter
+  const excesso  = prevAB - esperado;
+  const lift     = prevAB / esperado;
+
+  if (lift < 1.5 || excesso < 0.15) return null;
+
+  const excessoPP  = Math.round(excesso  * 100);
+  const esperadoPP = Math.round(esperado * 100);
+  const prevABPP   = Math.round(prevAB   * 100);
+
+  const forca     = excesso >= 0.25 ? 'forte' : 'moderada';
+  const confianca = nAB >= 15 ? 'alta' : 'moderada';
+  const fator     = confianca === 'alta' ? 1.0 : 0.85;
+  const score     = excessoPP * Math.min(lift, 4.0) * fator;
+
+  const lA = a.label.charAt(0).toUpperCase() + a.label.slice(1);
+  const narrativa =
+    `${lA} e ${b.label} foram registrados juntos em ${prevABPP}% dos dias analisados — contra ${esperadoPP}% esperado.`;
 
   return {
-    id: par.id, gatilhoLabel: par.gatilhoLabel, efeitoLabel: par.efeitoLabel,
-    prevCom: pCom, prevSem: pSem, delta: dlt,
-    nCom, nSem, forca, confianca,
-    narrativa: gerarNarrativaAssociacao({ par, prevCom: pCom, prevSem: pSem, delta: dlt, forca }),
+    id:       `${a.id}|${b.id}`,
+    labelA:   a.label,
+    labelB:   b.label,
+    campoA:   a.id,
+    campoB:   b.id,
+    prevAB:   prevABPP,
+    esperado: esperadoPP,
+    excesso:  excessoPP,
+    lift:     Math.round(lift * 10) / 10,
+    n, nAB,
+    forca, confianca, score, narrativa,
   };
 }
 
 export function calcularCorpoComportamento({ sintomas, intestinoLogs }) {
   const diasRegistrados = new Set((sintomas ?? []).map(s => s.data)).size;
-  const cobertura       = Math.min(100, Math.round((diasRegistrados / 90) * 100));
+  const cobertura       = Math.min(100, Math.round((diasRegistrados / 180) * 100));
 
-  if (diasRegistrados < 30 || cobertura < 30) {
+  if (diasRegistrados < 20) {
     return { disponivel: false, diasRegistrados, cobertura };
   }
 
   const coberturaBaixa = cobertura < 50;
 
-  // Conjunto de datas com intestino alterado (de intestino_logs)
   const altSet = new Set(
     (intestinoLogs ?? [])
       .filter(l =>
@@ -274,24 +285,44 @@ export function calcularCorpoComportamento({ sintomas, intestinoLogs }) {
       .map(l => l.data)
   );
 
-  let associacoes = PARES_V1
-    .map(par => analisarPar({ sintomas, par, altSet }))
-    .filter(Boolean);
+  // Calcular todos os pares válidos do pool único
+  const candidatos = [];
+  for (let i = 0; i < CAMPOS_MOTOR.length; i++) {
+    for (let j = i + 1; j < CAMPOS_MOTOR.length; j++) {
+      const a = CAMPOS_MOTOR[i];
+      const b = CAMPOS_MOTOR[j];
+      if (BLACKLIST_MOTOR.has([a.id, b.id].sort().join('|'))) continue;
+      const r = analisarParMotor(a, b, sintomas ?? [], altSet);
+      if (r) candidatos.push(r);
+    }
+  }
 
-  // Cobertura baixa: confiança moderada → não exibir; alta → rebaixar para moderada
+  // Cobertura baixa: ocultar confiança moderada; rebaixar alta → moderada
+  let filtrados = candidatos;
   if (coberturaBaixa) {
-    associacoes = associacoes
-      .map(a => a.confianca === 'moderada' ? null : { ...a, confianca: 'moderada' })
+    filtrados = candidatos
+      .map(c => c.confianca === 'moderada' ? null : { ...c, confianca: 'moderada', score: c.score * 0.85 })
       .filter(Boolean);
   }
 
-  // Ordenar: força forte primeiro, depois por delta
-  associacoes.sort((a, b) => {
-    if (a.forca !== b.forca) return a.forca === 'forte' ? -1 : 1;
-    return b.delta - a.delta;
-  });
+  // Ranquear por score interno; desempate por nAB
+  filtrados.sort((a, b) => b.score - a.score || b.nAB - a.nAB);
 
-  return { disponivel: true, associacoes, cobertura, coberturaBaixa, diasRegistrados };
+  // Deduplicação: máximo 2 aparições por campo
+  const aparicoes = {};
+  const selecionados = [];
+  for (const par of filtrados) {
+    const cA = aparicoes[par.campoA] ?? 0;
+    const cB = aparicoes[par.campoB] ?? 0;
+    if (cA < 2 && cB < 2) {
+      selecionados.push(par);
+      aparicoes[par.campoA] = cA + 1;
+      aparicoes[par.campoB] = cB + 1;
+      if (selecionados.length === 4) break;
+    }
+  }
+
+  return { disponivel: true, associacoes: selecionados, cobertura, coberturaBaixa, diasRegistrados };
 }
 
 // ── Ponto de entrada principal ────────────────────────────────────────────────

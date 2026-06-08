@@ -10,7 +10,7 @@ const COR_CONF = {
 // ── Força da associação (Corpo → Comportamento) ────────────────────────────────
 const COR_FORCA   = { forte: 'var(--green)', moderada: 'var(--amber)' };
 const BG_FORCA    = { forte: 'var(--green-bg)', moderada: '#fef9e7' };
-const LABEL_FORCA = { forte: 'Associação forte', moderada: 'Associação moderada' };
+const LABEL_FORCA = { forte: 'Associação consistente', moderada: 'Associação observada' };
 
 function AssociacaoCard({ assoc: a, isLast }) {
   const cor     = COR_FORCA[a.forca];
@@ -31,7 +31,7 @@ function AssociacaoCard({ assoc: a, isLast }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)' }}>
-            {a.gatilhoLabel} → {a.efeitoLabel}
+            {a.labelA.charAt(0).toUpperCase() + a.labelA.slice(1)} e {a.labelB}
           </span>
           <span style={{
             fontSize: 9, fontWeight: 600, letterSpacing: .4,
@@ -45,7 +45,7 @@ function AssociacaoCard({ assoc: a, isLast }) {
           "{a.narrativa}"
         </div>
         <div style={{ fontSize: 11, color: 'var(--text4)' }}>
-          Em {a.prevCom}% dos dias com gatilho · {a.prevSem}% sem gatilho · {a.nCom} observações
+          Co-ocorrência: {a.prevAB}% dos dias · esperado: {a.esperado}% · {a.nAB} registros em comum
         </div>
       </div>
     </div>
@@ -176,14 +176,14 @@ export default function PerfilBiologico({ pacienteId }) {
     let active = true;
     async function load() {
       const corte = new Date();
-      corte.setDate(corte.getDate() - 90);
-      const c90 = corte.toISOString().slice(0, 10);
+      corte.setDate(corte.getDate() - 180);
+      const c180 = corte.toISOString().slice(0, 10);
 
       const [sintomasRes, periodosRes, intestinoRes] = await Promise.all([
         supabase.from('ciclo_sintomas_diarios')
-          .select('data, humor, energia, sono, irritabilidade, compulsao, acne, retencao, inchaco, insonia, acorda_madrugada, choro, intestino')
+          .select('data, humor, energia, sono, foco, libido, irritabilidade, ansiedade, compulsao, acne, retencao, inchaco, dor_cabeca, dor_pelvica, insonia, acorda_madrugada, choro, intestino')
           .eq('paciente_id', pacienteId)
-          .gte('data', c90)
+          .gte('data', c180)
           .order('data', { ascending: false }),
         supabase.from('ciclo_periodos')
           .select('id, inicio, fim')
@@ -193,7 +193,7 @@ export default function PerfilBiologico({ pacienteId }) {
           .select('data, tipo, bristol, evacuou, esvaziamento_incompleto, dor_abdominal, estufamento')
           .eq('paciente_id', pacienteId)
           .eq('tipo', 'diario')
-          .gte('data', c90),
+          .gte('data', c180),
       ]);
 
       if (!active) return;
@@ -371,7 +371,7 @@ export default function PerfilBiologico({ pacienteId }) {
           <div className="card-header">
             <div>
               <div className="card-title">Corpo → Comportamento</div>
-              <div className="card-sub">Associações observadas nos registros · mesmo dia · 90 dias</div>
+              <div className="card-sub">Associações observadas nos registros · mesmo dia · 180 dias</div>
             </div>
           </div>
           {corpoComportamento.coberturaBaixa && (
@@ -391,7 +391,7 @@ export default function PerfilBiologico({ pacienteId }) {
               />
             ))}
             <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
-              Associações calculadas nos dias com registro completo de ambos os campos. Não indicam relação causal.
+              Associações calculadas nos dias com registro completo de ambos os campos. Não indicam relação causal. O motor não controla a fase do ciclo.
             </div>
           </div>
         </div>
