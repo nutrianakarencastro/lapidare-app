@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
+import { calcularRegistrosCarga } from '../../lib/registrosHabitos.js';
 
 const COR_CONF = {
   alta:     'var(--green)',
@@ -381,6 +382,46 @@ function PadraoFormacaoCard({ padrao, isLast }) {
   );
 }
 
+// ── Registros e Carga Sintomática ─────────────────────────────────────────────
+function RegistrosECargaCard({ dados }) {
+  const { cargaAltaPresenca, delta, nSemanasAlta, nSemanasBaixa } = dados;
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-header">
+        <div>
+          <div className="card-title">Registros e Carga Sintomática</div>
+          <div className="card-sub">Padrões observados entre semanas com mais registros de hábitos e a carga sintomática no mesmo período.</div>
+        </div>
+      </div>
+      <div className="card-body" style={{ paddingTop: 0 }}>
+        <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 12 }}>
+          "Nas semanas com registros de hábitos mais frequentes, a carga sintomática nos registros pareceu menor."
+        </div>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{
+            fontSize: 10, fontWeight: 600, letterSpacing: .5, textTransform: 'uppercase',
+            color: 'var(--text4)', marginBottom: 3,
+          }}>
+            Semanas com registros mais frequentes
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+            Carga sintomática: <strong style={{ color: 'var(--dark)' }}>{cargaAltaPresenca}%</strong> dos dias
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+            Diferença observada: {delta} pontos percentuais em relação às semanas com menos registros
+          </div>
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text4)' }}>
+          {nSemanasAlta} semanas com registros frequentes · {nSemanasBaixa} com menos registros
+        </div>
+        <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
+          Associações observadas nos registros. Não indica relação causal. Presença de registros não equivale a adesão aos hábitos.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Cabeçalho de estágio ───────────────────────────────────────────────────────
 function EstagioHeader({ dadosBase }) {
   const isConsolidado = dadosBase.estagio === 'consolidado';
@@ -422,8 +463,9 @@ function EstagioHeader({ dadosBase }) {
 
 // ── Componente principal ───────────────────────────────────────────────────────
 export default function PerfilBiologico({ pacienteId }) {
-  const [resultado, setResultado] = useState(null);
-  const [formacaoAberto, setFormacaoAberto] = useState(false);
+  const [resultado,        setResultado]        = useState(null);
+  const [registrosHabitos, setRegistrosHabitos] = useState(null);
+  const [formacaoAberto,   setFormacaoAberto]   = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -432,7 +474,7 @@ export default function PerfilBiologico({ pacienteId }) {
       corte.setDate(corte.getDate() - 180);
       const c180 = corte.toISOString().slice(0, 10);
 
-      const [sintomasRes, periodosRes, intestinoRes] = await Promise.all([
+      const [sintomasRes, periodosRes, intestinoRes, habitosRes] = await Promise.all([
         supabase.from('ciclo_sintomas_diarios')
           .select('data, humor, energia, sono, foco, libido, irritabilidade, ansiedade, compulsao, acne, retencao, inchaco, dor_cabeca, dor_pelvica, insonia, acorda_madrugada, choro, intestino')
           .eq('paciente_id', pacienteId)
@@ -447,6 +489,10 @@ export default function PerfilBiologico({ pacienteId }) {
           .eq('paciente_id', pacienteId)
           .eq('tipo', 'diario')
           .gte('data', c180),
+        supabase.from('habitos_logs')
+          .select('data, habito_id, valor')
+          .eq('paciente_id', pacienteId)
+          .gte('data', c180),
       ]);
 
       if (!active) return;
@@ -454,6 +500,10 @@ export default function PerfilBiologico({ pacienteId }) {
         sintomas:      sintomasRes.data  ?? [],
         periodos:      periodosRes.data  ?? [],
         intestinoLogs: intestinoRes.data ?? [],
+      }));
+      setRegistrosHabitos(calcularRegistrosCarga({
+        sintomas:    sintomasRes.data ?? [],
+        habitosLogs: habitosRes.data  ?? [],
       }));
     }
     load();
@@ -715,6 +765,9 @@ export default function PerfilBiologico({ pacienteId }) {
           )}
         </div>
       )}
+
+      {/* ── Registros e Carga Sintomática ── */}
+      {registrosHabitos?.disponivel && <RegistrosECargaCard dados={registrosHabitos} />}
     </>
   );
 }
