@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { dataBR } from '../../lib/utils.js';
+import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
+import { mapearEvidencias } from '../../lib/evidenciasConduta.js';
 
 const ORIGENS = [
   { v: '',         label: '— sem origem —' },
@@ -36,6 +38,35 @@ export default function Condutas({ pacienteId, nutriId, pacienteNome }) {
   const [editId, setEditId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [perfilResult, setPerfilResult] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    async function loadPerfil() {
+      const corte = new Date();
+      corte.setDate(corte.getDate() - 180);
+      const c180 = corte.toISOString().slice(0, 10);
+      const [sintomasRes, periodosRes, intestinoRes] = await Promise.all([
+        supabase.from('ciclo_sintomas_diarios')
+          .select('data, humor, energia, sono, foco, libido, irritabilidade, ansiedade, compulsao, acne, retencao, inchaco, dor_cabeca, dor_pelvica, insonia, acorda_madrugada, choro, intestino')
+          .eq('paciente_id', pacienteId).gte('data', c180).order('data', { ascending: false }),
+        supabase.from('ciclo_periodos')
+          .select('id, inicio, fim')
+          .eq('paciente_id', pacienteId).order('inicio', { ascending: false }),
+        supabase.from('intestino_logs')
+          .select('data, tipo, bristol, evacuou, esvaziamento_incompleto, dor_abdominal, estufamento')
+          .eq('paciente_id', pacienteId).eq('tipo', 'diario').gte('data', c180),
+      ]);
+      if (!active) return;
+      setPerfilResult(calcularPerfilBiologico({
+        sintomas:      sintomasRes.data  ?? [],
+        periodos:      periodosRes.data  ?? [],
+        intestinoLogs: intestinoRes.data ?? [],
+      }));
+    }
+    loadPerfil();
+    return () => { active = false; };
+  }, [pacienteId]);
 
   async function carregar() {
     const { data } = await supabase.from('condutas')
@@ -269,6 +300,7 @@ export default function Condutas({ pacienteId, nutriId, pacienteNome }) {
             editandoId={editId}
             onEditar={() => abrirEditar(c)}
             onExcluir={() => excluir(c)}
+            perfilResult={c.is_atual ? perfilResult : null}
           />
         ))
       )}
@@ -276,9 +308,57 @@ export default function Condutas({ pacienteId, nutriId, pacienteNome }) {
   );
 }
 
+// ── Bloco de evidências ───────────────────────────────────────────────────────
+function EvidenciasBlock({ evidencias, objetivoPrincipal }) {
+  if (!evidencias || evidencias.length === 0) return null;
+  return (
+    <div style={{
+      marginTop: 14, padding: '12px 14px', borderRadius: 8,
+      background: 'var(--bg2)',
+    }}>
+      <div style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+        color: 'var(--text4)', marginBottom: objetivoPrincipal ? 5 : 8,
+      }}>
+        Registros que apontam para este objetivo
+      </div>
+      {objetivoPrincipal && (
+        <div style={{
+          fontSize: 11, color: 'var(--text3)', fontStyle: 'italic',
+          marginBottom: 9, lineHeight: 1.4,
+        }}>
+          "{objetivoPrincipal}"
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {evidencias.map((ev, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <span style={{
+              fontSize: 9, fontWeight: 600, letterSpacing: .3, textTransform: 'uppercase',
+              background: '#fef9e7', color: 'var(--amber)',
+              padding: '2px 7px', borderRadius: 20, flexShrink: 0, marginTop: 1, whiteSpace: 'nowrap',
+            }}>
+              {ev.label}
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5 }}>
+              {ev.detalhe}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div style={{
+        marginTop: 10, fontSize: 9, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5,
+      }}>
+        Baseado nos registros dos últimos 180 dias. Não representa avaliação diagnóstica. A interpretação clínica é da nutricionista.
+      </div>
+    </div>
+  );
+}
+
 // ── Card de conduta ────────────────────────────────────────────────────────
-function CondutaCard({ conduta: c, editandoId, onEditar, onExcluir }) {
-  const editando = editandoId === c.id;
+function CondutaCard({ conduta: c, editandoId, onEditar, onExcluir, perfilResult }) {
+  const editando  = editandoId === c.id;
+  const evidencias = perfilResult ? mapearEvidencias({ conduta: c, perfilResult }) : [];
 
   return (
     <div className="card" style={{
@@ -347,6 +427,7 @@ function CondutaCard({ conduta: c, editandoId, onEditar, onExcluir }) {
             Sem detalhes registrados.
           </div>
         )}
+        <EvidenciasBlock evidencias={evidencias} objetivoPrincipal={c.objetivo_principal} />
       </div>
     </div>
   );
