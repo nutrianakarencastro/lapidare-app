@@ -9,6 +9,7 @@ import {
   proximaDataAgendamento,
   labelFrequencia,
 } from '../../lib/checkinDefault.js';
+import { processarAgendamentosVencidos } from '../../lib/checkinScheduler.js';
 import CheckinForm from '../../components/CheckinForm.jsx';
 import DicaJSON from '../../components/DicaJSON.jsx';
 
@@ -85,8 +86,11 @@ export default function Checkins() {
     if (!user || processadoRef.current) return;
     if (agendamentos.length === 0) return;
     processadoRef.current = true;
-    processarAgendamentosVencidos(user.id, agendamentos, mostraToast).then(executados => {
-      if (executados > 0) carregar();
+    processarAgendamentosVencidos(user.id, agendamentos).then(executados => {
+      if (executados > 0) {
+        mostraToast(`${executados} check-in${executados === 1 ? '' : 's'} disparado${executados === 1 ? '' : 's'} automaticamente`);
+        carregar();
+      }
     });
   }, [agendamentos.length, user]);
 
@@ -434,51 +438,7 @@ export default function Checkins() {
 /* ============================================================
    PROCESSADOR DE AGENDAMENTOS (executa no client)
    ============================================================ */
-async function processarAgendamentosVencidos(nutriId, agendamentos, mostraToast) {
-  const hoje = new Date().toISOString().slice(0, 10);
-  let total = 0;
-
-  for (const ag of agendamentos) {
-    if (!ag.ativo) continue;
-    if (ag.proximo_envio > hoje) continue;
-    if (!ag.template?.perguntas) continue;
-
-    // Tenta "reservar" o agendamento — só processa se ninguém atualizou primeiro
-    const nova = proximaDataAgendamento(hoje, ag.frequencia);
-    const { data: claim } = await supabase
-      .from('checkin_agendamentos')
-      .update({ proximo_envio: nova, ultimo_envio: new Date().toISOString() })
-      .eq('id', ag.id)
-      .lte('proximo_envio', hoje)
-      .select();
-
-    if (!claim || claim.length === 0) continue; // outra aba já processou
-
-    // Determina pacientes-alvo
-    let pacientesIds;
-    if (ag.paciente_id) {
-      pacientesIds = [ag.paciente_id];
-    } else {
-      const { data: pacs } = await supabase
-        .from('pacientes').select('id').eq('nutri_id', nutriId);
-      pacientesIds = (pacs ?? []).map(p => p.id);
-    }
-
-    if (pacientesIds.length === 0) continue;
-
-    // Cria envios
-    const linhas = pacientesIds.map(pid => ({
-      nutri_id: nutriId,
-      paciente_id: pid,
-      perguntas: ag.template.perguntas,
-    }));
-    const { error } = await supabase.from('checkin_envios').insert(linhas);
-    if (!error) total += pacientesIds.length;
-  }
-
-  if (total > 0) mostraToast(`${total} check-in${total === 1 ? '' : 's'} disparado${total === 1 ? '' : 's'} automaticamente`);
-  return total;
-}
+// processarAgendamentosVencidos movida para src/lib/checkinScheduler.js
 
 /* ============================================================
    SELETOR DE TEMPLATE INLINE (dropdown ao clicar Enviar)
@@ -1024,6 +984,7 @@ function AgendamentoEditor({ agendamento, templates, pacientes, nutriId, onClose
         <div>
           <label className="form-lbl">Frequência</label>
           <select value={frequencia} onChange={e => setFrequencia(e.target.value)}>
+            <option value="unico">Único (dispara uma vez)</option>
             <option value="semanal">Semanal (a cada 7 dias)</option>
             <option value="quinzenal">Quinzenal (a cada 14 dias)</option>
             <option value="mensal">Mensal</option>

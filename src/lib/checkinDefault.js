@@ -266,7 +266,7 @@ export function proximaDataAgendamento(fromDate, frequencia) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-const FREQ_LABEL = { semanal: 'Toda semana', quinzenal: 'Quinzenal', mensal: 'Mensal' };
+const FREQ_LABEL = { unico: 'Único', semanal: 'Toda semana', quinzenal: 'Quinzenal', mensal: 'Mensal' };
 export function labelFrequencia(f) { return FREQ_LABEL[f] ?? f; }
 
 /**

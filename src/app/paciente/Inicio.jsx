@@ -17,6 +17,7 @@ export default function Inicio() {
   const [exameRecente, setExameRecente] = useState(null);
   const [proximaConsulta, setProximaConsulta] = useState(null);
   const [checkinPendente, setCheckinPendente] = useState(null);
+  const [agendamentosAmanha, setAgendamentosAmanha] = useState([]);
   const [orientacoesNovas, setOrientacoesNovas] = useState(0);
   const [habitos, setHabitos] = useState([]);
   const [habitosLogs, setHabitosLogs] = useState({});  // { habito_id: valor }
@@ -31,9 +32,10 @@ export default function Inicio() {
     let active = true;
     async function load() {
       if (!user) return;
-      const agora = new Date().toISOString();
-      const hoje  = new Date().toISOString().slice(0, 10);
-      const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes] = await Promise.all([
+      const agora  = new Date().toISOString();
+      const hoje   = new Date().toISOString().slice(0, 10);
+      const amanha = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+      const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes, agAmRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em, pdf_path')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
@@ -83,6 +85,11 @@ export default function Inicio() {
           .select('id', { count: 'exact', head: true })
           .eq('paciente_id', user.id)
           .eq('status', 'nao_visualizada'),
+        supabase.from('checkin_agendamentos')
+          .select('id, frequencia, proximo_envio, template:checkin_templates(nome)')
+          .eq('paciente_id', user.id)
+          .eq('ativo', true)
+          .eq('proximo_envio', amanha),
       ]);
       if (!active) return;
       setPlano(planoRes.data?.dados ?? null);
@@ -90,6 +97,7 @@ export default function Inicio() {
       setCompras(comprasRes.data?.dados ?? null);
       setProximaConsulta(consultaRes.data ?? null);
       setCheckinPendente(checkinRes.data ?? null);
+      setAgendamentosAmanha(agAmRes.data ?? []);
       setOrientacoesNovas(orientacoesRes.count ?? 0);
       setExameRecente(examesRes.data ?? null);
 
@@ -698,6 +706,29 @@ export default function Inicio() {
             </div>
           </div>
           <i className="ti ti-chevron-right" style={{ fontSize: 18, color: ckUrgente ? 'var(--ink)' : 'var(--muted)', flexShrink: 0 }} aria-hidden="true"></i>
+        </div>
+      )}
+
+      {/* Lembrete de check-in agendado para amanhã */}
+      {agendamentosAmanha.length > 0 && (
+        <div style={{
+          margin: '0 16px 12px', padding: '12px 14px', borderRadius: 12,
+          background: 'var(--bg-soft)', border: '0.5px solid var(--hair)',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <i className="ti ti-calendar-event"
+            style={{ fontSize: 20, color: 'var(--gold-deep)', flexShrink: 0 }}
+            aria-hidden="true" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>
+              Check-in agendado para amanhã.
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+              {agendamentosAmanha.length === 1
+                ? (agendamentosAmanha[0].template?.nome ?? 'Check-in')
+                : `${agendamentosAmanha.length} check-ins agendados`}
+            </div>
+          </div>
         </div>
       )}
 

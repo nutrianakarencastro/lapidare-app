@@ -7,7 +7,8 @@ import {
   validarPlano, validarLista, contarItensLista,
 } from '../../lib/utils.js';
 import { PLANOS, OBJETIVOS, MODALIDADES } from '../../lib/opcoesClinicas.js';
-import { TEMPLATE_PADRAO } from '../../lib/checkinDefault.js';
+import { TEMPLATE_PADRAO, labelFrequencia } from '../../lib/checkinDefault.js';
+import { processarAgendamentosVencidos, executarAgendamento } from '../../lib/checkinScheduler.js';
 import CheckinForm from '../../components/CheckinForm.jsx';
 import Evolucao from './_Evolucao.jsx';
 import FollowUp from './_FollowUp.jsx';
@@ -666,38 +667,64 @@ export default function PacientePerfil() {
 }
 
 /* ============================================================
-   CHECK-IN — envio rápido + histórico desta paciente
-   (gerenciamento de templates fica em /nutri/checkins)
+   CHECK-IN — agendamentos + envio rápido + histórico
    ============================================================ */
 function CheckinPersonalizado({ pacienteId, nutriId, pacienteNome }) {
   const navigate = useNavigate();
-  const [templates, setTemplates] = useState([]);
-  const [envios, setEnvios] = useState([]);
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  // ── Envio imediato ─────────────────────────────────────────
+  const [templates,   setTemplates]   = useState([]);
+  const [envios,      setEnvios]      = useState([]);
   const [templateSel, setTemplateSel] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [aviso, setAviso] = useState(null);
+  const [busy,        setBusy]        = useState(false);
+  const [aviso,       setAviso]       = useState(null);
+
+  // ── Agendamentos ───────────────────────────────────────────
+  const [agendamentos,  setAgendamentos]  = useState([]);
+  const [agendandoNovo, setAgendandoNovo] = useState(false);
+  const [formAg, setFormAg] = useState({ template_id: '', frequencia: 'unico', proximo_envio: hoje });
+  const [salvandoAg,    setSalvandoAg]    = useState(false);
+  const [executando,    setExecutando]    = useState(null); // id do ag sendo executado
 
   async function carregar() {
-    const [tplRes, envRes] = await Promise.all([
+    const [tplRes, envRes, agRes] = await Promise.all([
       supabase.from('checkin_templates').select('*')
         .eq('nutri_id', nutriId)
         .or(`paciente_id.is.null,paciente_id.eq.${pacienteId}`)
         .order('created_at'),
       supabase.from('checkin_envios')
-        .select('id, enviado_em, respondido_em, lembrete_enviado_em, perguntas, respostas')
+        .select('id, enviado_em, respondido_em, lembrete_enviado_em, perguntas, respostas, nome')
         .eq('paciente_id', pacienteId)
         .order('enviado_em', { ascending: false })
         .limit(10),
+      supabase.from('checkin_agendamentos')
+        .select('*, template:checkin_templates(id, nome, perguntas)')
+        .eq('paciente_id', pacienteId)
+        .order('proximo_envio'),
     ]);
-    setTemplates(tplRes.data ?? []);
+    const tpls = tplRes.data ?? [];
+    setTemplates(tpls);
     setEnvios(envRes.data ?? []);
-    // pré-seleciona: personalizado dessa paciente > is_padrao > primeiro
-    const sel = (tplRes.data ?? []).find(t => t.paciente_id === pacienteId)
-             ?? (tplRes.data ?? []).find(t => t.is_padrao)
-             ?? (tplRes.data ?? [])[0];
+
+    const ags = agRes.data ?? [];
+    setAgendamentos(ags);
+
+    const sel = tpls.find(t => t.paciente_id === pacienteId)
+             ?? tpls.find(t => t.is_padrao)
+             ?? tpls[0];
     setTemplateSel(sel?.id ?? '');
+    if (sel) setFormAg(f => ({ ...f, template_id: sel.id }));
+
+    // Dispara agendamentos vencidos ao abrir o perfil (segundo ponto de trigger)
+    if (ags.length > 0) {
+      const executados = await processarAgendamentosVencidos(nutriId, ags);
+      if (executados > 0) carregar();
+    }
   }
   useEffect(() => { carregar(); }, [pacienteId, nutriId]);
+
+  // ── Envio imediato ─────────────────────────────────────────
 
   async function enviar() {
     setAviso(null);
@@ -705,45 +732,232 @@ function CheckinPersonalizado({ pacienteId, nutriId, pacienteNome }) {
     if (!tpl) return setAviso({ tipo: 'erro', msg: 'Selecione um template.' });
     setBusy(true);
     const { error } = await supabase.from('checkin_envios').insert({
-      nutri_id: nutriId,
-      paciente_id: pacienteId,
-      perguntas: tpl.perguntas,
+      nutri_id: nutriId, paciente_id: pacienteId, perguntas: tpl.perguntas, nome: tpl.nome,
     });
     setBusy(false);
     if (error) return setAviso({ tipo: 'erro', msg: error.message });
-    setAviso({ tipo: 'ok', msg: `Check-in "${tpl.nome}" enviado para ${pacienteNome.split(' ')[0]}.` });
+    setAviso({ tipo: 'ok', msg: `Check-in "${tpl.nome}" enviado.` });
     carregar();
   }
 
   async function reenviarLembrete(envio) {
-    const { error } = await supabase
-      .from('checkin_envios')
-      .update({ lembrete_enviado_em: new Date().toISOString() })
-      .eq('id', envio.id);
+    const { error } = await supabase.from('checkin_envios')
+      .update({ lembrete_enviado_em: new Date().toISOString() }).eq('id', envio.id);
     if (error) return setAviso({ tipo: 'erro', msg: error.message });
     setAviso({ tipo: 'ok', msg: 'Lembrete enviado.' });
     carregar();
   }
 
+  // ── Agendamentos ───────────────────────────────────────────
+
+  async function criarAgendamento() {
+    if (!formAg.template_id) return setAviso({ tipo: 'erro', msg: 'Selecione um template.' });
+    if (!formAg.proximo_envio) return setAviso({ tipo: 'erro', msg: 'Defina a data.' });
+    setSalvandoAg(true);
+    const { error } = await supabase.from('checkin_agendamentos').insert({
+      nutri_id:     nutriId,
+      paciente_id:  pacienteId,
+      template_id:  formAg.template_id,
+      frequencia:   formAg.frequencia,
+      proximo_envio: formAg.proximo_envio,
+      ativo:        true,
+    });
+    setSalvandoAg(false);
+    if (error) return setAviso({ tipo: 'erro', msg: error.message });
+    setAgendandoNovo(false);
+    setFormAg({ template_id: formAg.template_id, frequencia: 'unico', proximo_envio: hoje });
+    setAviso({ tipo: 'ok', msg: 'Check-in agendado.' });
+    carregar();
+  }
+
+  async function pausarAgendamento(ag) {
+    await supabase.from('checkin_agendamentos')
+      .update({ ativo: !ag.ativo }).eq('id', ag.id);
+    carregar();
+  }
+
+  async function excluirAgendamento(ag) {
+    if (!window.confirm('Excluir este agendamento?')) return;
+    await supabase.from('checkin_agendamentos').delete().eq('id', ag.id);
+    carregar();
+  }
+
+  async function executarAgora(ag) {
+    setExecutando(ag.id);
+    const result = await executarAgendamento(ag, nutriId);
+    setExecutando(null);
+    if (result.error) return setAviso({ tipo: 'erro', msg: result.error });
+    setAviso({ tipo: 'ok', msg: `Check-in "${ag.template?.nome}" enviado agora.` });
+    carregar();
+  }
+
+  // Último check-in respondido (para exibição nos cards)
+  const ultimoRespondido = envios.find(e => e.respondido_em);
+  const diasDesdeUltimo = ultimoRespondido
+    ? Math.floor((Date.now() - new Date(ultimoRespondido.respondido_em).getTime()) / 86_400_000)
+    : null;
+
+  const inpSt = {
+    width: '100%', boxSizing: 'border-box',
+    padding: '7px 10px', borderRadius: 6,
+    border: '0.5px solid var(--border, #e0dbd4)',
+    fontSize: 13, fontFamily: 'var(--font-sans)',
+    background: 'var(--white)', color: 'var(--dark)',
+  };
+
   return (
     <>
+      {/* ── Agendamentos ──────────────────────────────────────── */}
+      <div className="section-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Check-ins agendados</span>
+        <button className="btn-outline" style={{ fontSize: 12, padding: '3px 10px' }}
+          onClick={() => { setAgendandoNovo(v => !v); setAviso(null); }}>
+          <i className="ti ti-calendar-plus" aria-hidden="true"></i>
+          {agendandoNovo ? ' Cancelar' : ' Agendar'}
+        </button>
+      </div>
+
+      {/* Modal de novo agendamento */}
+      {agendandoNovo && (
+        <div className="card" style={{ marginBottom: 12, padding: 14 }}>
+          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 12 }}>Novo agendamento</div>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Modelo</div>
+            <select style={inpSt} value={formAg.template_id}
+              onChange={e => setFormAg(f => ({ ...f, template_id: e.target.value }))}>
+              <option value="">— selecione —</option>
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>
+                  {t.nome}{t.is_padrao ? ' · padrão' : ''}{t.paciente_id === pacienteId ? ' · personalizado' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Frequência</div>
+              <select style={inpSt} value={formAg.frequencia}
+                onChange={e => setFormAg(f => ({ ...f, frequencia: e.target.value }))}>
+                <option value="unico">Único</option>
+                <option value="semanal">Semanal</option>
+                <option value="quinzenal">Quinzenal</option>
+                <option value="mensal">Mensal</option>
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
+                {formAg.frequencia === 'unico' ? 'Data de envio' : 'Próximo envio'}
+              </div>
+              <input type="date" style={inpSt} value={formAg.proximo_envio}
+                onChange={e => setFormAg(f => ({ ...f, proximo_envio: e.target.value }))} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn" onClick={criarAgendamento} disabled={salvandoAg}>
+              {salvandoAg ? 'Agendando…' : 'Agendar'}
+            </button>
+            <button className="btn-outline" onClick={() => setAgendandoNovo(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {agendamentos.length === 0 && !agendandoNovo ? (
+        <div className="card empty-card" style={{ marginBottom: 12 }}>
+          <i className="ti ti-calendar-off empty-icon" style={{ fontSize: 24 }} aria-hidden="true"></i>
+          <div className="empty-sub">Nenhum check-in agendado para esta paciente.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          {agendamentos.map(ag => {
+            const vencido = ag.ativo && ag.proximo_envio <= hoje;
+            return (
+              <div key={ag.id} className="card" style={{
+                padding: 14, opacity: ag.ativo ? 1 : .6,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{
+                    width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+                    background: ag.ativo ? 'var(--green-bg)' : 'var(--bg2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <i className={`ti ti-${ag.ativo ? 'calendar-check' : 'calendar-x'}`}
+                      style={{ fontSize: 17, color: ag.ativo ? 'var(--green)' : 'var(--text3)' }}
+                      aria-hidden="true" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>
+                      {ag.template?.nome ?? 'Template removido'}
+                      {!ag.ativo && <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6, fontWeight: 400 }}>pausado</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                      {labelFrequencia(ag.frequencia)}
+                      {ag.ativo && (
+                        <>
+                          {' · '}
+                          {vencido
+                            ? <span style={{ color: 'var(--orange)' }}>vencido em {dataBR(ag.proximo_envio)}</span>
+                            : <>próximo: <strong>{dataBR(ag.proximo_envio)}</strong></>
+                          }
+                        </>
+                      )}
+                    </div>
+                    {diasDesdeUltimo !== null && (
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>
+                        Último check-in respondido: {diasDesdeUltimo === 0 ? 'hoje' : `há ${diasDesdeUltimo} dia${diasDesdeUltimo !== 1 ? 's' : ''}`}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                  {ag.ativo && (
+                    <button
+                      className="btn"
+                      style={{ fontSize: 11, padding: '4px 10px' }}
+                      disabled={executando === ag.id || !ag.template?.perguntas}
+                      onClick={() => executarAgora(ag)}
+                      title="Enviar este check-in agora, independente da data agendada">
+                      <i className="ti ti-send" aria-hidden="true"></i>
+                      {executando === ag.id ? ' Enviando…' : ' Executar agora'}
+                    </button>
+                  )}
+                  <button className="btn-outline" style={{ fontSize: 11, padding: '4px 10px' }}
+                    onClick={() => pausarAgendamento(ag)}>
+                    <i className={`ti ti-${ag.ativo ? 'player-pause' : 'player-play'}`} aria-hidden="true"></i>
+                    {ag.ativo ? ' Pausar' : ' Ativar'}
+                  </button>
+                  <button onClick={() => excluirAgendamento(ag)}
+                    style={{
+                      background: 'none', border: '0.5px solid var(--red)',
+                      borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
+                      color: 'var(--red)', fontSize: 11, marginLeft: 'auto',
+                    }}>
+                    <i className="ti ti-trash" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Envio imediato ────────────────────────────────────── */}
       <div className="card">
         <div className="card-header">
           <div>
-            <div className="card-title">Enviar check-in rápido</div>
+            <div className="card-title">Envio rápido</div>
             <div className="card-sub">
-              Templates ficam em <strong>Check-ins → Templates</strong>. Aqui você só escolhe e envia para {pacienteNome.split(' ')[0]}.
+              Envia imediatamente para {pacienteNome.split(' ')[0]}.
             </div>
           </div>
           <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px' }}
             onClick={() => navigate('/nutri/checkins')}>
-            <i className="ti ti-settings" aria-hidden="true"></i> Gerenciar
+            <i className="ti ti-settings" aria-hidden="true"></i> Templates
           </button>
         </div>
         <div className="card-body">
           {templates.length === 0 ? (
             <div style={{ fontSize: 14, color: 'var(--text3)' }}>
-              Nenhum template disponível. Crie em <strong>Check-ins → Templates</strong>.
+              Nenhum template. Crie em <strong>Check-ins → Templates</strong>.
             </div>
           ) : (
             <>
@@ -777,6 +991,7 @@ function CheckinPersonalizado({ pacienteId, nutriId, pacienteNome }) {
         </div>
       </div>
 
+      {/* ── Histórico ─────────────────────────────────────────── */}
       <div className="section-label">Últimos check-ins ({envios.length})</div>
       {envios.length === 0 ? (
         <div className="card empty-card">
@@ -786,7 +1001,7 @@ function CheckinPersonalizado({ pacienteId, nutriId, pacienteNome }) {
         <div className="card" style={{ padding: 0 }}>
           {envios.map((e, i) => {
             const respondeu = !!e.respondido_em;
-            const lembrado = !!e.lembrete_enviado_em;
+            const lembrado  = !!e.lembrete_enviado_em;
             return (
               <div key={e.id} style={{
                 display: 'flex', alignItems: 'center', gap: 12,
@@ -796,24 +1011,25 @@ function CheckinPersonalizado({ pacienteId, nutriId, pacienteNome }) {
                 <div style={{
                   width: 36, height: 36, borderRadius: 9,
                   background: respondeu ? 'var(--green-bg)' : (lembrado ? 'var(--orange-bg)' : 'var(--red-bg)'),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 }}>
-                  <i className={`ti ti-${respondeu ? 'check' : (lembrado ? 'bell' : 'clock')}`} style={{
-                    fontSize: 18,
-                    color: respondeu ? 'var(--green)' : (lembrado ? 'var(--orange)' : 'var(--red)'),
-                  }} aria-hidden="true"></i>
+                  <i className={`ti ti-${respondeu ? 'check' : (lembrado ? 'bell' : 'clock')}`}
+                    style={{ fontSize: 18, color: respondeu ? 'var(--green)' : (lembrado ? 'var(--orange)' : 'var(--red)') }}
+                    aria-hidden="true" />
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 500 }}>
-                    {respondeu ? `Respondeu em ${dataBR(e.respondido_em)}` : (lembrado ? 'Lembrete enviado' : 'Aguardando resposta')}
+                    {respondeu
+                      ? `Respondido em ${dataBR(e.respondido_em)}`
+                      : (lembrado ? 'Lembrete enviado' : 'Aguardando resposta')}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
-                    Enviado em {dataBR(e.enviado_em)} · {e.perguntas?.length ?? 0} perguntas
+                    {e.nome ? `${e.nome} · ` : ''}{dataBR(e.enviado_em)} · {e.perguntas?.length ?? 0} perguntas
                   </div>
                 </div>
                 {!respondeu && !lembrado && (
-                  <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', color: 'var(--orange)', borderColor: 'var(--orange)' }}
+                  <button className="btn-outline"
+                    style={{ fontSize: 12, padding: '4px 10px', color: 'var(--orange)', borderColor: 'var(--orange)' }}
                     onClick={() => reenviarLembrete(e)}>
                     <i className="ti ti-bell" aria-hidden="true"></i> Lembrete
                   </button>
