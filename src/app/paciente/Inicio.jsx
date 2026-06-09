@@ -18,6 +18,10 @@ export default function Inicio() {
   const [proximaConsulta, setProximaConsulta] = useState(null);
   const [checkinPendente, setCheckinPendente] = useState(null);
   const [agendamentosAmanha, setAgendamentosAmanha] = useState([]);
+  const [mostrarFormRemarcacao, setMostrarFormRemarcacao] = useState(false);
+  const [sugestaoData,          setSugestaoData]          = useState('');
+  const [obsRemarcacao,         setObsRemarcacao]         = useState('');
+  const [confirmandoConsulta,   setConfirmandoConsulta]   = useState(false);
   const [orientacoesNovas, setOrientacoesNovas] = useState(0);
   const [habitos, setHabitos] = useState([]);
   const [habitosLogs, setHabitosLogs] = useState({});  // { habito_id: valor }
@@ -40,7 +44,7 @@ export default function Inicio() {
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('consultas').select('id, data_hora, tipo, duracao_min, meet_link, links_extras')
+        supabase.from('consultas').select('id, data_hora, tipo, duracao_min, meet_link, links_extras, resposta_paciente, respondido_em, sugestao_remarcacao_data, obs_remarcacao, visualizado_em')
           .eq('paciente_id', user.id).eq('status', 'agendada')
           .gte('data_hora', agora).order('data_hora', { ascending: true }).limit(1).maybeSingle(),
         supabase.from('checkin_envios').select('id, enviado_em, lembrete_enviado_em, nome, tipo')
@@ -143,6 +147,13 @@ export default function Inicio() {
     return () => { active = false; };
   }, [user]);
 
+  // Marca a consulta como visualizada na primeira vez que o card aparece
+  useEffect(() => {
+    if (proximaConsulta?.id && !proximaConsulta.visualizado_em) {
+      supabase.rpc('paciente_visualizar_consulta', { p_consulta_id: proximaConsulta.id });
+    }
+  }, [proximaConsulta?.id]);
+
   const proximaRef = plano?.refeicoes?.find(r => !r.feita) ?? plano?.refeicoes?.[0] ?? null;
   const totalCompras = compras?.lista?.reduce((a, c) => a + (c.itens?.length ?? 0), 0) ?? 0;
 
@@ -157,6 +168,50 @@ export default function Inicio() {
     descricao: `Link da call: ${callUrl ?? ''}`,
     local: 'Online',
   }) : null;
+
+  // Regra das 24h para remarcação
+  const horasAteConsulta = proximaConsulta
+    ? (new Date(proximaConsulta.data_hora) - Date.now()) / 3_600_000
+    : 0;
+  const podeRemarcar  = horasAteConsulta > 24;
+  const amanhaCons    = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const maxSugestao   = proximaConsulta
+    ? new Date(new Date(proximaConsulta.data_hora).getTime() + 7 * 86_400_000).toISOString().slice(0, 10)
+    : '';
+
+  async function confirmarPresenca() {
+    setConfirmandoConsulta(true);
+    const { error } = await supabase.rpc('paciente_confirmar_consulta', {
+      p_consulta_id: proximaConsulta.id,
+      p_resposta:    'confirmada',
+    });
+    setConfirmandoConsulta(false);
+    if (!error) {
+      setProximaConsulta(c => ({ ...c, resposta_paciente: 'confirmada', respondido_em: new Date().toISOString() }));
+    }
+  }
+
+  async function solicitarRemarcacao() {
+    if (!sugestaoData) return;
+    setConfirmandoConsulta(true);
+    const { error } = await supabase.rpc('paciente_confirmar_consulta', {
+      p_consulta_id:              proximaConsulta.id,
+      p_resposta:                 'remarcacao_solicitada',
+      p_obs_remarcacao:           obsRemarcacao || null,
+      p_sugestao_remarcacao_data: sugestaoData,
+    });
+    setConfirmandoConsulta(false);
+    if (!error) {
+      setProximaConsulta(c => ({
+        ...c,
+        resposta_paciente:        'remarcacao_solicitada',
+        respondido_em:            new Date().toISOString(),
+        sugestao_remarcacao_data: sugestaoData,
+        obs_remarcacao:           obsRemarcacao || null,
+      }));
+      setMostrarFormRemarcacao(false);
+    }
+  }
 
   // Lembrete de check-in: se foi enviado pela nutri E ainda não respondido.
   // Se houver `lembrete_enviado_em`, fica em estilo "urgente" (gradiente forte).
@@ -822,6 +877,145 @@ export default function Inicio() {
                     {link.label || 'Link'}
                   </a>
                 ))}
+              </div>
+            )}
+
+            {/* ── Confirmação de presença ────────────────────── */}
+            {proximaConsulta.resposta_paciente === 'pendente' && !mostrarFormRemarcacao && (
+              <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}
+                onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={confirmarPresenca}
+                  disabled={confirmandoConsulta}
+                  style={{
+                    background: 'var(--green)', color: '#fff', border: 'none',
+                    borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 600,
+                    cursor: confirmandoConsulta ? 'default' : 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    opacity: confirmandoConsulta ? 0.7 : 1,
+                  }}>
+                  <i className="ti ti-check" aria-hidden="true" />
+                  {confirmandoConsulta ? 'Confirmando…' : 'Confirmar presença'}
+                </button>
+                <button
+                  onClick={() => podeRemarcar && setMostrarFormRemarcacao(true)}
+                  disabled={!podeRemarcar}
+                  title={!podeRemarcar ? 'Remarcações pelo app ficam disponíveis até 24h antes da consulta.' : undefined}
+                  style={{
+                    background: 'transparent',
+                    color: urgente ? 'var(--ink)' : 'var(--muted)',
+                    border: '0.5px solid ' + (urgente ? 'rgba(28,23,18,.4)' : 'var(--hair)'),
+                    borderRadius: 8, padding: '8px 14px', fontSize: 12,
+                    cursor: podeRemarcar ? 'pointer' : 'not-allowed',
+                    fontFamily: 'var(--font-sans)',
+                    opacity: podeRemarcar ? 1 : 0.5,
+                  }}>
+                  Preciso remarcar
+                </button>
+              </div>
+            )}
+            {proximaConsulta.resposta_paciente === 'pendente' && !podeRemarcar && !mostrarFormRemarcacao && (
+              <div style={{ marginTop: 4, fontSize: 11, color: urgente ? 'rgba(28,23,18,.6)' : 'var(--muted)' }}>
+                Remarcações pelo app ficam disponíveis até 24h antes da consulta.
+              </div>
+            )}
+
+            {/* ── Formulário de remarcação ───────────────────── */}
+            {mostrarFormRemarcacao && (
+              <div style={{ marginTop: 14 }} onClick={e => e.stopPropagation()}>
+                <div style={{ fontSize: 11, fontWeight: 500, marginBottom: 4,
+                  color: urgente ? 'var(--ink)' : 'var(--muted)' }}>
+                  Nova data sugerida *
+                </div>
+                <input
+                  type="date"
+                  min={amanhaCons}
+                  max={maxSugestao}
+                  value={sugestaoData}
+                  onChange={e => setSugestaoData(e.target.value)}
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '7px 10px', borderRadius: 7, fontSize: 13,
+                    border: '0.5px solid rgba(255,255,255,.4)',
+                    fontFamily: 'var(--font-sans)', marginBottom: 8,
+                    background: 'rgba(255,255,255,0.85)',
+                  }}
+                />
+                <div style={{ fontSize: 11, marginBottom: 4,
+                  color: urgente ? 'var(--ink)' : 'var(--muted)' }}>
+                  Observação (opcional)
+                </div>
+                <textarea
+                  value={obsRemarcacao}
+                  onChange={e => setObsRemarcacao(e.target.value)}
+                  placeholder="Explique o motivo, se quiser"
+                  rows={2}
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: '7px 10px', borderRadius: 7, fontSize: 13,
+                    border: '0.5px solid rgba(255,255,255,.4)',
+                    fontFamily: 'var(--font-sans)', resize: 'vertical', marginBottom: 8,
+                    background: 'rgba(255,255,255,0.85)',
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={solicitarRemarcacao}
+                    disabled={!sugestaoData || confirmandoConsulta}
+                    style={{
+                      background: 'var(--gold-deep)', color: '#fff', border: 'none',
+                      borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 600,
+                      cursor: (!sugestaoData || confirmandoConsulta) ? 'default' : 'pointer',
+                      fontFamily: 'var(--font-sans)',
+                      opacity: (!sugestaoData || confirmandoConsulta) ? 0.6 : 1,
+                    }}>
+                    {confirmandoConsulta ? 'Enviando…' : 'Confirmar remarcação'}
+                  </button>
+                  <button
+                    onClick={() => { setMostrarFormRemarcacao(false); setSugestaoData(''); setObsRemarcacao(''); }}
+                    style={{
+                      background: 'transparent',
+                      color: urgente ? 'var(--ink)' : 'var(--muted)',
+                      border: '0.5px solid ' + (urgente ? 'rgba(28,23,18,.4)' : 'var(--hair)'),
+                      borderRadius: 8, padding: '8px 12px', fontSize: 12,
+                      cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                    }}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Estado: confirmada ────────────────────────── */}
+            {proximaConsulta.resposta_paciente === 'confirmada' && (
+              <div style={{
+                marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 12, fontWeight: 500,
+                color: urgente ? 'var(--ink)' : 'var(--green)',
+              }}>
+                <i className="ti ti-circle-check" style={{ fontSize: 16 }} aria-hidden="true" />
+                Presença confirmada
+              </div>
+            )}
+
+            {/* ── Estado: remarcação solicitada ─────────────── */}
+            {proximaConsulta.resposta_paciente === 'remarcacao_solicitada' && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontSize: 12, fontWeight: 500,
+                  color: urgente ? 'var(--ink)' : 'var(--gold-deep)',
+                }}>
+                  <i className="ti ti-alert-triangle" style={{ fontSize: 15 }} aria-hidden="true" />
+                  Remarcação solicitada — aguardando contato da Dra.
+                </div>
+                {proximaConsulta.sugestao_remarcacao_data && (
+                  <div style={{ fontSize: 11, marginTop: 2,
+                    color: urgente ? 'rgba(28,23,18,.7)' : 'var(--muted)' }}>
+                    Sugestão enviada: {dataBR(proximaConsulta.sugestao_remarcacao_data)}
+                  </div>
+                )}
               </div>
             )}
           </div>

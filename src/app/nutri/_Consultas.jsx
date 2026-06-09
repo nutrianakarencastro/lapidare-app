@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
+import { dataBR } from '../../lib/utils.js';
 
 const TIPOS = [
   { v: 'primeira', label: '1ª Consulta' },
@@ -76,7 +77,7 @@ export default function ConsultasClinicas({ pacienteId, nutriId, pacienteNome, o
 
   async function carregar() {
     const { data } = await supabase.from('consultas')
-      .select('id, data_hora, tipo, status, obs, resumo, queixas_achados, objetivos_discutidos, proximos_passos, observacoes_internas')
+      .select('id, data_hora, tipo, status, obs, resumo, queixas_achados, objetivos_discutidos, proximos_passos, observacoes_internas, resposta_paciente, respondido_em, sugestao_remarcacao_data, obs_remarcacao, visualizado_em')
       .eq('paciente_id', pacienteId)
       .eq('nutri_id', nutriId)
       .neq('status', 'cancelada')
@@ -410,6 +411,31 @@ function ConsultaCard({ consulta: c, editandoId, onRegistrar, onEditar }) {
           <div style={{ fontSize: 12, color: 'var(--text3)' }}>
             {dataHoraLabel(c.data_hora)}
           </div>
+          {/* Badge de resposta da paciente */}
+          {isAtiva && c.resposta_paciente === 'confirmada' && (
+            <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <i className="ti ti-circle-check" style={{ fontSize: 13 }} aria-hidden="true" />
+              Paciente confirmou presença
+            </div>
+          )}
+          {isAtiva && c.resposta_paciente === 'remarcacao_solicitada' && (
+            <div style={{ marginTop: 3 }}>
+              <div style={{ fontSize: 11, color: 'var(--orange)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <i className="ti ti-alert-triangle" style={{ fontSize: 12 }} aria-hidden="true" />
+                Quer remarcar{c.sugestao_remarcacao_data ? ` para ${dataBR(c.sugestao_remarcacao_data)}` : ''}
+              </div>
+              {c.obs_remarcacao && (
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1, fontStyle: 'italic' }}>
+                  "{c.obs_remarcacao}"
+                </div>
+              )}
+            </div>
+          )}
+          {isAtiva && c.resposta_paciente === 'pendente' && c.visualizado_em && (
+            <div style={{ fontSize: 11, color: 'var(--text4)', marginTop: 3 }}>
+              Visualizado em {dataBR(c.visualizado_em)} · sem resposta
+            </div>
+          )}
         </div>
 
         <div style={{ flexShrink: 0 }}>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import {
-  dataConsultaBR, textoDias, iniciais,
+  dataConsultaBR, textoDias, iniciais, dataBR,
   linkCall, gerarLinkJitsi, gerarGoogleCalendarUrl, consultaEmBreve,
   gerarDiasCalendario, ehMesmoDia, mesAnoExtenso, DIAS_SEMANA_CURTOS,
 } from '../../lib/utils.js';
@@ -56,6 +56,7 @@ export default function Agenda() {
       .from('consultas')
       .select(`
         id, data_hora, duracao_min, tipo, status, obs, meet_link, links_extras,
+        resposta_paciente, respondido_em, sugestao_remarcacao_data, obs_remarcacao, visualizado_em,
         paciente:pacientes(id, nome)
       `)
       .eq('nutri_id', user.id)
@@ -384,6 +385,31 @@ function ConsultaRow({ c, isLast, isPast, isCanceled, onClick }) {
           {c.status === 'em_andamento' && ' · em andamento'}
           {c.status === 'realizada' && ' · ✓ realizada'}
         </div>
+        {/* Badge de resposta da paciente — apenas consultas futuras ativas */}
+        {!isPast && !isCanceled && c.resposta_paciente === 'confirmada' && (
+          <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <i className="ti ti-circle-check" style={{ fontSize: 13 }} aria-hidden="true" />
+            Paciente confirmou
+          </div>
+        )}
+        {!isPast && !isCanceled && c.resposta_paciente === 'remarcacao_solicitada' && (
+          <div style={{ marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: 'var(--orange)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <i className="ti ti-alert-triangle" style={{ fontSize: 12 }} aria-hidden="true" />
+              Quer remarcar{c.sugestao_remarcacao_data ? ` para ${dataBR(c.sugestao_remarcacao_data)}` : ''}
+            </div>
+            {c.obs_remarcacao && (
+              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1, fontStyle: 'italic' }}>
+                "{c.obs_remarcacao}"
+              </div>
+            )}
+          </div>
+        )}
+        {!isPast && !isCanceled && c.resposta_paciente === 'pendente' && c.visualizado_em && (
+          <div style={{ fontSize: 11, color: 'var(--text4)', marginTop: 2 }}>
+            Visualizado em {dataBR(c.visualizado_em)} · sem resposta
+          </div>
+        )}
       </div>
 
       {emBreve && link && (
