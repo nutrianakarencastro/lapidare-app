@@ -31,6 +31,8 @@ export default function Inicio() {
   const [cicloPeriodos,   setCicloPeriodos]   = useState([]);
   const [totalSupl,       setTotalSupl]       = useState(0);
   const [suplTomados,     setSuplTomados]     = useState(0);
+  const [suplData,        setSuplData]        = useState([]);
+  const [suplLogsHojeIds, setSuplLogsHojeIds] = useState(new Set());
 
   useEffect(() => {
     let active = true;
@@ -72,11 +74,12 @@ export default function Inicio() {
           .order('inicio', { ascending: false })
           .limit(6),
         supabase.from('suplementos')
-          .select('id', { count: 'exact', head: true })
+          .select('id, nome, horarios')
           .eq('paciente_id', user.id)
-          .eq('ativo', true),
+          .eq('ativo', true)
+          .order('ordem'),
         supabase.from('suplementos_logs')
-          .select('id', { count: 'exact', head: true })
+          .select('suplemento_id')
           .eq('paciente_id', user.id)
           .eq('data', hoje)
           .eq('tomado', true),
@@ -122,8 +125,12 @@ export default function Inicio() {
       );
       setFeedbackPendente(novoFeedback ? fb : null);
       setCicloPeriodos(cicloRes.data ?? []);
-      setTotalSupl(suplRes.count ?? 0);
-      setSuplTomados(suplLogsRes.count ?? 0);
+      const suplLista    = suplRes.data ?? [];
+      const suplLogsList = suplLogsRes.data ?? [];
+      setSuplData(suplLista);
+      setSuplLogsHojeIds(new Set(suplLogsList.map(l => l.suplemento_id)));
+      setTotalSupl(suplLista.length);
+      setSuplTomados(suplLogsList.length);
 
       // Calcula streak (dias seguidos com todos cumpridos)
       const todosLogs = logsHojeRes.data ?? [];
@@ -219,6 +226,16 @@ export default function Inicio() {
     }
   }
 
+  async function registrarSupl(suplId) {
+    const hoje = new Date().toISOString().slice(0, 10);
+    setSuplLogsHojeIds(prev => new Set([...prev, suplId]));
+    setSuplTomados(prev => prev + 1);
+    await supabase.from('suplementos_logs').upsert(
+      { suplemento_id: suplId, paciente_id: user.id, data: hoje, tomado: true },
+      { onConflict: 'suplemento_id,data' }
+    );
+  }
+
   // Lembrete de check-in: se foi enviado pela nutri E ainda não respondido.
   // Se houver `lembrete_enviado_em`, fica em estilo "urgente" (gradiente forte).
   const ckUrgente = !!checkinPendente?.lembrete_enviado_em;
@@ -302,6 +319,8 @@ export default function Inicio() {
     setJornada(j => ({ ...j, metas_semana: novas }));
     await supabase.rpc('paciente_marcar_meta', { p_metas: novas });
   }
+
+  const suplComHorario = suplData.filter(s => s.horarios?.length > 0);
 
   return (
     <>
@@ -481,6 +500,65 @@ export default function Inicio() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Suplementação de hoje ── */}
+      {suplComHorario.length > 0 && (
+        <div style={{
+          margin: '0 16px 14px', padding: 16,
+          background: 'var(--white)',
+          border: '0.5px solid var(--hair)',
+          borderRadius: 16,
+        }}>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            marginBottom: 12,
+          }}>
+            <div style={{
+              fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
+              color: 'var(--muted)', fontWeight: 500,
+            }}>
+              Suplementação de hoje
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+              {suplComHorario.filter(s => suplLogsHojeIds.has(s.id)).length} de {suplComHorario.length} registrados
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {suplComHorario.map(s => {
+              const tomado   = suplLogsHojeIds.has(s.id);
+              const horarios = (s.horarios ?? []).map(h => h.slice(0, 5)).join(' · ');
+              return (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>{s.nome}</div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{horarios}</div>
+                  </div>
+                  {tomado ? (
+                    <span style={{
+                      fontSize: 11, padding: '4px 10px', borderRadius: 20,
+                      color: 'var(--green)', fontWeight: 500,
+                      border: '0.5px solid var(--green)',
+                    }}>
+                      Registrado ✓
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => registrarSupl(s.id)}
+                      style={{
+                        fontSize: 11, padding: '4px 12px', borderRadius: 20,
+                        background: 'var(--gold-deep)', color: '#fff',
+                        border: 'none', cursor: 'pointer',
+                        fontFamily: 'var(--font-sans)', fontWeight: 500,
+                      }}>
+                      Registrar
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

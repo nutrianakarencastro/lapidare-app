@@ -72,6 +72,7 @@ export default function Suplementacao({ pacienteId, nutriId, pacienteNome }) {
       dose:             s.dose?.trim()             || null,
       posologia:        s.posologia?.trim()         || null,
       horario:          s.horario?.trim()           || null,
+      horarios:         s.horarios ?? [],
       duracao_prevista: s.duracao_prevista?.trim()  || null,
       link_compra:      s.link_compra?.trim()       || null,
       cupom_desconto:   s.cupom_desconto?.trim()    || null,
@@ -414,6 +415,7 @@ export default function Suplementacao({ pacienteId, nutriId, pacienteNome }) {
           <button className="btn"
             onClick={() => setEditar({
               novo: true, nome: '', marca: '', dose: '', posologia: '', horario: '',
+              horarios: [],
               duracao_prevista: '', link_compra: '', cupom_desconto: '',
               objetivo_clinico: [], obs: '', ativo: true,
             })}>
@@ -530,9 +532,23 @@ export default function Suplementacao({ pacienteId, nutriId, pacienteNome }) {
 function ModalSuplemento({ s, onClose, onSave, busy }) {
   const [form, setForm] = useState(() => ({
     objetivo_clinico: [],
+    horarios: [],
     ...s,
   }));
+  const [novoHorario, setNovoHorario] = useState('');
   const sv = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  function adicionarHorario() {
+    if (!novoHorario) return;
+    const atual = form.horarios ?? [];
+    if (atual.includes(novoHorario)) return;
+    sv('horarios', [...atual, novoHorario].sort());
+    setNovoHorario('');
+  }
+
+  function removerHorario(h) {
+    sv('horarios', (form.horarios ?? []).filter(x => x !== h));
+  }
 
   function toggleObj(id) {
     const atual = form.objetivo_clinico ?? [];
@@ -576,8 +592,48 @@ function ModalSuplemento({ s, onClose, onSave, busy }) {
             <input value={form.dose ?? ''} onChange={e => sv('dose', e.target.value)} placeholder="1 cápsula, 5g..." />
           </div>
           <div>
-            <label className="form-lbl">Horário</label>
-            <input value={form.horario ?? ''} onChange={e => sv('horario', e.target.value)} placeholder="Café da manhã, 08:00..." />
+            <label className="form-lbl">Horário (descrição)</label>
+            <input value={form.horario ?? ''} onChange={e => sv('horario', e.target.value)} placeholder="Café da manhã, antes de dormir…" />
+          </div>
+        </div>
+
+        {/* Horários de lembrete */}
+        <div style={{ marginBottom: 10 }}>
+          <label className="form-lbl">Horários de lembrete na home da paciente</label>
+          {(form.horarios ?? []).length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+              {(form.horarios ?? []).map(h => (
+                <span key={h} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  fontSize: 12, padding: '3px 8px', borderRadius: 16,
+                  background: 'var(--bg2)', border: '0.5px solid var(--border)',
+                  color: 'var(--dark)',
+                }}>
+                  {h.slice(0, 5)}
+                  <button type="button" onClick={() => removerHorario(h)} style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    padding: 0, color: 'var(--text4)', lineHeight: 1, fontSize: 12,
+                  }}>
+                    <i className="ti ti-x" aria-hidden="true" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type="time"
+              value={novoHorario}
+              onChange={e => setNovoHorario(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), adicionarHorario())}
+              style={{ flex: 1 }}
+            />
+            <button type="button" className="btn-outline" onClick={adicionarHorario} style={{ whiteSpace: 'nowrap' }}>
+              <i className="ti ti-plus" aria-hidden="true" /> Adicionar
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text4)', marginTop: 4 }}>
+            Aparece na seção "Suplementação de hoje" na home da paciente.
           </div>
         </div>
 

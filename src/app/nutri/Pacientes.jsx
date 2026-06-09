@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { dataBR, iniciais } from '../../lib/utils.js';
+import { PLANOS, OBJETIVOS, MODALIDADES } from '../../lib/opcoesClinicas.js';
 import ImportarCsv from './_ImportarCsv.jsx';
 
 export default function Pacientes() {
@@ -13,6 +14,8 @@ export default function Pacientes() {
   const [busca, setBusca] = useState('');
   const [importerOpen, setImporterOpen] = useState(false);
   const [showPendentes, setShowPendentes] = useState(false);
+  const [editandoPendente,  setEditandoPendente]  = useState(null);
+  const [salvandoPendente,  setSalvandoPendente]  = useState(false);
 
   async function carregar() {
     const [pacRes, pendRes] = await Promise.all([
@@ -23,7 +26,7 @@ export default function Pacientes() {
       supabase
         .from('pacientes_pendentes')
         .select('*')
-        .eq('status', 'pendente')
+        .in('status', ['pendente', 'enviado'])
         .order('created_at', { ascending: false }),
     ]);
     setPacientes(pacRes.data ?? []);
@@ -49,6 +52,27 @@ export default function Pacientes() {
   async function removerPendente(p) {
     if (!window.confirm(`Remover "${p.nome}" da lista de pendentes?`)) return;
     await supabase.from('pacientes_pendentes').delete().eq('id', p.id);
+    carregar();
+  }
+
+  function perfilPreparado(p) {
+    return !!(p.objetivo && p.tipo_plano && p.modalidade);
+  }
+
+  async function salvarPendente(form) {
+    setSalvandoPendente(true);
+    await supabase.from('pacientes_pendentes').update({
+      nome:       form.nome?.trim()     || null,
+      objetivo:   form.objetivo         || null,
+      tipo_plano: form.tipo_plano       || null,
+      modalidade: form.modalidade       || null,
+      whatsapp:   form.whatsapp?.trim() || null,
+      cpf:        form.cpf?.trim()      || null,
+      nascimento: form.nascimento       || null,
+      obs:        form.obs?.trim()      || null,
+    }).eq('id', form.id);
+    setSalvandoPendente(false);
+    setEditandoPendente(null);
     carregar();
   }
 
@@ -118,28 +142,46 @@ export default function Pacientes() {
               </tr>
             </thead>
             <tbody>
-              {pendentes.map(p => (
-                <tr key={p.id}>
-                  <td><strong>{p.nome}</strong></td>
-                  <td>{p.email}</td>
-                  <td>{p.objetivo ?? '—'}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <div style={{ display: 'inline-flex', gap: 6 }}>
-                      <button className="btn" style={{ fontSize: 10, padding: '4px 10px' }} onClick={() => copiarLinkSignup(p)}>
-                        <i className="ti ti-link" aria-hidden="true"></i> Copiar link
-                      </button>
-                      <button onClick={() => removerPendente(p)}
-                        style={{
-                          background: 'none', border: '0.5px solid var(--red)',
-                          borderRadius: 6, padding: '4px 8px',
-                          color: 'var(--red)', cursor: 'pointer',
-                        }}>
-                        <i className="ti ti-trash" aria-hidden="true"></i>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {pendentes.map(p => {
+                const preparado = perfilPreparado(p);
+                return (
+                  <tr key={p.id}>
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{p.nome}</div>
+                      <span style={{
+                        fontSize: 9, fontWeight: 600, letterSpacing: '.08em',
+                        textTransform: 'uppercase',
+                        color: preparado ? 'var(--green)' : 'var(--text4)',
+                      }}>
+                        {preparado ? 'Perfil preparado' : 'Perfil incompleto'}
+                      </span>
+                    </td>
+                    <td>{p.email}</td>
+                    <td>{p.objetivo ?? '—'}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: 6 }}>
+                        <button
+                          className="btn-outline"
+                          style={{ fontSize: 10, padding: '4px 10px' }}
+                          onClick={() => setEditandoPendente(p)}>
+                          <i className="ti ti-edit" aria-hidden="true"></i> Preparar perfil
+                        </button>
+                        <button className="btn" style={{ fontSize: 10, padding: '4px 10px' }} onClick={() => copiarLinkSignup(p)}>
+                          <i className="ti ti-link" aria-hidden="true"></i> Copiar link
+                        </button>
+                        <button onClick={() => removerPendente(p)}
+                          style={{
+                            background: 'none', border: '0.5px solid var(--red)',
+                            borderRadius: 6, padding: '4px 8px',
+                            color: 'var(--red)', cursor: 'pointer',
+                          }}>
+                          <i className="ti ti-trash" aria-hidden="true"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -149,6 +191,15 @@ export default function Pacientes() {
         <ImportarCsv
           onClose={() => setImporterOpen(false)}
           onImported={() => { carregar(); setShowPendentes(true); }}
+        />
+      )}
+
+      {editandoPendente && (
+        <ModalEditarPendente
+          p={editandoPendente}
+          onClose={() => setEditandoPendente(null)}
+          onSave={salvarPendente}
+          salvando={salvandoPendente}
         />
       )}
 
@@ -215,5 +266,117 @@ export default function Pacientes() {
         </div>
       )}
     </>
+  );
+}
+
+function ModalEditarPendente({ p, onClose, onSave, salvando }) {
+  const [form, setForm] = useState({ ...p });
+  const sv = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(28,23,18,.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 100, padding: 24,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--white)', borderRadius: 14, padding: 24,
+        maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto',
+        border: '0.5px solid var(--border)',
+        boxShadow: '0 8px 32px rgba(28,23,18,.12)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--dark)' }}>Preparar perfil</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text3)', padding: 4 }}>
+            <i className="ti ti-x" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        {/* Email — não editável */}
+        <div style={{
+          marginBottom: 14, padding: '8px 10px', borderRadius: 7,
+          background: 'var(--bg2)', border: '0.5px solid var(--border)',
+        }}>
+          <div style={{ fontSize: 10, color: 'var(--text4)', marginBottom: 2 }}>
+            Email — não editável (identifica o convite)
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text2)' }}>{p.email}</div>
+        </div>
+
+        {/* Nome */}
+        <div style={{ marginBottom: 10 }}>
+          <label className="form-lbl">Nome</label>
+          <input value={form.nome ?? ''} onChange={e => sv('nome', e.target.value)} />
+        </div>
+
+        {/* Objetivo + Plano */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <div>
+            <label className="form-lbl">Objetivo</label>
+            <select value={form.objetivo ?? ''} onChange={e => sv('objetivo', e.target.value)}>
+              <option value="">— Selecionar —</option>
+              {OBJETIVOS.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="form-lbl">Plano</label>
+            <select value={form.tipo_plano ?? ''} onChange={e => sv('tipo_plano', e.target.value)}>
+              <option value="">— Selecionar —</option>
+              {PLANOS.filter(pl => pl.v !== 'outro_livre').map(pl => (
+                <option key={pl.v} value={pl.v}>{pl.l}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Modalidade + Nascimento */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <div>
+            <label className="form-lbl">Modalidade</label>
+            <select value={form.modalidade ?? ''} onChange={e => sv('modalidade', e.target.value)}>
+              <option value="">— Selecionar —</option>
+              {MODALIDADES.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="form-lbl">Nascimento</label>
+            <input type="date" value={form.nascimento ?? ''} onChange={e => sv('nascimento', e.target.value)} />
+          </div>
+        </div>
+
+        {/* Telefone + CPF */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+          <div>
+            <label className="form-lbl">Telefone / WhatsApp</label>
+            <input value={form.whatsapp ?? ''} onChange={e => sv('whatsapp', e.target.value)} placeholder="(11) 99999-9999" />
+          </div>
+          <div>
+            <label className="form-lbl">CPF</label>
+            <input value={form.cpf ?? ''} onChange={e => sv('cpf', e.target.value)} placeholder="000.000.000-00" />
+          </div>
+        </div>
+
+        {/* Observações */}
+        <div style={{ marginBottom: 16 }}>
+          <label className="form-lbl">Observações internas</label>
+          <textarea
+            value={form.obs ?? ''}
+            onChange={e => sv('obs', e.target.value)}
+            rows={2}
+            placeholder="Anotações sobre a paciente..."
+            style={{ width: '100%', resize: 'vertical', minHeight: 52, boxSizing: 'border-box' }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-outline" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => onSave(form)} disabled={salvando}>
+            <i className="ti ti-check" aria-hidden="true"></i> {salvando ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
