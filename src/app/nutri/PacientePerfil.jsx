@@ -89,22 +89,13 @@ export default function PacientePerfil() {
   }
 
   async function copiarLinkAcesso() {
-    const { data: pendente } = await supabase
-      .from('pacientes_pendentes')
-      .select('token, status')
-      .eq('email', paciente.email)
-      .eq('nutri_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const jaRegistrada = !pendente || pendente.status === 'ativado';
-    const link = jaRegistrada
-      ? `${window.location.origin}/login`
-      : `${window.location.origin}/signup-paciente/${user.id}/${pendente.token}`;
-    const msg = jaRegistrada
-      ? 'Link de acesso copiado! A paciente já possui conta — ela deve acessar pelo login.'
-      : 'Link de convite copiado! A paciente ainda não criou sua conta.';
+    const temConta = paciente.status_app === 'ativa' || paciente.status_app === 'arquivada';
+    const link = temConta
+      ? `${window.location.origin}/paciente/login`
+      : `${window.location.origin}/signup-paciente/${user.id}/${paciente.token}`;
+    const msg = temConta
+      ? 'Link de acesso copiado. A paciente deve entrar pelo login.'
+      : 'Link de convite copiado. A paciente ainda não criou sua conta.';
 
     try {
       await navigator.clipboard.writeText(link);
@@ -113,6 +104,11 @@ export default function PacientePerfil() {
     }
     setMsgLink(msg);
     setTimeout(() => setMsgLink(null), 4000);
+
+    if (paciente.status_app === 'nao_convidada') {
+      await supabase.from('pacientes').update({ status_app: 'convite_enviado' }).eq('id', id);
+      carregar();
+    }
   }
 
   function mascaraCPF(cpf) {

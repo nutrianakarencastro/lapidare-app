@@ -20,16 +20,15 @@ export default function Cadastrar() {
 
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState(null);
-  const [sucesso, setSucesso] = useState(null);   // pendente criado (objeto)
+  const [sucesso, setSucesso] = useState(null);
   const [pendentes, setPendentes] = useState([]);
 
   async function carregarPendentes() {
     if (!user) return;
     const { data } = await supabase
-      .from('pacientes_pendentes')
+      .from('pacientes')
       .select('*')
-      .eq('nutri_id', user.id)
-      .neq('status', 'ativado')
+      .in('status_app', ['nao_convidada', 'convite_enviado'])
       .order('created_at', { ascending: false });
     setPendentes(data ?? []);
   }
@@ -64,11 +63,9 @@ export default function Cadastrar() {
       tipo_plano: tipoPlanoFinal,
       modalidade,
       obs:        obs.trim()  || null,
-      status:     'pendente',
     };
-    // upsert (caso já exista pendente com mesmo email, atualiza dados)
     const { data, error } = await supabase
-      .from('pacientes_pendentes')
+      .from('pacientes')
       .upsert(payload, { onConflict: 'nutri_id,email' })
       .select('*')
       .single();
@@ -80,30 +77,30 @@ export default function Cadastrar() {
     carregarPendentes();
   }
 
-  function linkDe(pendente) {
-    return `${window.location.origin}/signup-paciente/${user.id}/${pendente.token}`;
+  function linkDe(paciente) {
+    return `${window.location.origin}/signup-paciente/${user.id}/${paciente.token}`;
   }
 
-  function mensagemWhats(pendente) {
-    const link = linkDe(pendente);
-    const primeiroNome = pendente.nome.split(' ')[0];
+  function mensagemWhats(paciente) {
+    const link = linkDe(paciente);
+    const primeiroNome = paciente.nome.split(' ')[0];
     return encodeURIComponent(
       `Oi ${primeiroNome}! 😊\n\nPreparei seu acesso ao app de acompanhamento nutricional. Clica no link abaixo, cria sua senha e já entra:\n\n${link}\n\nQualquer dúvida, me chama por aqui!`
     );
   }
 
-  async function copiarLink(pendente) {
+  async function copiarLink(paciente) {
     try {
-      await navigator.clipboard.writeText(linkDe(pendente));
+      await navigator.clipboard.writeText(linkDe(paciente));
       alert('Link copiado!');
     } catch {
-      prompt('Copie o link abaixo:', linkDe(pendente));
+      prompt('Copie o link abaixo:', linkDe(paciente));
     }
   }
 
-  async function excluirPendente(pendente) {
-    if (!window.confirm(`Excluir cadastro pendente de "${pendente.nome}"?`)) return;
-    await supabase.from('pacientes_pendentes').delete().eq('id', pendente.id);
+  async function excluirPendente(paciente) {
+    if (!window.confirm(`Excluir cadastro de "${paciente.nome}"?`)) return;
+    await supabase.from('pacientes').delete().eq('id', paciente.id);
     carregarPendentes();
   }
 
@@ -172,10 +169,10 @@ export default function Cadastrar() {
           </button>
         </form>
 
-        {/* ─── Painel direito: sucesso recente OU instruções ─── */}
+        {/* ─── Painel direito ─── */}
         <div>
           {sucesso ? (
-            <CartaoSucesso pendente={sucesso}
+            <CartaoSucesso paciente={sucesso}
               link={linkDe(sucesso)}
               mensagemWhats={mensagemWhats(sucesso)}
               onCopiar={() => copiarLink(sucesso)}
@@ -196,7 +193,7 @@ export default function Cadastrar() {
 
           {/* ─── Lista de pendentes ─── */}
           <div className="section-label" style={{ marginTop: 4 }}>
-            Cadastros pendentes ({pendentes.length})
+            Aguardando ativação ({pendentes.length})
           </div>
           {pendentes.length === 0 ? (
             <div style={{
@@ -221,11 +218,11 @@ export default function Cadastrar() {
                     </div>
                     <span style={{
                       fontSize: 10, padding: '2px 8px', borderRadius: 999,
-                      background: p.status === 'enviado' ? 'var(--green-bg)' : 'var(--orange-bg)',
-                      color:      p.status === 'enviado' ? 'var(--green)'    : 'var(--orange)',
+                      background: p.status_app === 'convite_enviado' ? 'var(--green-bg)' : 'var(--orange-bg)',
+                      color:      p.status_app === 'convite_enviado' ? 'var(--green)'    : 'var(--orange)',
                       fontWeight: 500,
                     }}>
-                      {p.status === 'enviado' ? '✓ Link enviado' : 'Aguardando envio'}
+                      {p.status_app === 'convite_enviado' ? '✓ Link enviado' : 'Aguardando envio'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
@@ -237,8 +234,8 @@ export default function Cadastrar() {
                       href={`https://wa.me/?text=${mensagemWhats(p)}`}
                       target="_blank" rel="noreferrer"
                       onClick={async () => {
-                        await supabase.from('pacientes_pendentes')
-                          .update({ status: 'enviado' }).eq('id', p.id);
+                        await supabase.from('pacientes')
+                          .update({ status_app: 'convite_enviado' }).eq('id', p.id);
                         carregarPendentes();
                       }}
                       style={{ fontSize: 11, padding: '4px 10px', textDecoration: 'none' }}>
@@ -264,7 +261,7 @@ export default function Cadastrar() {
 }
 
 
-function CartaoSucesso({ pendente, link, mensagemWhats, onCopiar, onDispensar }) {
+function CartaoSucesso({ paciente, link, mensagemWhats, onCopiar, onDispensar }) {
   return (
     <div style={{
       padding: 16, borderRadius: 12,
@@ -276,7 +273,7 @@ function CartaoSucesso({ pendente, link, mensagemWhats, onCopiar, onDispensar })
       <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 8 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--green, #10b981)', marginBottom: 4 }}>
-            ✓ {pendente.nome.split(' ')[0]} cadastrada
+            ✓ {paciente.nome.split(' ')[0]} cadastrada
           </div>
           <div style={{ fontSize: 12, color: 'var(--text2)' }}>
             Agora envie o link abaixo. Ela só vai precisar criar a senha.

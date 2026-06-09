@@ -99,7 +99,7 @@ export default function ImportarCsv({ onClose, onImported }) {
       if (!email || !email.includes('@')) { errs.push(`Linha ${i + 2}: email inválido (${email || 'vazio'})`); return; }
       const obj = {
         nome, email,
-        whatsapp:   mapa.whatsapp   != null ? (row[mapa.whatsapp]   ?? '').trim() || null : null,
+        telefone:   mapa.whatsapp   != null ? (row[mapa.whatsapp]   ?? '').trim() || null : null,
         cpf:        mapa.cpf        != null ? (row[mapa.cpf]        ?? '').trim() || null : null,
         nascimento: mapa.nascimento != null ? parseDataBR(row[mapa.nascimento])           : null,
         objetivo:   mapa.objetivo   != null ? (row[mapa.objetivo]   ?? '').trim() || null : null,
@@ -118,7 +118,7 @@ export default function ImportarCsv({ onClose, onImported }) {
     const result = { ok: 0, falhas: 0, msgs: [] };
 
     for (const r of rows) {
-      const { error } = await supabase.from('pacientes_pendentes').upsert({
+      const { error } = await supabase.from('pacientes').upsert({
         nutri_id: user.id,
         ...r,
       }, { onConflict: 'nutri_id,email' });
@@ -272,9 +272,8 @@ export default function ImportarCsv({ onClose, onImported }) {
             )}
 
             <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 14, lineHeight: 1.6 }}>
-              <strong>O que acontece depois:</strong> as pacientes ficam em uma <strong>lista de pendentes</strong>.
-              Você envia para cada uma o link de cadastro em <strong>Cadastrar paciente</strong>.
-              Quando elas se cadastrarem, os dados importados (objetivo, plano, modalidade) já vêm pré-preenchidos.
+              <strong>O que acontece depois:</strong> as pacientes aparecem na lista principal com o badge <strong>Não convidada</strong>.
+              Envie o link de convite direto da lista ou em <strong>Cadastrar paciente</strong>.
             </div>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 14 }}>
