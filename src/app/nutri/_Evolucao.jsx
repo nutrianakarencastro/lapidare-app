@@ -22,7 +22,178 @@ async function signedUrl(path) {
   return data.signedUrl;
 }
 
-export default function Evolucao({ pacienteId, paciente, nutriId }) {
+function labelTipoConsulta(tipo) {
+  if (!tipo) return 'Consulta';
+  if (tipo === 'primeira') return 'Primeira consulta';
+  if (tipo === 'avaliacao') return 'Avaliação';
+  const m = tipo.match(/^consulta_(\d+)$/);
+  if (m) return `Consulta ${m[1]}`;
+  return tipo;
+}
+
+function EventosLista({ evs, setVerCheckin }) {
+  if (evs.length === 0) {
+    return (
+      <div style={{ padding: '14px 16px', fontSize: 13, color: 'var(--text3)' }}>
+        Nenhum registro neste período.
+      </div>
+    );
+  }
+  return (
+    <div style={{ position: 'relative', padding: '12px 12px 12px 34px' }}>
+      <div style={{
+        position: 'absolute', left: 19, top: 0, bottom: 0,
+        width: 2, background: 'var(--border)',
+      }} />
+      {evs.map((ev, i) => (
+        <div key={i} style={{ position: 'relative', marginBottom: i < evs.length - 1 ? 10 : 0 }}>
+          <div style={{
+            position: 'absolute', left: -20, top: 12,
+            width: 14, height: 14, borderRadius: '50%',
+            background: ev.cor,
+            border: '2px solid var(--white)',
+            boxShadow: '0 0 0 1px var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <i className={`ti ti-${ev.icon}`} style={{ fontSize: 8, color: 'var(--white)' }} aria-hidden="true" />
+          </div>
+          <div
+            className="card"
+            style={{ padding: '10px 12px', marginBottom: 0, cursor: ev.checkinId ? 'pointer' : 'default' }}
+            onClick={() => ev.checkinId && setVerCheckin(ev.checkin)}
+          >
+            <div style={{
+              fontSize: 10, color: ev.cor, letterSpacing: '.5px',
+              textTransform: 'uppercase', fontWeight: 600, marginBottom: 3,
+            }}>
+              {dataBR(ev.data)}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>{ev.titulo}</div>
+            {ev.desc && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{ev.desc}</div>}
+            {ev.checkinId && (
+              <div style={{ fontSize: 10, color: 'var(--gold-deep, #a08456)', marginTop: 3 }}>
+                toque para ver respostas →
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FaseBlock({ fase, setVerCheckin, onIrParaTab }) {
+  const [aberta, setAberta] = useState(fase.ativa);
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div
+        role="button"
+        onClick={() => setAberta(a => !a)}
+        style={{
+          padding: '14px 16px',
+          borderRadius: aberta ? '10px 10px 0 0' : 10,
+          background: fase.ativa ? 'var(--bg2)' : 'var(--white)',
+          border: '0.5px solid var(--border)',
+          borderLeft: fase.ativa ? '3px solid var(--amber, #d4a647)' : '0.5px solid var(--border)',
+          cursor: 'pointer', userSelect: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {fase.ativa && (
+              <div style={{
+                fontSize: 9, fontWeight: 600, letterSpacing: '.15em',
+                textTransform: 'uppercase',
+                color: 'var(--amber, #d4a647)', marginBottom: 4,
+              }}>
+                Período atual
+              </div>
+            )}
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--dark)', marginBottom: 2 }}>
+              {dataBR(fase.consulta.data_hora)}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+              {labelTipoConsulta(fase.consulta.tipo)}
+              {' · '}
+              {fase.ativa
+                ? `há ${fase.diasPeriodo} dia${fase.diasPeriodo !== 1 ? 's' : ''}`
+                : `${fase.diasPeriodo} dia${fase.diasPeriodo !== 1 ? 's' : ''}`}
+              {' · '}
+              {fase.eventos.length} evento{fase.eventos.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+            {onIrParaTab && (
+              <button
+                onClick={e => { e.stopPropagation(); onIrParaTab('consultas'); }}
+                style={{
+                  fontSize: 10, padding: '3px 8px', borderRadius: 5,
+                  background: 'none', border: '0.5px solid var(--border)',
+                  color: 'var(--text3)', cursor: 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                }}
+              >
+                <i className="ti ti-stethoscope" style={{ fontSize: 10 }} aria-hidden="true" />
+                Ver consulta
+              </button>
+            )}
+            <i
+              className={`ti ti-chevron-${aberta ? 'up' : 'down'}`}
+              style={{ fontSize: 14, color: 'var(--text3)' }}
+              aria-hidden="true"
+            />
+          </div>
+        </div>
+      </div>
+      {aberta && (
+        <div style={{
+          border: '0.5px solid var(--border)', borderTop: 'none',
+          borderRadius: '0 0 10px 10px', overflow: 'hidden',
+        }}>
+          <EventosLista evs={fase.eventos} setVerCheckin={setVerCheckin} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AntesDoInicioBlock({ eventos: evs, setVerCheckin }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <div style={{ marginBottom: 12, opacity: 0.75 }}>
+      <div
+        onClick={() => setAberto(a => !a)}
+        style={{
+          padding: '12px 16px', borderRadius: aberto ? '10px 10px 0 0' : 10,
+          background: 'var(--white)', border: '0.5px solid var(--border)',
+          cursor: 'pointer', userSelect: 'none',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>
+            Antes do início do acompanhamento
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+            {evs.length} evento{evs.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+        <i className={`ti ti-chevron-${aberto ? 'up' : 'down'}`} style={{ fontSize: 14, color: 'var(--text3)' }} aria-hidden="true" />
+      </div>
+      {aberto && (
+        <div style={{
+          border: '0.5px solid var(--border)', borderTop: 'none',
+          borderRadius: '0 0 10px 10px', overflow: 'hidden',
+        }}>
+          <EventosLista evs={evs} setVerCheckin={setVerCheckin} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Evolucao({ pacienteId, paciente, nutriId, onIrParaTab }) {
   const [carregando, setCarregando] = useState(true);
   const [avaliacoes, setAvaliacoes] = useState([]);
   const [fotos, setFotos] = useState([]);
@@ -173,6 +344,40 @@ export default function Evolucao({ pacienteId, paciente, nutriId }) {
     }
     return lst.sort((a, b) => b.data.localeCompare(a.data));  // mais recente primeiro
   }, [avaliacoes, fotos, checkins, planos, prescricoes, consultas]);
+
+  // Agrupa eventos em períodos clínicos derivados das consultas realizadas
+  const fases = useMemo(() => {
+    const realizadas = consultas
+      .filter(c => c.status === 'realizada')
+      .sort((a, b) => a.data_hora.localeCompare(b.data_hora));
+
+    if (realizadas.length === 0) return null;
+
+    const hoje = new Date().toISOString();
+    const semConsulta = eventos.filter(e => e.tipo !== 'consulta');
+
+    const grupos = realizadas.map((c, i) => {
+      const inicio = c.data_hora;
+      const fim    = realizadas[i + 1]?.data_hora ?? hoje;
+      const ativa  = i === realizadas.length - 1;
+      const diasPeriodo = Math.round(
+        (new Date(fim).getTime() - new Date(inicio).getTime()) / 86_400_000
+      );
+      return {
+        inicio, fim, ativa, diasPeriodo,
+        consulta: c,
+        eventos: semConsulta
+          .filter(e => e.data >= inicio && e.data < fim)
+          .sort((a, b) => b.data.localeCompare(a.data)),
+      };
+    });
+
+    const antesDoInicio = semConsulta
+      .filter(e => e.data < realizadas[0].data_hora)
+      .sort((a, b) => b.data.localeCompare(a.data));
+
+    return { grupos: grupos.reverse(), antesDoInicio };
+  }, [consultas, eventos]);
 
   // ─── Renders auxiliares ───
   function HighlightCard({ titulo, atual, delta, unidade, melhorMenor = true }) {
@@ -404,67 +609,67 @@ export default function Evolucao({ pacienteId, paciente, nutriId }) {
         <div className="section-title">Linha do tempo</div>
         <span className="card-sub">mais recente primeiro</span>
       </div>
-      <div style={{ position: 'relative', paddingLeft: 28, marginTop: 8 }}>
-        {/* Linha vertical */}
-        <div style={{
-          position: 'absolute', left: 11, top: 0, bottom: 0,
-          width: 2, background: 'var(--border)',
-        }} />
-        {eventos.map((ev, i) => (
-          <div key={i} style={{ position: 'relative', marginBottom: 14 }}>
-            {/* Ponto */}
-            <div style={{
-              position: 'absolute', left: -22, top: 14,
-              width: 16, height: 16, borderRadius: '50%',
-              background: ev.cor,
-              border: '2px solid var(--white)',
-              boxShadow: '0 0 0 1px var(--border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <i className={`ti ti-${ev.icon}`} style={{ fontSize: 9, color: 'var(--white)' }} aria-hidden="true"></i>
-            </div>
-            {/* Card do evento */}
-            <div
-              className="card"
-              style={{
-                padding: '12px 14px', marginBottom: 0,
-                cursor: ev.checkinId ? 'pointer' : 'default',
-              }}
-              onClick={() => ev.checkinId && setVerCheckin(ev.checkin)}>
+
+      {fases !== null ? (
+        /* ── Timeline orientada por períodos clínicos ── */
+        <div style={{ marginTop: 8 }}>
+          {fases.grupos.map(fase => (
+            <FaseBlock
+              key={fase.consulta.id}
+              fase={fase}
+              setVerCheckin={setVerCheckin}
+              onIrParaTab={onIrParaTab}
+            />
+          ))}
+          {fases.antesDoInicio.length > 0 && (
+            <AntesDoInicioBlock
+              eventos={fases.antesDoInicio}
+              setVerCheckin={setVerCheckin}
+            />
+          )}
+        </div>
+      ) : (
+        /* ── Fallback: timeline flat (sem consultas realizadas) ── */
+        <div style={{ position: 'relative', paddingLeft: 28, marginTop: 8 }}>
+          <div style={{
+            position: 'absolute', left: 11, top: 0, bottom: 0,
+            width: 2, background: 'var(--border)',
+          }} />
+          {eventos.map((ev, i) => (
+            <div key={i} style={{ position: 'relative', marginBottom: 14 }}>
               <div style={{
-                fontSize: 10, color: ev.cor, letterSpacing: '.5px',
-                textTransform: 'uppercase', fontWeight: 600, marginBottom: 4,
+                position: 'absolute', left: -22, top: 14,
+                width: 16, height: 16, borderRadius: '50%',
+                background: ev.cor,
+                border: '2px solid var(--white)',
+                boxShadow: '0 0 0 1px var(--border)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                {dataBR(ev.data)}
+                <i className={`ti ti-${ev.icon}`} style={{ fontSize: 9, color: 'var(--white)' }} aria-hidden="true" />
               </div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>{ev.titulo}</div>
-              {ev.desc && (
-                <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3 }}>{ev.desc}</div>
-              )}
-              {ev.checkinId && (
-                <div style={{ fontSize: 10, color: 'var(--gold-deep, #a08456)', marginTop: 4 }}>
-                  toque para ver respostas →
-                </div>
-              )}
-            </div>
-            {ev.tipo === 'consulta' && i < eventos.length - 1 && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                marginTop: 10, marginBottom: -4,
-              }}>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                <span style={{
-                  fontSize: 9, letterSpacing: '.15em', textTransform: 'uppercase',
-                  color: 'var(--text4)', fontWeight: 500, whiteSpace: 'nowrap',
+              <div
+                className="card"
+                style={{ padding: '12px 14px', marginBottom: 0, cursor: ev.checkinId ? 'pointer' : 'default' }}
+                onClick={() => ev.checkinId && setVerCheckin(ev.checkin)}
+              >
+                <div style={{
+                  fontSize: 10, color: ev.cor, letterSpacing: '.5px',
+                  textTransform: 'uppercase', fontWeight: 600, marginBottom: 4,
                 }}>
-                  fase iniciada em {dataBR(ev.data)}
-                </span>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                  {dataBR(ev.data)}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>{ev.titulo}</div>
+                {ev.desc && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3 }}>{ev.desc}</div>}
+                {ev.checkinId && (
+                  <div style={{ fontSize: 10, color: 'var(--gold-deep, #a08456)', marginTop: 4 }}>
+                    toque para ver respostas →
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {uploadOpen && (
         <UploadFoto
