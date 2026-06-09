@@ -6,6 +6,164 @@ import { calcularLeituraConsistencia } from '../../lib/consistenciaUtils.js';
 import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
 import { gerarPontosAtencao } from '../../lib/visaoProspectiva.js';
 
+// ── Jornada Clínica ───────────────────────────────────────────────────────────
+// Leitura automática derivada das consultas. Responde: "onde está no tratamento?"
+function BlocoJornadaClinica({ pacienteId, ultCons, prox, metas }) {
+  const [dados, setDados] = useState(null);
+
+  useEffect(() => {
+    if (ultCons === undefined) return;
+    let active = true;
+    async function load() {
+      if (!ultCons) {
+        if (active) setDados({ semConsultas: true });
+        return;
+      }
+      const faseInicio = ultCons.data_hora.slice(0, 10);
+      const [consRes, condRes, ckRes, exRes] = await Promise.all([
+        supabase.from('consultas')
+          .select('id, data_hora')
+          .eq('paciente_id', pacienteId)
+          .eq('status', 'realizada')
+          .order('data_hora'),
+        supabase.from('condutas')
+          .select('id', { count: 'exact', head: true })
+          .eq('paciente_id', pacienteId)
+          .gte('data', faseInicio),
+        supabase.from('checkin_envios')
+          .select('respondido_em')
+          .eq('paciente_id', pacienteId)
+          .gte('enviado_em', ultCons.data_hora),
+        supabase.from('exames_pedidos')
+          .select('status')
+          .eq('paciente_id', pacienteId)
+          .gte('data_pedido', faseInicio),
+      ]);
+      if (!active) return;
+      const consultas = consRes.data ?? [];
+      const primeira  = consultas[0];
+      const totalSemanas = primeira
+        ? Math.round((Date.now() - new Date(primeira.data_hora).getTime()) / (7 * 86_400_000))
+        : 0;
+      const diasFase = Math.floor(
+        (Date.now() - new Date(ultCons.data_hora).getTime()) / 86_400_000
+      );
+      const ck = ckRes.data ?? [];
+      const ex = exRes.data ?? [];
+      setDados({
+        semConsultas:    false,
+        totalConsultas:  consultas.length,
+        totalSemanas,
+        diasFase,
+        condutasCount:   condRes.count ?? 0,
+        metasCount:      (metas ?? []).length,
+        ckEnviados:      ck.length,
+        ckRespondidos:   ck.filter(c => c.respondido_em !== null).length,
+        exSolicitados:   ex.filter(e => e.status === 'solicitado').length,
+        exRecebidos:     ex.filter(e => e.status === 'recebido').length,
+        exAvaliados:     ex.filter(e => e.status === 'avaliado').length,
+      });
+    }
+    load();
+    return () => { active = false; };
+  }, [pacienteId, ultCons, metas]);
+
+  const lbl = {
+    fontSize: 11, letterSpacing: 1, textTransform: 'uppercase',
+    color: 'var(--text3)', fontWeight: 500,
+  };
+  const val = { color: 'var(--dark)', fontWeight: 600 };
+
+  if (ultCons === undefined || dados === null) {
+    return (
+      <div className="card" style={{ padding: '14px 16px', marginBottom: 16, opacity: 0.55 }}>
+        <div style={lbl}>Jornada Clínica — carregando…</div>
+      </div>
+    );
+  }
+
+  if (dados.semConsultas) {
+    return (
+      <div className="card" style={{ padding: '14px 16px', marginBottom: 16 }}>
+        <div style={{ ...lbl, marginBottom: 6 }}>Jornada Clínica</div>
+        <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+          Nenhuma consulta realizada — a Jornada Clínica inicia após a primeira consulta.
+        </div>
+      </div>
+    );
+  }
+
+  const exTotal = dados.exSolicitados + dados.exRecebidos + dados.exAvaliados;
+
+  return (
+    <div className="card" style={{ padding: '16px', marginBottom: 16 }}>
+      <div style={{ ...lbl, marginBottom: 10 }}>Jornada Clínica</div>
+
+      {/* Consultas */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 20px', marginBottom: 6 }}>
+        <span style={{ fontSize: 13 }}>
+          <span style={{ color: 'var(--text3)' }}>Última consulta </span>
+          <span style={val}>{dataBR(ultCons.data_hora)}</span>
+        </span>
+        {prox && (
+          <span style={{ fontSize: 13 }}>
+            <span style={{ color: 'var(--text3)' }}>Próxima </span>
+            <span style={val}>{dataBR(prox.data_hora)}</span>
+          </span>
+        )}
+      </div>
+
+      {/* Tratamento */}
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
+        Em tratamento há{' '}
+        <span style={val}>{dados.totalSemanas} semana{dados.totalSemanas !== 1 ? 's' : ''}</span>
+        {' · '}
+        <span style={val}>{dados.totalConsultas}</span>
+        {' '}consulta{dados.totalConsultas !== 1 ? 's' : ''} realizada{dados.totalConsultas !== 1 ? 's' : ''}
+      </div>
+
+      {/* Fase atual */}
+      <div style={{
+        padding: '10px 12px', borderRadius: 8,
+        background: 'var(--bg2)', border: '0.5px solid var(--border)',
+      }}>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
+          Fase atual · há <strong style={{ color: 'var(--dark)' }}>{dados.diasFase}</strong> dia{dados.diasFase !== 1 ? 's' : ''} (desde {dataBR(ultCons.data_hora)})
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ fontSize: 12 }}>
+            <span style={{ color: 'var(--text3)' }}>Condutas </span>
+            <span style={val}>{dados.condutasCount}</span>
+          </div>
+          <div style={{ fontSize: 12 }}>
+            <span style={{ color: 'var(--text3)' }}>Metas ativas </span>
+            <span style={val}>{dados.metasCount}</span>
+          </div>
+          <div style={{ fontSize: 12 }}>
+            <span style={{ color: 'var(--text3)' }}>Check-ins </span>
+            {dados.ckEnviados === 0
+              ? <span style={{ color: 'var(--text4)' }}>nenhum enviado nesta fase</span>
+              : <><span style={val}>{dados.ckRespondidos} de {dados.ckEnviados}</span> respondidos</>
+            }
+          </div>
+          {exTotal > 0 && (
+            <div style={{ fontSize: 12 }}>
+              <span style={{ color: 'var(--text3)' }}>Exames </span>
+              <span style={val}>{dados.exSolicitados}</span> pedido{dados.exSolicitados !== 1 ? 's' : ''}
+              {dados.exRecebidos > 0 && (
+                <> · <span style={val}>{dados.exRecebidos}</span> resultado{dados.exRecebidos !== 1 ? 's' : ''}</>
+              )}
+              {dados.exAvaliados > 0 && (
+                <> · <span style={val}>{dados.exAvaliados}</span> avaliado{dados.exAvaliados !== 1 ? 's' : ''}</>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function tipoConsulta(tipo) {
   if (!tipo) return '—';
   if (tipo === 'primeira') return '1ª consulta';
@@ -194,6 +352,13 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
 
   return (
     <>
+      <BlocoJornadaClinica
+        pacienteId={pacienteId}
+        ultCons={ultCons}
+        prox={prox}
+        metas={metas}
+      />
+
       {/* ── Consultas ── */}
       <div className="g2">
         <div className="card" style={{ padding: '14px 16px' }}>

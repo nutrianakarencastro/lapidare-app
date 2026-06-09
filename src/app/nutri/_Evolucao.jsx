@@ -447,6 +447,21 @@ export default function Evolucao({ pacienteId, paciente, nutriId }) {
                 </div>
               )}
             </div>
+            {ev.tipo === 'consulta' && i < eventos.length - 1 && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                marginTop: 10, marginBottom: -4,
+              }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                <span style={{
+                  fontSize: 9, letterSpacing: '.15em', textTransform: 'uppercase',
+                  color: 'var(--text4)', fontWeight: 500, whiteSpace: 'nowrap',
+                }}>
+                  fase iniciada em {dataBR(ev.data)}
+                </span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              </div>
+            )}
           </div>
         ))}
       </div>
