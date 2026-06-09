@@ -446,7 +446,8 @@ function SheetRastreio({ onSalvar, onFechar, salvando }) {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function Intestino() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [logs, setLogs] = useState(null);
   const [logHoje, setLogHoje] = useState(null);
   const [solicitacaoPendente, setSolicitacaoPendente] = useState(null);
@@ -465,12 +466,12 @@ export default function Intestino() {
     const [logsRes, solRes] = await Promise.all([
       supabase.from('intestino_logs')
         .select('*')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .gte('data', dataInicio30)
         .order('data', { ascending: false }),
       supabase.from('intestino_rastreio_solicitacoes')
         .select('*')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .is('respondido_em', null)
         .order('solicitado_em', { ascending: false })
         .limit(1)
@@ -487,7 +488,7 @@ export default function Intestino() {
   async function salvarDiario(form) {
     setSalvando(true);
     const payload = {
-      paciente_id: user.id,
+      paciente_id: pacienteId,
       data: hoje(),
       tipo: 'diario',
       ...form,
@@ -508,7 +509,7 @@ export default function Intestino() {
     if (!solicitacaoPendente) return;
     setSalvando(true);
     const payload = {
-      paciente_id: user.id,
+      paciente_id: pacienteId,
       data: hoje(),
       tipo: 'rastreio',
       ...form,

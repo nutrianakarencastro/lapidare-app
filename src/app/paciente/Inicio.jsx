@@ -10,7 +10,8 @@ export default function Inicio() {
   const tema = useTheme();
   const nutriNome = tema.nutri_nome ?? 'Sua nutri';
   const navigate = useNavigate();
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [plano, setPlano] = useState(null);
   const [planoPdfPath, setPlanoPdfPath] = useState(null);
   const [compras, setCompras] = useState(null);
@@ -43,58 +44,58 @@ export default function Inicio() {
       const amanha = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
       const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes, agAmRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em, pdf_path')
-          .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
+          .eq('paciente_id', pacienteId).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
-          .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
+          .eq('paciente_id', pacienteId).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('consultas').select('id, data_hora, tipo, duracao_min, meet_link, links_extras, resposta_paciente, respondido_em, sugestao_remarcacao_data, obs_remarcacao, visualizado_em, paciente:pacientes(modalidade)')
-          .eq('paciente_id', user.id).eq('status', 'agendada')
+          .eq('paciente_id', pacienteId).eq('status', 'agendada')
           .gte('data_hora', agora).order('data_hora', { ascending: true }).limit(1).maybeSingle(),
         supabase.from('checkin_envios').select('id, enviado_em, lembrete_enviado_em, nome, tipo')
-          .eq('paciente_id', user.id).is('respondido_em', null)
+          .eq('paciente_id', pacienteId).is('respondido_em', null)
           .order('enviado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('habitos').select('id, nome, emoji, tipo, meta, unidade, ordem')
-          .eq('paciente_id', user.id).eq('ativo', true).order('ordem'),
+          .eq('paciente_id', pacienteId).eq('ativo', true).order('ordem'),
         supabase.from('habitos_logs').select('habito_id, valor, data')
-          .eq('paciente_id', user.id)
+          .eq('paciente_id', pacienteId)
           .gte('data', new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)),
         supabase.from('jornadas')
           .select('fase, nome_fase, objetivo_fase, consulta_numero, data_inicio_fase, duracao_semanas_prevista, metas_semana, proximo_marco, data_proximo_marco, evolucao_resumida')
-          .eq('paciente_id', user.id)
+          .eq('paciente_id', pacienteId)
           .maybeSingle(),
         supabase.from('checkin_envios')
           .select('id, nome, tipo, feedback, feedback_em, feedback_atualizado_em, feedback_lido_em')
-          .eq('paciente_id', user.id)
+          .eq('paciente_id', pacienteId)
           .not('feedback', 'is', null)
           .order('feedback_atualizado_em', { ascending: false })
           .limit(1)
           .maybeSingle(),
         supabase.from('ciclo_periodos')
           .select('inicio, fim')
-          .eq('paciente_id', user.id)
+          .eq('paciente_id', pacienteId)
           .order('inicio', { ascending: false })
           .limit(6),
         supabase.from('suplementos')
           .select('id, nome, horarios')
-          .eq('paciente_id', user.id)
+          .eq('paciente_id', pacienteId)
           .eq('ativo', true)
           .order('ordem'),
         supabase.from('suplementos_logs')
           .select('suplemento_id')
-          .eq('paciente_id', user.id)
+          .eq('paciente_id', pacienteId)
           .eq('data', hoje)
           .eq('tomado', true),
         supabase.from('exames_avaliacoes')
           .select('id, titulo, atualizado_em, visto_pela_paciente_em')
-          .eq('paciente_id', user.id)
+          .eq('paciente_id', pacienteId)
           .order('data_avaliacao', { ascending: false })
           .limit(1).maybeSingle(),
         supabase.from('orientacoes_pacientes')
           .select('id', { count: 'exact', head: true })
-          .eq('paciente_id', user.id)
+          .eq('paciente_id', pacienteId)
           .eq('status', 'nao_visualizada'),
         supabase.from('checkin_agendamentos')
           .select('id, frequencia, proximo_envio, template:checkin_templates(nome)')
-          .eq('paciente_id', user.id)
+          .eq('paciente_id', pacienteId)
           .eq('ativo', true)
           .eq('proximo_envio', amanha),
       ]);
@@ -231,7 +232,7 @@ export default function Inicio() {
     setSuplLogsHojeIds(prev => new Set([...prev, suplId]));
     setSuplTomados(prev => prev + 1);
     await supabase.from('suplementos_logs').upsert(
-      { suplemento_id: suplId, paciente_id: user.id, data: hoje, tomado: true },
+      { suplemento_id: suplId, paciente_id: pacienteId, data: hoje, tomado: true },
       { onConflict: 'suplemento_id,data' }
     );
   }

@@ -26,7 +26,8 @@ function fmtData(d) {
 }
 
 export default function DocumentosPaciente() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [documentos, setDocumentos] = useState(null);
   const [erro,       setErro]       = useState(null);
   const [pdfUrls,    setPdfUrls]    = useState({});
@@ -37,7 +38,7 @@ export default function DocumentosPaciente() {
       const { data, error } = await supabase
         .from('documentos')
         .select('id, titulo, tipo, descricao, status, data_documento, pdf_path, pdf_nome, link_externo')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .order('data_documento', { ascending: false });
 
       if (error) { setErro(error.message); setDocumentos([]); return; }

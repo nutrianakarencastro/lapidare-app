@@ -153,7 +153,7 @@ function TextoSecao({ titulo, conteudo, cor, bgCor, icone }) {
   );
 }
 
-function AvaliacaoView({ avaliacao, user, isHistorico }) {
+function AvaliacaoView({ avaliacao, pacienteId, isHistorico }) {
   const [analiseFull, setAnaliseFull] = useState(false);
   const [abrindo, setAbrindo] = useState(new Set());
 
@@ -167,7 +167,7 @@ function AvaliacaoView({ avaliacao, user, isHistorico }) {
     : analise;
 
   async function abrirArquivo(arq) {
-    if (!arq.storage_path?.startsWith(user.id + '/')) return;
+    if (!arq.storage_path?.startsWith(pacienteId + '/')) return;
     setAbrindo(s => new Set(s).add(arq.id));
     const win = window.open('', '_blank');
     const { data: signed, error } = await supabase.storage
@@ -295,7 +295,8 @@ function AvaliacaoView({ avaliacao, user, isHistorico }) {
 // ── Componente principal ───────────────────────────────────────────────────────
 
 export default function Exames() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [pedidos,    setPedidos]    = useState(undefined);
   const [avaliacoes, setAvaliacoes] = useState(undefined);
   const [selectedId, setSelectedId] = useState(null);
@@ -306,11 +307,11 @@ export default function Exames() {
     const [pedidosRes, avRes] = await Promise.all([
       supabase.from('exames_pedidos')
         .select('id, titulo, categoria, data_pedido, data_resultado_recebido, status, storage_path, nome_arquivo')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .order('data_pedido', { ascending: false }),
       supabase.from('exames_avaliacoes')
         .select('*, exames_arquivos(*)')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .order('data_avaliacao', { ascending: false }),
     ]);
     setPedidos(pedidosRes.data ?? []);
@@ -409,7 +410,7 @@ export default function Exames() {
             </button>
           )}
 
-          <AvaliacaoView avaliacao={avaliacao} user={user} isHistorico={!!selectedId} />
+          <AvaliacaoView avaliacao={avaliacao} pacienteId={pacienteId} isHistorico={!!selectedId} />
 
           {!selectedId && historico.length > 0 && (
             <div style={{ margin: '16px 0 0' }}>

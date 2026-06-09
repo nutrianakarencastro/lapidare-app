@@ -31,7 +31,8 @@ const METRICAS = [
 ];
 
 export default function Progresso() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [registros, setRegistros] = useState(undefined);
   const [metrica, setMetrica] = useState('kg');
   const [abrindoId, setAbrindoId] = useState(null);
@@ -43,7 +44,7 @@ export default function Progresso() {
       const { data } = await supabase
         .from('peso_registros')
         .select('id, data, kg, altura_cm, cintura_cm, quadril_cm, braco_cm, coxa_cm, pgc, mm_kg, obs, pdf_path, pdf_nome')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .order('data', { ascending: true });
       if (!active) return;
       setRegistros(data ?? []);
@@ -53,7 +54,7 @@ export default function Progresso() {
   }, [user]);
 
   async function abrirPdfAvaliacao(registro) {
-    if (!registro.pdf_path?.startsWith(user.id + '/')) return;
+    if (!registro.pdf_path?.startsWith(pacienteId + '/')) return;
     if (abrindoId) return;
     setAbrindoId(registro.id);
     // Abre janela antes do await — iOS/Safari bloqueia window.open após operações assíncronas
@@ -290,7 +291,8 @@ export default function Progresso() {
    FOTOS DE EVOLUÇÃO — paciente sobe as próprias
    ============================================================ */
 function FotosEvolucao() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [fotos, setFotos] = useState(undefined);
   const [urls, setUrls] = useState({});
   const [formOpen, setFormOpen] = useState(false);
@@ -309,7 +311,7 @@ function FotosEvolucao() {
     const { data } = await supabase
       .from('fotos_evolucao')
       .select('id, storage_path, tipo, data_foto, obs, created_at')
-      .eq('paciente_id', user.id)
+      .eq('paciente_id', pacienteId)
       .order('data_foto', { ascending: false });
     setFotos(data ?? []);
     const novas = {};
@@ -381,7 +383,7 @@ function FotosEvolucao() {
       return setErro('Erro ao processar: ' + e.message);
     }
     const ext = (arquivo.name.split('.').pop() || 'jpg').toLowerCase();
-    const path = `${user.id}/${Date.now()}-${tipo}.${ext}`;
+    const path = `${pacienteId}/${Date.now()}-${tipo}.${ext}`;
     const { error: upErr } = await supabase.storage
       .from('fotos_evolucao').upload(path, blob, { contentType: arquivo.type });
     if (upErr) {
@@ -389,7 +391,7 @@ function FotosEvolucao() {
       return setErro('Upload falhou: ' + upErr.message);
     }
     const { error: insErr } = await supabase.from('fotos_evolucao').insert({
-      paciente_id: user.id,
+      paciente_id: pacienteId,
       storage_path: path,
       tipo,
       data_foto: new Date().toISOString().slice(0, 10),

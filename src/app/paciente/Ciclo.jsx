@@ -709,7 +709,8 @@ const INTESTINO_OPS = [
 ];
 
 function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [form, setForm] = useState(() => existente ? { ...novoSintoma(), ...existente } : novoSintoma());
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState(null);
@@ -726,10 +727,10 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
   async function salvar() {
     setErro(null);
     setBusy(true);
-    const payload = { paciente_id: user.id, data: dia, ...form };
+    const payload = { paciente_id: pacienteId, data: dia, ...form };
     delete payload.id; delete payload.created_at; delete payload.paciente_id;
     const { error } = await supabase.from('ciclo_sintomas_diarios').upsert(
-      { paciente_id: user.id, data: dia, ...form },
+      { paciente_id: pacienteId, data: dia, ...form },
       { onConflict: 'paciente_id,data' }
     );
     setBusy(false);
@@ -1333,7 +1334,8 @@ function Registros({ periodos, sintomas }) {
 // ─── Tela principal ───────────────────────────────────────────────────────────
 
 export default function Ciclo() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [periodos, setPeriodos]       = useState(null);
   const [sintomas, setSintomas]       = useState([]);
   const [perfil, setPerfil]           = useState(null);
@@ -1345,9 +1347,9 @@ export default function Ciclo() {
   async function carregar() {
     if (!user) return;
     const [pRes, sRes, prRes] = await Promise.all([
-      supabase.from('ciclo_periodos').select('*').eq('paciente_id', user.id).order('inicio', { ascending: false }),
-      supabase.from('ciclo_sintomas_diarios').select('*').eq('paciente_id', user.id).order('data', { ascending: false }).limit(90),
-      supabase.from('ciclo_perfil').select('*').eq('paciente_id', user.id).maybeSingle(),
+      supabase.from('ciclo_periodos').select('*').eq('paciente_id', pacienteId).order('inicio', { ascending: false }),
+      supabase.from('ciclo_sintomas_diarios').select('*').eq('paciente_id', pacienteId).order('data', { ascending: false }).limit(90),
+      supabase.from('ciclo_perfil').select('*').eq('paciente_id', pacienteId).maybeSingle(),
     ]);
     setPeriodos(pRes.data ?? []);
     setSintomas(sRes.data ?? []);
@@ -1381,7 +1383,7 @@ export default function Ciclo() {
   if (mostrarPerfil) {
     return (
       <FormPerfil
-        pacienteId={user.id}
+        pacienteId={pacienteId}
         perfil={perfil}
         onSalvo={async () => { setMostrarPerfil(false); await carregar(); }}
         onCancelar={() => setMostrarPerfil(false)}
@@ -1495,7 +1497,7 @@ export default function Ciclo() {
           onFechar={() => setDiaSel(null)}
           onSalvarPeriodo={handleSalvarPeriodo}
           onAbrirSintomas={handleAbrirSintomas}
-          pacienteId={user.id}
+          pacienteId={pacienteId}
           podeMarcarMenstruacao={podeMarcarMenstruacao}
         />
       )}

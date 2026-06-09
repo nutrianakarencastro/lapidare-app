@@ -5,7 +5,8 @@ import { useSession } from '../../lib/session.jsx';
 const HOJE = () => new Date().toISOString().slice(0, 10);
 
 export default function Habitos() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [habitos, setHabitos] = useState(null);
   const [logs, setLogs] = useState([]);
 
@@ -13,9 +14,9 @@ export default function Habitos() {
     if (!user) return;
     const [hRes, lRes] = await Promise.all([
       supabase.from('habitos').select('*')
-        .eq('paciente_id', user.id).eq('ativo', true).order('ordem'),
+        .eq('paciente_id', pacienteId).eq('ativo', true).order('ordem'),
       supabase.from('habitos_logs').select('*')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .gte('data', new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10))
         .order('data', { ascending: false }),
     ]);

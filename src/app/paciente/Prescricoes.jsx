@@ -11,7 +11,8 @@ const TIPOS = {
 };
 
 export default function PrescricoesPaciente() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [docs, setDocs] = useState(undefined);
   const [filtro, setFiltro] = useState('todos');
 
@@ -22,7 +23,7 @@ export default function PrescricoesPaciente() {
       const { data } = await supabase
         .from('prescricoes')
         .select('id, tipo, titulo, storage_path, nota, created_at')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .order('created_at', { ascending: false });
       if (!active) return;
       setDocs(data ?? []);

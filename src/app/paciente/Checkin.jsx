@@ -9,7 +9,8 @@ import CheckinForm from '../../components/CheckinForm.jsx';
 export default function Checkin() {
   const { envioId } = useParams();
   const navigate = useNavigate();
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [envio, setEnvio] = useState(undefined);
   const [respostas, setRespostas] = useState({});
   const [busy, setBusy] = useState(false);
@@ -36,7 +37,7 @@ export default function Checkin() {
         .from('checkin_envios')
         .select('*')
         .eq('id', envioId)
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .maybeSingle();
       if (!active) return;
       if (error) { setErro(error.message); setEnvio(null); return; }

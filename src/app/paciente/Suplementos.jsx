@@ -7,7 +7,8 @@ import { OBJETIVOS_CLINICOS } from '../../lib/suplementacaoConfig.js';
 const HOJE = () => new Date().toISOString().slice(0, 10);
 
 export default function Suplementos() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [suplementos, setSuplementos] = useState(null);
   const [logs,        setLogs]        = useState([]);
   const [pdfs,        setPdfs]        = useState([]);
@@ -17,17 +18,17 @@ export default function Suplementos() {
     if (!user) return;
     const [supRes, logRes, pdfRes, farmRes] = await Promise.all([
       supabase.from('suplementos').select('*')
-        .eq('paciente_id', user.id).eq('ativo', true).order('ordem'),
+        .eq('paciente_id', pacienteId).eq('ativo', true).order('ordem'),
       supabase.from('suplementos_logs').select('*')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .gte('data', new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10))
         .order('data', { ascending: false }),
       supabase.from('prescricoes').select('id, titulo, storage_path, created_at')
-        .eq('paciente_id', user.id).eq('tipo', 'suplementacao')
+        .eq('paciente_id', pacienteId).eq('tipo', 'suplementacao')
         .order('created_at', { ascending: false }),
       supabase.from('farmacias_paciente')
         .select('id, codigo_desconto, farmacias(id, nome, telefone, link_contato, codigo_desconto, arquivo_url, observacoes)')
-        .eq('paciente_id', user.id).order('ordem'),
+        .eq('paciente_id', pacienteId).order('ordem'),
     ]);
     setSuplementos(supRes.data ?? []);
     setLogs(logRes.data ?? []);
@@ -44,7 +45,7 @@ export default function Suplementos() {
       await supabase.from('suplementos_logs').delete().eq('id', ja.id);
     } else {
       await supabase.from('suplementos_logs').insert({
-        suplemento_id: s.id, paciente_id: user.id, data: hoje, tomado: true,
+        suplemento_id: s.id, paciente_id: pacienteId, data: hoje, tomado: true,
       });
     }
     carregar();

@@ -40,7 +40,8 @@ function limparLista(compras) {
 }
 
 export default function Compras() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [compras, setCompras] = useState(undefined);
   const [marcados, setMarcados] = useState({});
   const [pdfPath, setPdfPath] = useState(null);
@@ -53,7 +54,7 @@ export default function Compras() {
       const { data } = await supabase
         .from('listas_compras')
         .select('dados, publicado_em, pdf_path, pdf_nome, pdf_atualizado_em')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .order('publicado_em', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -68,7 +69,7 @@ export default function Compras() {
 
   async function abrirPdf() {
     // Segurança: path deve pertencer ao próprio paciente
-    if (!pdfPath?.startsWith(user.id + '/')) return;
+    if (!pdfPath?.startsWith(pacienteId + '/')) return;
     const { data: signed, error } = await supabase.storage
       .from('planos').createSignedUrl(pdfPath, 120);
     if (error || !signed?.signedUrl) return;

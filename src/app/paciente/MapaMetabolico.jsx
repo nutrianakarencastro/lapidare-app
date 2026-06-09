@@ -82,25 +82,26 @@ function CardEixo({ eixoKey, score }) {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function MapaMetabolico() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [sintomas, setSintomas] = useState(null);
   const [periodos, setPeriodos] = useState([]);
   const [intestinoLogs, setIntestinoLogs] = useState([]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!pacienteId) return;
     let active = true;
     async function carregar() {
       const [sRes, pRes, iRes] = await Promise.all([
         supabase.from('ciclo_sintomas_diarios')
-          .select('*').eq('paciente_id', user.id)
+          .select('*').eq('paciente_id', pacienteId)
           .gte('data', dataInicioMapaVivo())
           .order('data', { ascending: false }),
         supabase.from('ciclo_periodos')
-          .select('id, inicio, fim').eq('paciente_id', user.id)
+          .select('id, inicio, fim').eq('paciente_id', pacienteId)
           .order('inicio', { ascending: false }),
         supabase.from('intestino_logs')
-          .select('*').eq('paciente_id', user.id)
+          .select('*').eq('paciente_id', pacienteId)
           .gte('data', dataInicioMapaVivo())
           .order('data', { ascending: false }),
       ]);

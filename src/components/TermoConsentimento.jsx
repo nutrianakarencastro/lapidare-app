@@ -80,7 +80,7 @@ export default function TermoConsentimento({ children }) {
     const { error } = await supabase.from('pacientes').update({
       termo_aceito_em: new Date().toISOString(),
       termo_versao: TERMO_VERSAO,
-    }).eq('id', user.id);
+    }).eq('id', profile.id);
     setAceitando(false);
     if (error) {
       setErro('Não foi possível salvar: ' + error.message);

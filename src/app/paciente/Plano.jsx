@@ -4,7 +4,8 @@ import { useSession } from '../../lib/session.jsx';
 import { dataBR } from '../../lib/utils.js';
 
 export default function Plano() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [plano, setPlano] = useState(undefined); // undefined=loading, null=vazio
   const [validade, setValidade] = useState(null);
   const [openSubs, setOpenSubs] = useState({});
@@ -21,7 +22,7 @@ export default function Plano() {
       const { data } = await supabase
         .from('planos')
         .select('dados, validade, publicado_em, pdf_path, pdf_nome, pdf_atualizado_em')
-        .eq('paciente_id', user.id)
+        .eq('paciente_id', pacienteId)
         .order('publicado_em', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -38,7 +39,7 @@ export default function Plano() {
 
   async function abrirPdf() {
     if (abrindoPdf) return;
-    if (!pdfPath?.startsWith(user.id + '/')) {
+    if (!pdfPath?.startsWith(pacienteId + '/')) {
       setErroPdf('Não foi possível abrir o PDF. Tente novamente.');
       return;
     }

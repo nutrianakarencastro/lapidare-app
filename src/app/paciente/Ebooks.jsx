@@ -12,7 +12,8 @@ const TAG_LABEL = {
 };
 
 export default function Ebooks() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
+  const pacienteId = profile?.id;
   const [ebooks, setEbooks] = useState(null);
 
   useEffect(() => {
@@ -22,7 +23,7 @@ export default function Ebooks() {
       const { data: links } = await supabase
         .from('ebooks_pacientes')
         .select('ebook_id')
-        .eq('paciente_id', user.id);
+        .eq('paciente_id', pacienteId);
       const ids = (links ?? []).map(l => l.ebook_id);
       if (ids.length === 0) {
         setEbooks([]);
