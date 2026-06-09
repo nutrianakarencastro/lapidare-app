@@ -33,6 +33,7 @@ BEGIN
 
   -- ── Inserção ─────────────────────────────────────────────────
   INSERT INTO public.pacientes (
+    id,
     nutri_id,
     nome,
     email,
@@ -48,6 +49,7 @@ BEGIN
     created_at
   )
   SELECT
+    gen_random_uuid(),
     pp.nutri_id,
     pp.nome,
     lower(pp.email),
