@@ -19,6 +19,7 @@ const TABS = [
 const MAIS_ITEMS = [
   { path: '/paciente/compras',     icon: 'shopping-cart',  label: 'Lista de compras',      sub: 'Lista da semana' },
   { path: '/paciente/suplementos', icon: 'pill',           label: 'Suplementos',           sub: 'Lista do dia' },
+  { path: '/paciente/estrategias',  icon: 'flask',          label: 'Estratégias',           sub: 'Experimentos clínicos' },
   { path: '/paciente/habitos',     icon: 'checklist',      label: 'Hábitos',               sub: 'Tracker diário' },
   // Prescrições desativada — pedidos/resultados → Exames; laudos → futura aba Documentos
   // { path: '/paciente/prescricoes', icon: 'file-text', label: 'Prescrições', sub: 'Documentos da Dra.' },
@@ -46,6 +47,7 @@ const HEADERS = {
   // '/paciente/prescricoes':  () => ({ eyebrow: 'Documentos', title: 'Prescrições' }),
   // '/paciente/ebooks': () => ({ eyebrow: 'Materiais', title: 'E-books', subtitle: 'Compartilhados pela sua nutri' }),
   '/paciente/suplementos':  () =>                ({ eyebrow: 'Habit tracker',    title: 'Meus suplementos',  subtitle: 'Marque diariamente' }),
+  '/paciente/estrategias':  () =>                ({ eyebrow: 'Experimentos clínicos', title: 'Estratégias', subtitle: 'O que estamos observando juntas' }),
   '/paciente/habitos':      () =>                ({ eyebrow: 'Hábitos do dia',   title: 'Meus hábitos',      subtitle: 'Acompanhe sua rotina' }),
   '/paciente/mapa':         () =>                ({ eyebrow: 'Saúde metabólica', title: 'Mapa Metabólico',       subtitle: 'Seus 9 eixos de equilíbrio' }),
   '/paciente/ciclo':        () =>                ({ eyebrow: 'Saúde hormonal',   title: 'Ciclo & Hormônios',     subtitle: 'Acompanhe seu ciclo menstrual' }),
@@ -99,7 +101,7 @@ export default function PacienteLayout() {
         {TABS.map(t => {
           const active = t.path
             ? location.pathname === t.path
-            : ['/paciente/compras', '/paciente/suplementos', '/paciente/habitos', '/paciente/mapa', '/paciente/ciclo', '/paciente/intestino', '/paciente/alem-nutricao', '/paciente/jornada', '/paciente/exames', '/paciente/orientacoes', '/paciente/documentos'].includes(location.pathname);
+            : ['/paciente/compras', '/paciente/suplementos', '/paciente/estrategias', '/paciente/habitos', '/paciente/mapa', '/paciente/ciclo', '/paciente/intestino', '/paciente/alem-nutricao', '/paciente/jornada', '/paciente/exames', '/paciente/orientacoes', '/paciente/documentos'].includes(location.pathname);
 
           if (!t.path) {
             return (

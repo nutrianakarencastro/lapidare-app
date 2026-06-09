@@ -50,6 +50,7 @@ import OrientacoesPaciente from './app/paciente/Orientacoes.jsx';
 import DocumentosPaciente from './app/paciente/Documentos.jsx';
 import IntestinoPaciente from './app/paciente/Intestino.jsx';
 import AlemNutricaoPaciente from './app/paciente/AlemNutricao.jsx';
+import EstrategiasPaciente from './app/paciente/Estrategias.jsx';
 import AlemNutricaoNutri from './app/nutri/AlemNutricao.jsx';
 
 export default function App() {
@@ -105,6 +106,7 @@ export default function App() {
             {/* E-books desativado — Orientações é o módulo oficial de conteúdo */}
             {/* <Route path="/paciente/ebooks" element={<EbooksPaciente />} /> */}
             <Route path="/paciente/suplementos" element={<SuplementosPaciente />} />
+            <Route path="/paciente/estrategias" element={<EstrategiasPaciente />} />
             <Route path="/paciente/habitos" element={<HabitosPaciente />} />
             <Route path="/paciente/checkin/:envioId" element={<Checkin />} />
             <Route path="/paciente/mapa" element={<MapaMetabolico />} />
