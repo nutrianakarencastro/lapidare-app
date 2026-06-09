@@ -44,7 +44,7 @@ export default function Inicio() {
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
           .eq('paciente_id', user.id).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('consultas').select('id, data_hora, tipo, duracao_min, meet_link, links_extras, resposta_paciente, respondido_em, sugestao_remarcacao_data, obs_remarcacao, visualizado_em')
+        supabase.from('consultas').select('id, data_hora, tipo, duracao_min, meet_link, links_extras, resposta_paciente, respondido_em, sugestao_remarcacao_data, obs_remarcacao, visualizado_em, paciente:pacientes(modalidade)')
           .eq('paciente_id', user.id).eq('status', 'agendada')
           .gte('data_hora', agora).order('data_hora', { ascending: true }).limit(1).maybeSingle(),
         supabase.from('checkin_envios').select('id, enviado_em, lembrete_enviado_em, nome, tipo')
@@ -187,7 +187,13 @@ export default function Inicio() {
     });
     setConfirmandoConsulta(false);
     if (!error) {
-      setProximaConsulta(c => ({ ...c, resposta_paciente: 'confirmada', respondido_em: new Date().toISOString() }));
+      setProximaConsulta(c => ({
+        ...c,
+        resposta_paciente:        'confirmada',
+        respondido_em:            new Date().toISOString(),
+        sugestao_remarcacao_data: null,
+        obs_remarcacao:           null,
+      }));
     }
   }
 
@@ -823,6 +829,7 @@ export default function Inicio() {
             </div>
             <div style={{ fontSize: 11, color: urgente ? 'var(--ink)' : 'var(--muted)', opacity: urgente ? .8 : 1 }}>
               {dataConsultaBR(proximaConsulta.data_hora)} · {proximaConsulta.duracao_min}min
+              {proximaConsulta.paciente?.modalidade && ` · ${proximaConsulta.paciente.modalidade}`}
             </div>
             {callUrl && (
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
