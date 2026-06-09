@@ -97,3 +97,47 @@ export function calcularRegistrosCarga({ sintomas, habitosLogs }) {
     nSemanasBaixa:     semanasBaixa.length,
   };
 }
+
+// ── Registros de Suplementação × Carga Sintomática ───────────────────────────
+// Compara dias com registro de suplementação (tomado=true) vs dias sem registro.
+// Mede registros — não equivale a suplementação real tomada.
+// Sem causalidade. Sem direção otimizada. Observação bidirecional neutra.
+
+const MIN_DIAS_SUPL = 20;
+
+export function calcularCorrelacaoSupl({ sintomas, suplementosLogs }) {
+  if (!sintomas?.length || !suplementosLogs?.length) {
+    return { disponivel: false, motivo: 'sem_dados' };
+  }
+
+  const datasComSupl = new Set(
+    suplementosLogs.filter(l => l.tomado === true).map(l => l.data)
+  );
+  if (datasComSupl.size === 0) {
+    return { disponivel: false, motivo: 'sem_dados' };
+  }
+
+  const diasCom = [], diasSem = [];
+  for (const s of sintomas) {
+    const piora = ehPioraDia(s);
+    if (piora === null) continue;
+    if (datasComSupl.has(s.data)) diasCom.push(piora);
+    else                          diasSem.push(piora);
+  }
+
+  if (diasCom.length < MIN_DIAS_SUPL || diasSem.length < MIN_DIAS_SUPL) {
+    return { disponivel: false, motivo: 'poucos_dados' };
+  }
+
+  const cargaCom = Math.round(diasCom.filter(Boolean).length / diasCom.length * 100);
+  const cargaSem = Math.round(diasSem.filter(Boolean).length / diasSem.length * 100);
+
+  return {
+    disponivel: true,
+    cargaCom,
+    cargaSem,
+    delta:      cargaCom - cargaSem,
+    nCom:       diasCom.length,
+    nSem:       diasSem.length,
+  };
+}

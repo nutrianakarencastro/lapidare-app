@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { calcularPerfilBiologico, calcularMapaGatilhos } from '../../lib/perfilBiologicoUtils.js';
-import { calcularRegistrosCarga } from '../../lib/registrosHabitos.js';
+import { calcularRegistrosCarga, calcularCorrelacaoSupl } from '../../lib/registrosHabitos.js';
 
 const COR_CONF = {
   alta:     'var(--green)',
@@ -453,6 +453,42 @@ function PadraoFormacaoCard({ padrao, isLast }) {
 }
 
 // ── Registros e Carga Sintomática ─────────────────────────────────────────────
+function RegistroSuplCard({ dados }) {
+  const { cargaCom, cargaSem, delta, nCom, nSem } = dados;
+  const linhaSt = {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+    padding: '8px 0',
+    borderBottom: '0.5px solid var(--border)',
+  };
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-header">
+        <div>
+          <div className="card-title">Registros de Suplementação e Carga Sintomática</div>
+          <div className="card-sub">Padrão observado nos dias com e sem registro de suplementação nos últimos 180 dias.</div>
+        </div>
+      </div>
+      <div className="card-body" style={{ paddingTop: 0 }}>
+        <div style={linhaSt}>
+          <span style={{ fontSize: 12, color: 'var(--text2)' }}>Dias com registro de suplementação</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)' }}>{cargaCom}%</span>
+        </div>
+        <div style={{ ...linhaSt, borderBottom: 'none' }}>
+          <span style={{ fontSize: 12, color: 'var(--text2)' }}>Dias sem registro de suplementação</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)' }}>{cargaSem}%</span>
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text4)', marginTop: 10 }}>
+          {nCom} dias com registro · {nSem} dias sem registro
+          {' · '}diferença observada: {Math.abs(delta)} pp
+        </div>
+        <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
+          Registro de suplementação não equivale a suplementação tomada. Padrões observacionais não indicam relação causal.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RegistrosECargaCard({ dados }) {
   const { cargaAltaPresenca, delta, nSemanasAlta, nSemanasBaixa } = dados;
   return (
@@ -535,6 +571,7 @@ function EstagioHeader({ dadosBase }) {
 export default function PerfilBiologico({ pacienteId }) {
   const [resultado,        setResultado]        = useState(null);
   const [registrosHabitos, setRegistrosHabitos] = useState(null);
+  const [correlacaoSupl,   setCorrelacaoSupl]   = useState(null);
   const [mapaGatilhosFase, setMapaGatilhosFase] = useState(null);
   const [faseInfo,         setFaseInfo]         = useState(null);
   const [formacaoAberto,   setFormacaoAberto]   = useState(false);
@@ -547,7 +584,7 @@ export default function PerfilBiologico({ pacienteId }) {
       const c180 = corte.toISOString().slice(0, 10);
 
       const agora = new Date().toISOString();
-      const [sintomasRes, periodosRes, intestinoRes, habitosRes, consultaRes] = await Promise.all([
+      const [sintomasRes, periodosRes, intestinoRes, habitosRes, suplRes, consultaRes] = await Promise.all([
         supabase.from('ciclo_sintomas_diarios')
           .select('data, humor, energia, sono, foco, libido, irritabilidade, ansiedade, compulsao, acne, retencao, inchaco, dor_cabeca, dor_pelvica, insonia, acorda_madrugada, choro, intestino')
           .eq('paciente_id', pacienteId)
@@ -565,6 +602,11 @@ export default function PerfilBiologico({ pacienteId }) {
         supabase.from('habitos_logs')
           .select('data, habito_id, valor')
           .eq('paciente_id', pacienteId)
+          .gte('data', c180),
+        supabase.from('suplementos_logs')
+          .select('data, tomado')
+          .eq('paciente_id', pacienteId)
+          .eq('tomado', true)
           .gte('data', c180),
         supabase.from('consultas')
           .select('data_hora')
@@ -587,6 +629,10 @@ export default function PerfilBiologico({ pacienteId }) {
       setRegistrosHabitos(calcularRegistrosCarga({
         sintomas:    sintomasRes.data ?? [],
         habitosLogs: habitosRes.data  ?? [],
+      }));
+      setCorrelacaoSupl(calcularCorrelacaoSupl({
+        sintomas:       sintomasRes.data ?? [],
+        suplementosLogs: suplRes.data   ?? [],
       }));
 
       // Consciência de fase — Fatores Associados
@@ -878,6 +924,9 @@ export default function PerfilBiologico({ pacienteId }) {
 
       {/* ── Registros e Carga Sintomática ── */}
       {registrosHabitos?.disponivel && <RegistrosECargaCard dados={registrosHabitos} />}
+
+      {/* ── Registros de Suplementação e Carga Sintomática ── */}
+      {correlacaoSupl?.disponivel && <RegistroSuplCard dados={correlacaoSupl} />}
     </>
   );
 }
