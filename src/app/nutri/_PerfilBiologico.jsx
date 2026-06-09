@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
-import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
+import { calcularPerfilBiologico, calcularMapaGatilhos } from '../../lib/perfilBiologicoUtils.js';
 import { calcularRegistrosCarga } from '../../lib/registrosHabitos.js';
 
 const COR_CONF = {
@@ -80,10 +80,11 @@ function FatorCard({ fator, isLast }) {
   );
 }
 
-function MapaGatilhosCard({ mapa }) {
+function MapaGatilhosCard({ mapa, mapaFase, faseInfo }) {
   const { fatores, influenciaCiclo } = mapa;
   const temFatores = fatores && fatores.length > 0;
-  if (!temFatores && !influenciaCiclo) return null;
+  const temFase    = mapaFase !== null && faseInfo !== null && faseInfo.diasRegistrados >= 14;
+  if (!temFatores && !influenciaCiclo && !temFase) return null;
   return (
     <div className="card" style={{ marginBottom: 14 }}>
       <div className="card-header">
@@ -93,6 +94,13 @@ function MapaGatilhosCard({ mapa }) {
         </div>
       </div>
       <div className="card-body" style={{ paddingTop: 0 }}>
+
+        {/* ── 180 dias ── */}
+        {!temFatores && !influenciaCiclo && (
+          <div style={{ fontSize: 12, color: 'var(--text4)', fontStyle: 'italic', marginBottom: 10 }}>
+            Nenhum padrão identificado nos últimos 180 dias.
+          </div>
+        )}
         {temFatores && fatores.map((f, i) => (
           <FatorCard key={f.id} fator={f} isLast={i === fatores.length - 1 && !influenciaCiclo} />
         ))}
@@ -115,6 +123,68 @@ function MapaGatilhosCard({ mapa }) {
             </div>
           </>
         )}
+
+        {/* ── Fase atual ── */}
+        {temFase && (
+          <>
+            <div style={{ height: '0.5px', background: 'var(--border)', margin: '10px 0 12px' }} />
+            <div>
+              <div style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+                color: 'var(--text4)', marginBottom: 8,
+              }}>
+                Fase atual · há {faseInfo.diasCalendario} dia{faseInfo.diasCalendario !== 1 ? 's' : ''}
+              </div>
+              {!mapaFase.disponivel ? (
+                <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
+                  Esta fase ainda possui poucos registros para identificar padrões observados.
+                  <br />
+                  <span style={{ fontSize: 11, color: 'var(--text4)' }}>
+                    {faseInfo.diasRegistrados} dias registrados.
+                  </span>
+                </div>
+              ) : !mapaFase.fatores?.length && !mapaFase.influenciaCiclo ? (
+                <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.5 }}>
+                  Nenhum padrão associado identificado nesta fase.
+                  <br />
+                  <span style={{ fontSize: 11, color: 'var(--text4)' }}>
+                    {faseInfo.diasRegistrados} dias registrados.
+                  </span>
+                </div>
+              ) : (
+                <>
+                  {(mapaFase.fatores ?? []).map((f, i) => (
+                    <FatorCard
+                      key={f.id}
+                      fator={f}
+                      isLast={i === (mapaFase.fatores.length - 1) && !mapaFase.influenciaCiclo}
+                    />
+                  ))}
+                  {mapaFase.influenciaCiclo && (
+                    <>
+                      {mapaFase.fatores?.length > 0 && (
+                        <div style={{ height: '0.5px', background: 'var(--border)', margin: '6px 0 12px' }} />
+                      )}
+                      <div style={{
+                        fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase',
+                        color: 'var(--text4)', marginBottom: 6,
+                      }}>
+                        Influência do ciclo observada
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6, fontStyle: 'italic', marginBottom: 4 }}>
+                        "{mapaFase.influenciaCiclo.narrativa}"
+                      </div>
+                    </>
+                  )}
+                  <div style={{ fontSize: 11, color: 'var(--text4)', marginTop: 6 }}>
+                    {faseInfo.diasRegistrados} dias registrados nesta fase.
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
+
         <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
           Associações calculadas nos dias com registro completo dos campos relevantes. Não indicam relação causal. A fase lútea é um contexto fisiológico, não um fator modificável.
         </div>
@@ -465,6 +535,8 @@ function EstagioHeader({ dadosBase }) {
 export default function PerfilBiologico({ pacienteId }) {
   const [resultado,        setResultado]        = useState(null);
   const [registrosHabitos, setRegistrosHabitos] = useState(null);
+  const [mapaGatilhosFase, setMapaGatilhosFase] = useState(null);
+  const [faseInfo,         setFaseInfo]         = useState(null);
   const [formacaoAberto,   setFormacaoAberto]   = useState(false);
 
   useEffect(() => {
@@ -474,7 +546,8 @@ export default function PerfilBiologico({ pacienteId }) {
       corte.setDate(corte.getDate() - 180);
       const c180 = corte.toISOString().slice(0, 10);
 
-      const [sintomasRes, periodosRes, intestinoRes, habitosRes] = await Promise.all([
+      const agora = new Date().toISOString();
+      const [sintomasRes, periodosRes, intestinoRes, habitosRes, consultaRes] = await Promise.all([
         supabase.from('ciclo_sintomas_diarios')
           .select('data, humor, energia, sono, foco, libido, irritabilidade, ansiedade, compulsao, acne, retencao, inchaco, dor_cabeca, dor_pelvica, insonia, acorda_madrugada, choro, intestino')
           .eq('paciente_id', pacienteId)
@@ -493,18 +566,49 @@ export default function PerfilBiologico({ pacienteId }) {
           .select('data, habito_id, valor')
           .eq('paciente_id', pacienteId)
           .gte('data', c180),
+        supabase.from('consultas')
+          .select('data_hora')
+          .eq('paciente_id', pacienteId)
+          .eq('status', 'realizada')
+          .lt('data_hora', agora)
+          .order('data_hora', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
 
       if (!active) return;
-      setResultado(calcularPerfilBiologico({
+
+      const perfilResult = calcularPerfilBiologico({
         sintomas:      sintomasRes.data  ?? [],
         periodos:      periodosRes.data  ?? [],
         intestinoLogs: intestinoRes.data ?? [],
-      }));
+      });
+      setResultado(perfilResult);
       setRegistrosHabitos(calcularRegistrosCarga({
         sintomas:    sintomasRes.data ?? [],
         habitosLogs: habitosRes.data  ?? [],
       }));
+
+      // Consciência de fase — Fatores Associados
+      const lastConsulta = consultaRes.data;
+      if (lastConsulta) {
+        const faseInicio       = lastConsulta.data_hora.slice(0, 10);
+        const sintomasFase     = (sintomasRes.data ?? []).filter(s => s.data >= faseInicio);
+        const intestinoFase    = (intestinoRes.data ?? []).filter(l => l.data >= faseInicio);
+        const diasRegistrados  = new Set(sintomasFase.map(s => s.data)).size;
+        const diasCalendario   = Math.floor(
+          (Date.now() - new Date(lastConsulta.data_hora).getTime()) / 86_400_000
+        );
+        setFaseInfo({ diasCalendario, diasRegistrados });
+        if (diasRegistrados >= 14) {
+          setMapaGatilhosFase(calcularMapaGatilhos({
+            sintomas:        sintomasFase,
+            intestinoLogs:   intestinoFase,
+            periodos:        periodosRes.data ?? [],
+            ciclosCompletos: perfilResult.dadosBase?.ciclosCompletos ?? 0,
+          }));
+        }
+      }
     }
     load();
     return () => { active = false; };
@@ -701,7 +805,13 @@ export default function PerfilBiologico({ pacienteId }) {
       )}
 
       {/* ── Mapa de Gatilhos ── */}
-      {mapaGatilhos?.disponivel && <MapaGatilhosCard mapa={mapaGatilhos} />}
+      {mapaGatilhos?.disponivel && (
+        <MapaGatilhosCard
+          mapa={mapaGatilhos}
+          mapaFase={mapaGatilhosFase}
+          faseInfo={faseInfo}
+        />
+      )}
 
       {/* ── Convergências Clínicas ── */}
       {convergencias?.length > 0 && (
