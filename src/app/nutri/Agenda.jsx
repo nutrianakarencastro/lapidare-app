@@ -135,6 +135,7 @@ export default function Agenda() {
         consultas={consultas ?? []}
         onMudarMes={setMesVisivel}
         onSelecionarDia={setDiaSelecionado}
+        onEditConsulta={abrirEdit}
       />
 
       {/* Consultas do dia selecionado */}
@@ -213,7 +214,7 @@ export default function Agenda() {
 /* ============================================================
    CALENDÁRIO MENSAL
    ============================================================ */
-function CalendarioMensal({ mesVisivel, diaSelecionado, consultas, onMudarMes, onSelecionarDia }) {
+function CalendarioMensal({ mesVisivel, diaSelecionado, consultas, onMudarMes, onSelecionarDia, onEditConsulta }) {
   const dias = useMemo(() => gerarDiasCalendario(mesVisivel), [mesVisivel]);
   const hoje = new Date();
 
@@ -302,35 +303,57 @@ function CalendarioMensal({ mesVisivel, diaSelecionado, consultas, onMudarMes, o
                 border: '0.5px solid ' + (isSelected ? 'var(--dark)' : 'var(--border)'),
                 borderRadius: 6,
                 padding: '6px 4px',
-                minHeight: 60,
+                minHeight: 76,
                 cursor: 'pointer',
                 display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
                 opacity: d.foraDoMes ? .35 : 1,
                 fontFamily: 'var(--font-sans)',
                 transition: 'background .15s',
+                width: '100%',
               }}>
               <span style={{
                 fontSize: 14,
                 fontWeight: isToday || isSelected ? 600 : 400,
                 color: isSelected ? 'var(--white)' : isToday ? 'var(--orange)' : 'var(--dark)',
-                marginBottom: 4,
+                marginBottom: 3,
               }}>
                 {d.data.getDate()}
               </span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-                {cs.slice(0, 4).map((c, ci) => (
-                  <span key={ci} style={{
-                    width: 6, height: 6, borderRadius: '50%',
-                    background: tipoColor(c.tipo),
-                    boxShadow: isSelected ? '0 0 0 0.5px var(--white)' : 'none',
-                  }} title={`${new Date(c.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${c.paciente?.nome}`} />
-                ))}
-                {cs.length > 4 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', minWidth: 0 }}>
+                {cs.slice(0, 2).map((c, ci) => {
+                  const hora = new Date(c.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                  const primeiroNome = (c.paciente?.nome ?? '').split(' ')[0];
+                  const cor = tipoColor(c.tipo);
+                  return (
+                    <div key={ci}
+                      onClick={e => { e.stopPropagation(); onEditConsulta(c); }}
+                      title={`${hora} · ${c.paciente?.nome}`}
+                      style={{
+                        display: 'flex', alignItems: 'center',
+                        padding: '1px 3px',
+                        borderRadius: 3,
+                        background: isSelected ? 'rgba(255,255,255,0.18)' : cor + '1a',
+                        borderLeft: `2px solid ${isSelected ? 'rgba(255,255,255,0.55)' : cor}`,
+                        overflow: 'hidden', minWidth: 0,
+                      }}>
+                      <span style={{
+                        fontSize: 9, fontWeight: 500, lineHeight: 1.5,
+                        color: isSelected ? 'var(--white)' : 'var(--dark)',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        width: '100%',
+                      }}>
+                        {hora} {primeiroNome}
+                      </span>
+                    </div>
+                  );
+                })}
+                {cs.length > 2 && (
                   <span style={{
-                    fontSize: 10,
-                    color: isSelected ? 'var(--white)' : 'var(--text3)',
-                    marginLeft: 2,
-                  }}>+{cs.length - 4}</span>
+                    fontSize: 9, paddingLeft: 3,
+                    color: isSelected ? 'rgba(255,255,255,0.7)' : 'var(--text3)',
+                  }}>
+                    +{cs.length - 2}
+                  </span>
                 )}
               </div>
             </button>
