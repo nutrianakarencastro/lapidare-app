@@ -10,6 +10,14 @@ const inpSt = {
   background: 'var(--white)', color: 'var(--dark)',
 };
 
+function labelFreqJornada(tipo, valor) {
+  if (tipo === 'diaria')        return 'Todo dia';
+  if (tipo === 'dias_uteis')    return 'Dias úteis';
+  if (tipo === 'semanal')       return valor ? `${valor}× por semana` : 'Semanal';
+  if (tipo === 'personalizada') return valor || 'Personalizada';
+  return null;
+}
+
 function semanaAtualDe(dataInicio) {
   if (!dataInicio) return 1;
   const diff = Math.floor((new Date() - new Date(dataInicio + 'T12:00:00')) / 86400000);
@@ -46,21 +54,42 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   const [aviso,     setAviso]     = useState(null);
   const [encerrando, setEncerrando] = useState(false);
   const [histAberto, setHistAberto] = useState(false);
+  const [metasAtivas,       setMetasAtivas]       = useState([]);
+  const [estrategiasAtivas, setEstrategiasAtivas] = useState([]);
+  const [condutaAtual,      setCondutaAtual]      = useState(null);
 
   async function carregar() {
-    const [jRes, hRes, habRes] = await Promise.all([
+    const [jRes, hRes, habRes, metasRes, estratRes, condutaRes] = await Promise.all([
       supabase.from('jornadas').select('*').eq('paciente_id', pacienteId).maybeSingle(),
       supabase.from('jornada_historico').select('*')
         .eq('paciente_id', pacienteId)
         .order('data_inicio_fase', { ascending: false }),
       supabase.from('habitos').select('id, nome, emoji, tipo')
         .eq('paciente_id', pacienteId).eq('ativo', true).order('ordem'),
+      supabase.from('metas_terapeuticas')
+        .select('id, titulo, eixo, prioridade, status')
+        .eq('paciente_id', pacienteId).eq('nutri_id', nutriId)
+        .in('status', ['ativa', 'em_evolucao'])
+        .order('prioridade'),
+      supabase.from('estrategias')
+        .select('id, titulo, categoria, frequencia_tipo, frequencia_valor')
+        .eq('paciente_id', pacienteId).eq('nutri_id', nutriId)
+        .eq('status', 'ativa')
+        .order('created_at', { ascending: false }),
+      supabase.from('condutas')
+        .select('id, titulo, objetivo_principal, data')
+        .eq('paciente_id', pacienteId).eq('nutri_id', nutriId)
+        .eq('is_atual', true)
+        .limit(1).maybeSingle(),
     ]);
     const j = jRes.data ?? null;
     setJornada(j);
     setHistorico(hRes.data ?? []);
     setForm(j ? { ...j, novo: false } : null);
     setHabitosPaciente(habRes.data ?? []);
+    setMetasAtivas(metasRes.data ?? []);
+    setEstrategiasAtivas(estratRes.data ?? []);
+    setCondutaAtual(condutaRes.data ?? null);
   }
 
   useEffect(() => { carregar(); }, [pacienteId]);
@@ -518,6 +547,104 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Contexto clínico desta fase ──────────────────────────────────── */}
+      {(metasAtivas.length > 0 || estrategiasAtivas.length > 0 || condutaAtual) && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Contexto clínico desta fase</div>
+              <div className="card-sub">O que está em curso neste momento do tratamento</div>
+            </div>
+          </div>
+          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Conduta atual */}
+            {condutaAtual && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>
+                  Conduta atual
+                </div>
+                <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--bg2)', border: '0.5px solid var(--border)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: condutaAtual.objetivo_principal ? 3 : 0 }}>
+                    {condutaAtual.titulo}
+                  </div>
+                  {condutaAtual.objetivo_principal && (
+                    <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5 }}>
+                      {condutaAtual.objetivo_principal}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: 'var(--text4)', marginTop: 4 }}>
+                    {dataBR(condutaAtual.data)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Metas terapêuticas ativas */}
+            {metasAtivas.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>
+                  Metas terapêuticas · {metasAtivas.length} ativa{metasAtivas.length !== 1 ? 's' : ''}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {metasAtivas.map(m => (
+                    <div key={m.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 10px', borderRadius: 7,
+                      background: 'var(--bg2)', border: '0.5px solid var(--border)',
+                    }}>
+                      <span style={{
+                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                        background: { alta: 'var(--red)', media: 'var(--orange)', baixa: 'var(--text3)' }[m.prioridade] ?? 'var(--text3)',
+                      }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 500 }}>{m.titulo}</div>
+                        {m.eixo && (
+                          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{m.eixo}</div>
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 10,
+                        background: m.status === 'em_evolucao' ? 'var(--green-bg)' : 'var(--blue-bg, #eff6ff)',
+                        color:      m.status === 'em_evolucao' ? 'var(--green)'    : 'var(--blue)',
+                      }}>
+                        {m.status === 'em_evolucao' ? 'Em evolução' : 'Ativa'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Estratégias ativas */}
+            {estrategiasAtivas.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>
+                  Estratégias ativas · {estrategiasAtivas.length}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {estrategiasAtivas.map(e => (
+                    <div key={e.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 10px', borderRadius: 7,
+                      background: 'var(--bg2)', border: '0.5px solid var(--border)',
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 500 }}>{e.titulo}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
+                          {[e.categoria, labelFreqJornada(e.frequencia_tipo, e.frequencia_valor)].filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          </div>
         </div>
       )}
 

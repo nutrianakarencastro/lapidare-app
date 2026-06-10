@@ -1,61 +1,17 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { podeAcessar } from '../../lib/modelos.js';
 import BloqueioModelo from '../../components/BloqueioModelo.jsx';
 import { dataBR } from '../../lib/utils.js';
-
-function semanaAtualDe(dataInicio) {
-  if (!dataInicio) return 1;
-  const diff = Math.floor((new Date() - new Date(dataInicio + 'T12:00:00')) / 86400000);
-  return Math.max(1, Math.ceil((diff + 1) / 7));
-}
+import { semanaAtualDe, useJornada } from '../../lib/jornadaUtils.js';
 
 export default function Jornada() {
-  const { user, profile } = useSession();
+  const { profile } = useSession();
   const pacienteId = profile?.id;
   const navigate = useNavigate();
-  const [jornada,   setJornada]   = useState(undefined);
-  const [historico, setHistorico] = useState([]);
-  const [habitos,   setHabitos]   = useState([]);
+  const { jornada, historico, habitos, loading, toggleMeta } = useJornada(pacienteId);
 
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    async function load() {
-      const [jRes, hRes, habRes] = await Promise.all([
-        supabase.from('jornadas')
-          .select('fase, nome_fase, objetivo_fase, consulta_numero, data_inicio_fase, duracao_semanas_prevista, metas_semana, proximo_marco, data_proximo_marco, evolucao_resumida')
-          .eq('paciente_id', pacienteId)
-          .maybeSingle(),
-        supabase.from('jornada_historico')
-          .select('fase, nome_fase, objetivo_fase, consulta_numero, data_inicio_fase, data_fim_fase, semanas_cumpridas, metas_semana, evolucao_resumida')
-          .eq('paciente_id', pacienteId)
-          .order('data_inicio_fase', { ascending: true }),
-        supabase.from('habitos')
-          .select('id, nome, emoji')
-          .eq('paciente_id', pacienteId).eq('ativo', true),
-      ]);
-      if (!active) return;
-      setJornada(jRes.data ?? null);
-      setHistorico(hRes.data ?? []);
-      setHabitos(habRes.data ?? []);
-    }
-    load();
-    return () => { active = false; };
-  }, [user]);
-
-  async function toggleMeta(metaId, concluida) {
-    if (!jornada) return;
-    const novas = (jornada.metas_semana ?? []).map(m =>
-      m.id === metaId ? { ...m, concluida } : m
-    );
-    setJornada(j => ({ ...j, metas_semana: novas }));
-    await supabase.rpc('paciente_marcar_meta', { p_metas: novas });
-  }
-
-  if (jornada === undefined) {
+  if (loading) {
     return (
       <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
         Carregando…

@@ -6,6 +6,7 @@ import { useTheme } from '../../lib/theme.jsx';
 import { textoDias, dataConsultaBR, diasAte, linkCall, consultaEmBreve, gerarGoogleCalendarUrl, dataBR } from '../../lib/utils.js';
 import { calcularFaseDoCiclo, FASES } from '../../lib/cicloUtils.js';
 import { podeAcessar } from '../../lib/modelos.js';
+import { semanaAtualDe, toggleJornadaMeta } from '../../lib/jornadaUtils.js';
 
 export default function Inicio() {
   const tema = useTheme();
@@ -306,21 +307,6 @@ export default function Inicio() {
   const calTemConteudo = faseCiclo !== null || !!jornada?.objetivo_fase ||
     habitos.length > 0 || totalSupl > 0 || calTotalMetas > 0 ||
     !!checkinPendente  || calConsultaProxima;
-
-  function semanaAtualDe(dataInicio) {
-    if (!dataInicio) return 1;
-    const diff = Math.floor((new Date() - new Date(dataInicio + 'T12:00:00')) / 86400000);
-    return Math.max(1, Math.ceil((diff + 1) / 7));
-  }
-
-  async function toggleMetaInicio(metaId, concluida) {
-    if (!jornada) return;
-    const novas = (jornada.metas_semana ?? []).map(m =>
-      m.id === metaId ? { ...m, concluida } : m
-    );
-    setJornada(j => ({ ...j, metas_semana: novas }));
-    await supabase.rpc('paciente_marcar_meta', { p_metas: novas });
-  }
 
   const suplComHorario = suplData.filter(s => s.horarios?.length > 0);
 
@@ -765,7 +751,7 @@ export default function Inicio() {
                   {metas.map(m => (
                     <button
                       key={m.id}
-                      onClick={() => toggleMetaInicio(m.id, !m.concluida)}
+                      onClick={() => toggleJornadaMeta(jornada, m.id, !m.concluida, setJornada)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 9,
                         padding: '7px 9px', borderRadius: 8, cursor: 'pointer',
