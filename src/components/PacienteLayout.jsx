@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import BrandFooter from './BrandFooter.jsx';
 import { useSession, signOut } from '../lib/session.jsx';
+import { podeAcessar } from '../lib/modelos.js';
 import { useTheme } from '../lib/theme.jsx';
 import { iniciais } from '../lib/utils.js';
 import '../styles/paciente.css';
@@ -17,25 +18,21 @@ const TABS = [
 ];
 
 const MAIS_ITEMS = [
-  { path: '/paciente/compras',     icon: 'shopping-cart',  label: 'Lista de compras',      sub: 'Lista da semana' },
-  { path: '/paciente/suplementos', icon: 'pill',           label: 'Suplementos',           sub: 'Lista do dia' },
-  { path: '/paciente/estrategias',  icon: 'flask',          label: 'Estratégias',           sub: 'Experimentos clínicos' },
-  { path: '/paciente/habitos',     icon: 'checklist',      label: 'Hábitos',               sub: 'Tracker diário' },
-  // Prescrições desativada — pedidos/resultados → Exames; laudos → futura aba Documentos
-  // { path: '/paciente/prescricoes', icon: 'file-text', label: 'Prescrições', sub: 'Documentos da Dra.' },
-  // E-books desativado da navegação da paciente — Orientações é o módulo oficial de conteúdo
-  // { path: '/paciente/ebooks', icon: 'book-2', label: 'E-books', sub: 'Materiais da Dra.' },
-  { path: '/paciente/ciclo',       icon: 'moon',           label: 'Ciclo & Hormônios',     sub: 'Acompanhe seu ciclo' },
-  { path: '/paciente/intestino',    icon: 'leaf',           label: 'Intestino',             sub: 'Registro e acompanhamento' },
-  { path: '/paciente/alem-nutricao', icon: 'star',         label: 'Além da Nutrição',      sub: 'Indicações da nutri' },
-  { path: '/paciente/mapa',         icon: 'map',            label: 'Mapa Metabólico',       sub: 'Seus 9 eixos metabólicos' },
-  { path: '/paciente/jornada',     icon: 'route',          label: 'Minha jornada',         sub: 'Fases e evolução' },
+  { path: '/paciente/compras',       modulo: null,            icon: 'shopping-cart',  label: 'Lista de compras',           sub: 'Lista da semana' },
+  { path: '/paciente/suplementos',   modulo: null,            icon: 'pill',           label: 'Suplementos',                sub: 'Lista do dia' },
+  { path: '/paciente/estrategias',   modulo: 'estrategias',   icon: 'flask',          label: 'Estratégias',                sub: 'Experimentos clínicos' },
+  { path: '/paciente/habitos',       modulo: null,            icon: 'checklist',      label: 'Hábitos',                    sub: 'Tracker diário' },
+  { path: '/paciente/ciclo',         modulo: 'ciclo',         icon: 'moon',           label: 'Ciclo & Hormônios',          sub: 'Acompanhe seu ciclo' },
+  { path: '/paciente/intestino',     modulo: 'intestino',     icon: 'leaf',           label: 'Intestino',                  sub: 'Registro e acompanhamento' },
+  { path: '/paciente/alem-nutricao', modulo: 'alem_nutricao', icon: 'star',           label: 'Além da Nutrição',           sub: 'Indicações da nutri' },
+  { path: '/paciente/mapa',          modulo: 'mapa',          icon: 'map',            label: 'Mapa Metabólico',            sub: 'Seus 9 eixos metabólicos' },
+  { path: '/paciente/jornada',       modulo: 'jornada',       icon: 'route',          label: 'Minha jornada',              sub: 'Fases e evolução' },
   // CHAT DESATIVADO — canal oficial é WhatsApp. Reativar: descomentar linha abaixo e remover o item whatsapp.
-  // { path: '/paciente/chat', icon: 'message-circle', label: 'Chat com a Dra.', sub: 'Conversa direta' },
-  { path: '/paciente/exames',        icon: 'flask',          label: 'Exames & Análises',          sub: 'Resultados e avaliações' },
-  { path: '/paciente/orientacoes',   icon: 'notebook',       label: 'Orientações',                sub: 'Conteúdo da Dra.'              },
-  { path: '/paciente/documentos',    icon: 'files',          label: 'Documentos',                 sub: 'Contratos e documentos oficiais' },
-  { href: WHATSAPP_URL,              icon: 'brand-whatsapp', label: 'Falar com a Dra. Ana Karen', sub: 'Abre o WhatsApp' },
+  // { path: '/paciente/chat', modulo: 'chat', icon: 'message-circle', label: 'Chat com a Dra.', sub: 'Conversa direta' },
+  { path: '/paciente/exames',        modulo: null,            icon: 'flask',          label: 'Exames & Análises',          sub: 'Resultados e avaliações' },
+  { path: '/paciente/orientacoes',   modulo: null,            icon: 'notebook',       label: 'Biblioteca',                 sub: 'Conteúdo da Dra.' },
+  { path: '/paciente/documentos',    modulo: null,            icon: 'files',          label: 'Documentos',                 sub: 'Contratos e documentos oficiais' },
+  { href: WHATSAPP_URL,              modulo: null,            icon: 'brand-whatsapp', label: 'Falar com a Dra. Ana Karen', sub: 'Abre o WhatsApp' },
 ];
 
 const HEADERS = {
@@ -136,28 +133,34 @@ export default function PacienteLayout() {
           <div className="sheet" onClick={e => e.stopPropagation()}>
             <div className="grabber"></div>
             <div className="serif" style={{ fontSize: 22, marginBottom: 14 }}>Mais</div>
-            {MAIS_ITEMS.map(item => (
-              <button
-                key={item.path ?? item.href}
-                className="sheet-item"
-                onClick={() => {
-                  setMoreOpen(false);
-                  if (item.href) {
-                    window.open(item.href, '_blank', 'noopener,noreferrer');
-                  } else {
-                    navigate(item.path);
+            {MAIS_ITEMS.map(item => {
+              const bloqueado = item.modulo && !podeAcessar(profile?.acesso_utera, item.modulo);
+              return (
+                <button
+                  key={item.path ?? item.href}
+                  className="sheet-item"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    if (item.href) {
+                      window.open(item.href, '_blank', 'noopener,noreferrer');
+                    } else {
+                      navigate(item.path);
+                    }
+                  }}>
+                  <div className="icon-wrap">
+                    <i className={`ti ti-${item.icon}`} aria-hidden="true"></i>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="label">{item.label}</div>
+                    <div className="sub">{item.sub}</div>
+                  </div>
+                  {bloqueado
+                    ? <span style={{ fontSize: 14, opacity: .7 }}>🔒</span>
+                    : <i className="ti ti-chevron-right" style={{ color: 'var(--muted)' }} aria-hidden="true"></i>
                   }
-                }}>
-                <div className="icon-wrap">
-                  <i className={`ti ti-${item.icon}`} aria-hidden="true"></i>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div className="label">{item.label}</div>
-                  <div className="sub">{item.sub}</div>
-                </div>
-                <i className="ti ti-chevron-right" style={{ color: 'var(--muted)' }} aria-hidden="true"></i>
-              </button>
-            ))}
+                </button>
+              );
+            })}
 
             <div style={{ height: 1, background: 'var(--hair)', margin: '12px 0 8px' }}></div>
 

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
+import { podeAcessar } from '../../lib/modelos.js';
+import BloqueioModelo from '../../components/BloqueioModelo.jsx';
 import {
   calcularMapaVivo, dataInicioMapaVivo,
   EIXOS_PACIENTE, EIXOS_ORDEM,
@@ -146,6 +148,10 @@ export default function MapaMetabolico() {
 
   const eixosAtivos = EIXOS_ORDEM.filter(k => (mapa.scores[k] ?? 0) >= 26);
   const eixosCalmos = EIXOS_ORDEM.filter(k => (mapa.scores[k] ?? 0) < 26);
+
+  if (!podeAcessar(profile?.acesso_utera, 'mapa')) {
+    return <BloqueioModelo modulo="Mapa Metabólico" tierMinimo={3} />;
+  }
 
   return (
     <div style={{ paddingBottom: 32 }}>

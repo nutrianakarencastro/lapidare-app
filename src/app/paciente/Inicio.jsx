@@ -5,6 +5,7 @@ import { useSession } from '../../lib/session.jsx';
 import { useTheme } from '../../lib/theme.jsx';
 import { textoDias, dataConsultaBR, diasAte, linkCall, consultaEmBreve, gerarGoogleCalendarUrl, dataBR } from '../../lib/utils.js';
 import { calcularFaseDoCiclo, FASES } from '../../lib/cicloUtils.js';
+import { podeAcessar } from '../../lib/modelos.js';
 
 export default function Inicio() {
   const tema = useTheme();
@@ -799,7 +800,7 @@ export default function Inicio() {
       })()}
 
       {/* Lembrete de check-in pendente */}
-      {checkinPendente && (
+      {checkinPendente && podeAcessar(profile?.acesso_utera, 'checkin') && (
         <div
           onClick={() => navigate(`/paciente/checkin/${checkinPendente.id}`)}
           style={{

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
+import { podeAcessar } from '../../lib/modelos.js';
+import BloqueioModelo from '../../components/BloqueioModelo.jsx';
 import { dataBR } from '../../lib/utils.js';
 
 function labelFreq(tipo, valor) {
@@ -121,6 +123,10 @@ export default function Estrategias() {
         Carregando…
       </div>
     );
+  }
+
+  if (!podeAcessar(profile?.acesso_utera, 'estrategias')) {
+    return <BloqueioModelo modulo="Estratégias Terapêuticas" tierMinimo={3} />;
   }
 
   return (

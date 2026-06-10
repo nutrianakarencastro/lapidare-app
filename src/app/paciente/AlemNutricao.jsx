@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
+import { podeAcessar } from '../../lib/modelos.js';
+import BloqueioModelo from '../../components/BloqueioModelo.jsx';
 import { CATEGORIAS_ALEM, CATEGORIA_MAP, ordenarItens, normalizarLinks } from '../../lib/alemNutricaoUtils.js';
 
 // ─── Placeholder de imagem ────────────────────────────────────────────────────
@@ -116,7 +118,7 @@ function CardItem({ item }) {
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function AlemNutricao() {
-  const { user } = useSession();
+  const { user, profile } = useSession();
   const [itens, setItens] = useState(null);
   const [categoriaFiltro, setCategoriaFiltro] = useState('todos');
 
@@ -149,6 +151,10 @@ export default function AlemNutricao() {
       ? itens
       : itens.filter(i => i.categoria === categoriaFiltro)
   );
+
+  if (!podeAcessar(profile?.acesso_utera, 'alem_nutricao')) {
+    return <BloqueioModelo modulo="Além da Nutrição" tierMinimo={2} />;
+  }
 
   return (
     <div style={{ paddingBottom: 32 }}>

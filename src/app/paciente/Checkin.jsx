@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
+import { podeAcessar } from '../../lib/modelos.js';
+import BloqueioModelo from '../../components/BloqueioModelo.jsx';
 import { respostasIniciais } from '../../lib/checkinDefault.js';
 import { dataBR } from '../../lib/utils.js';
 import CheckinForm from '../../components/CheckinForm.jsx';
@@ -139,6 +141,10 @@ export default function Checkin() {
         </div>
       </div>
     );
+  }
+
+  if (!podeAcessar(profile?.acesso_utera, 'checkin')) {
+    return <BloqueioModelo modulo="Check-ins" tierMinimo={2} />;
   }
 
   return (

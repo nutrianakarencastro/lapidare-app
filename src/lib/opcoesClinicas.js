@@ -1,6 +1,20 @@
 // Listas compartilhadas entre Cadastrar e PacientePerfil.
 // 'outro_livre' é sentinela de UI — nunca persiste no banco.
 
+export const MODELOS_CLINICOS = [
+  { v: 'consulta',       l: 'Consulta'       },
+  { v: 'acompanhamento', l: 'Acompanhamento'  },
+  { v: 'manutencao',     l: 'Manutenção'      },
+  { v: 'reviva',         l: 'Reviva'          },
+  { v: 'longevidade',    l: 'Longevidade'     },
+];
+
+export const NIVEIS_ACESSO_UTERA = [
+  { v: 'essencial',  l: 'Essencial'  },
+  { v: 'expandido',  l: 'Expandido'  },
+  { v: 'completo',   l: 'Completo'   },
+];
+
 export const PLANOS = [
   { v: 'consulta_avulsa', l: 'Consulta avulsa' },
   { v: 'trimestral',      l: 'Trimestral' },

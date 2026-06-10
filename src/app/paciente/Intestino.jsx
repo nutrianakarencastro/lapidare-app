@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
+import { podeAcessar } from '../../lib/modelos.js';
+import BloqueioModelo from '../../components/BloqueioModelo.jsx';
 import {
   BRISTOL_LABELS, GATILHOS_OPCOES, COR_FEZES_OPCOES, CHEIRO_FEZES_OPCOES,
   SENSACAO_APOS_OPCOES, MOMENTO_ESTUFAMENTO_OPCOES,
@@ -544,6 +546,10 @@ export default function Intestino() {
   const mediaEvac = mediaEvacuacoesPorSemana(diarios);
   const sinais = detectarSinaisAtencao(logs);
   const sinaisVisiveis = sinais.filter(s => s.nivel === 'atencao');
+
+  if (!podeAcessar(profile?.acesso_utera, 'intestino')) {
+    return <BloqueioModelo modulo="Intestino" tierMinimo={2} />;
+  }
 
   return (
     <div style={{ paddingBottom: 32 }}>

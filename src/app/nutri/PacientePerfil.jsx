@@ -6,7 +6,7 @@ import {
   dataBR, iniciais,
   validarPlano, validarLista, contarItensLista,
 } from '../../lib/utils.js';
-import { PLANOS, OBJETIVOS, MODALIDADES } from '../../lib/opcoesClinicas.js';
+import { PLANOS, OBJETIVOS, MODALIDADES, MODELOS_CLINICOS, NIVEIS_ACESSO_UTERA } from '../../lib/opcoesClinicas.js';
 import { TEMPLATE_PADRAO, labelFrequencia } from '../../lib/checkinDefault.js';
 import { processarAgendamentosVencidos, executarAgendamento } from '../../lib/checkinScheduler.js';
 import CheckinForm from '../../components/CheckinForm.jsx';
@@ -130,8 +130,10 @@ export default function PacientePerfil() {
       tipo_plano:       planoConhecido
                           ? paciente.tipo_plano
                           : (paciente.tipo_plano ? 'outro_livre' : ''),
-      tipo_plano_livre: planoConhecido ? '' : (paciente.tipo_plano ?? ''),
-      modalidade:       paciente.modalidade   ?? '',
+      tipo_plano_livre:       planoConhecido ? '' : (paciente.tipo_plano ?? ''),
+      modalidade:             paciente.modalidade             ?? '',
+      modelo_acompanhamento:  paciente.modelo_acompanhamento  ?? '',
+      acesso_utera:           paciente.acesso_utera           ?? 'completo',
     });
     setErroEdit(null);
     setEditandoPerfil(true);
@@ -149,8 +151,10 @@ export default function PacientePerfil() {
       telefone:   formEdit.telefone?.trim() || null,
       cpf:        formEdit.cpf?.trim()      || null,
       objetivo:   formEdit.objetivo         || null,
-      tipo_plano: tipoPlanoFinal,
-      modalidade: formEdit.modalidade       || null,
+      tipo_plano:            tipoPlanoFinal,
+      modalidade:            formEdit.modalidade            || null,
+      modelo_acompanhamento: formEdit.modelo_acompanhamento || null,
+      acesso_utera:          formEdit.acesso_utera          || 'completo',
     }).eq('id', id);
     setSalvandoEdit(false);
     if (error) { setErroEdit(error.message); return; }
@@ -449,7 +453,7 @@ export default function PacientePerfil() {
             )}
 
             {/* Modalidade */}
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Modalidade</div>
               <select
                 style={{
@@ -463,6 +467,48 @@ export default function PacientePerfil() {
                 <option value="">— selecione —</option>
                 {MODALIDADES.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
+            </div>
+
+            {/* Separador */}
+            <div style={{ height: '0.5px', background: 'var(--border)', margin: '4px 0 14px' }} />
+
+            {/* Modelo clínico */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Modelo clínico</div>
+              <select
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '8px 10px', borderRadius: 7,
+                  border: '0.5px solid var(--border)', fontSize: 13,
+                  fontFamily: 'var(--font-sans)', background: 'var(--white)',
+                }}
+                value={formEdit.modelo_acompanhamento ?? ''}
+                onChange={e => setFormEdit(f => ({ ...f, modelo_acompanhamento: e.target.value }))}>
+                <option value="">— não classificado —</option>
+                {MODELOS_CLINICOS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+              </select>
+              <div style={{ fontSize: 11, color: 'var(--text4)', marginTop: 4, lineHeight: 1.4 }}>
+                Referência clínica. Não afeta o acesso ao aplicativo.
+              </div>
+            </div>
+
+            {/* Experiência Útera */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Experiência Útera</div>
+              <select
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '8px 10px', borderRadius: 7,
+                  border: '0.5px solid var(--border)', fontSize: 13,
+                  fontFamily: 'var(--font-sans)', background: 'var(--white)',
+                }}
+                value={formEdit.acesso_utera ?? 'completo'}
+                onChange={e => setFormEdit(f => ({ ...f, acesso_utera: e.target.value }))}>
+                {NIVEIS_ACESSO_UTERA.map(n => <option key={n.v} value={n.v}>{n.l}</option>)}
+              </select>
+              <div style={{ fontSize: 11, color: 'var(--text4)', marginTop: 4, lineHeight: 1.4 }}>
+                Define o que estará liberado no aplicativo desta paciente.
+              </div>
             </div>
 
             {erroEdit && (

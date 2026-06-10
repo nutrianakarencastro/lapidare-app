@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
+import { podeAcessar } from '../../lib/modelos.js';
+import BloqueioModelo from '../../components/BloqueioModelo.jsx';
 import { dataBR } from '../../lib/utils.js';
 
 function semanaAtualDe(dataInicio) {
@@ -80,6 +82,10 @@ export default function Jornada() {
   const pct      = jornada ? Math.min(100, Math.round((semana / total) * 100)) : 0;
   const metasConcluidas = (jornada?.metas_semana ?? []).filter(m => m.concluida).length;
   const totalMetas      = (jornada?.metas_semana ?? []).length;
+
+  if (!podeAcessar(profile?.acesso_utera, 'jornada')) {
+    return <BloqueioModelo modulo="Minha Jornada" tierMinimo={2} />;
+  }
 
   return (
     <div style={{ padding: '0 16px 32px' }}>

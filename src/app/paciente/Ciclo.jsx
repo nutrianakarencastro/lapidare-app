@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
+import { podeAcessar } from '../../lib/modelos.js';
+import BloqueioModelo from '../../components/BloqueioModelo.jsx';
 import {
   FASES, EIXOS,
   calcularFaseDoCiclo, calcularScoresHormonais, gerarAlertas, detectarCorrelacoes,
@@ -1357,6 +1359,10 @@ export default function Ciclo() {
   }
 
   useEffect(() => { carregar(); }, [user]);
+
+  if (!podeAcessar(profile?.acesso_utera, 'ciclo')) {
+    return <BloqueioModelo modulo="Ciclo & Hormônios" tierMinimo={2} />;
+  }
 
   async function handleSalvarPeriodo() {
     setDiaSel(null);
