@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import {
@@ -41,9 +42,11 @@ function tipoColor(tipo) {
 
 export default function Agenda() {
   const { user } = useSession();
+  const location = useLocation();
+  const autoOpened = useRef(false);
   const [consultas, setConsultas] = useState(undefined);
   const [pacientes, setPacientes] = useState([]);
-  const [modalState, setModalState] = useState({ open: false, consulta: null });
+  const [modalState, setModalState] = useState({ open: false, consulta: null, pacienteId: null });
   const [mesVisivel, setMesVisivel] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -74,6 +77,15 @@ export default function Agenda() {
 
   useEffect(() => { carregar(); carregarPacientes(); }, [user]);
 
+  // Abre modal pré-selecionando paciente quando navegado via navigate('/nutri/agenda', { state: { pacienteId } })
+  useEffect(() => {
+    if (autoOpened.current) return;
+    if (location.state?.pacienteId && pacientes.length > 0) {
+      autoOpened.current = true;
+      setModalState({ open: true, consulta: null, pacienteId: location.state.pacienteId });
+    }
+  }, [pacientes.length, location.state?.pacienteId]);
+
   const agora = new Date().toISOString();
   const ativas = (consultas ?? []).filter(c => c.status !== 'cancelada');
   const futuras = ativas.filter(c => c.data_hora >= agora);
@@ -89,9 +101,9 @@ export default function Agenda() {
       .sort((a, b) => a.data_hora.localeCompare(b.data_hora));
   }, [consultas, diaSelecionado]);
 
-  const abrirNova = () => setModalState({ open: true, consulta: null });
-  const abrirEdit = (consulta) => setModalState({ open: true, consulta });
-  const fechar = () => setModalState({ open: false, consulta: null });
+  const abrirNova = (pacienteId = null) => setModalState({ open: true, consulta: null, pacienteId });
+  const abrirEdit = (consulta) => setModalState({ open: true, consulta, pacienteId: null });
+  const fechar = () => setModalState({ open: false, consulta: null, pacienteId: null });
 
   return (
     <>
@@ -187,6 +199,7 @@ export default function Agenda() {
       {modalState.open && (
         <ConsultaModal
           consulta={modalState.consulta}
+          initialPacienteId={modalState.pacienteId}
           pacientes={pacientes}
           nutriId={user.id}
           onClose={fechar}
@@ -444,7 +457,7 @@ function ConsultaRow({ c, isLast, isPast, isCanceled, onClick }) {
 /* ============================================================
    MODAL CONSULTA
    ============================================================ */
-function ConsultaModal({ consulta, pacientes, nutriId, onClose, onSaved }) {
+function ConsultaModal({ consulta, initialPacienteId = null, pacientes, nutriId, onClose, onSaved }) {
   const isEdit = !!consulta;
 
   const initial = consulta
@@ -459,7 +472,7 @@ function ConsultaModal({ consulta, pacientes, nutriId, onClose, onSaved }) {
         meetLink: consulta.meet_link ?? '',
         linksExtras: Array.isArray(consulta.links_extras) ? consulta.links_extras : [],
       }
-    : { pacienteId: pacientes[0]?.id ?? '', data: '', hora: '14:00', duracao: 45, tipo: 'primeira', status: 'agendada', obs: '', meetLink: '', linksExtras: [] };
+    : { pacienteId: initialPacienteId ?? pacientes[0]?.id ?? '', data: '', hora: '14:00', duracao: 45, tipo: 'primeira', status: 'agendada', obs: '', meetLink: '', linksExtras: [] };
 
   const [pacienteId, setPacienteId] = useState(initial.pacienteId);
   const [data, setData] = useState(initial.data);

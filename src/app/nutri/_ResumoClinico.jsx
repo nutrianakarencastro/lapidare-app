@@ -430,8 +430,8 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
           ) : (
             <div style={{ fontSize: 13, color: 'var(--text3)' }}>Nenhuma agendada</div>
           )}
-          <button className="btn-outline" style={btnAcao} onClick={() => navigate('/nutri/agenda')}>
-            <i className="ti ti-calendar" aria-hidden="true"></i> Agenda
+          <button className="btn-outline" style={btnAcao} onClick={() => navigate('/nutri/agenda', { state: { pacienteId } })}>
+            <i className="ti ti-calendar" aria-hidden="true"></i> Agendar consulta
           </button>
         </div>
 

@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useSession, signOut } from '../lib/session.jsx';
 import { useTheme } from '../lib/theme.jsx';
-import { supabase } from '../lib/supabase.js';
 import BrandFooter from './BrandFooter.jsx';
 import { iniciais, mesAno } from '../lib/utils.js';
 import '../styles/nutri.css';
@@ -11,27 +10,34 @@ const NAV_CONFIG = [
   {
     group: 'Atendimento',
     items: [
-      { id: 'visao',        path: '/nutri/visao',        label: 'Visão geral',         icon: 'layout-dashboard' },
-      { id: 'pacientes',    path: '/nutri/pacientes',    label: 'Pacientes',           icon: 'users' },
-      { id: 'agenda',       path: '/nutri/agenda',       label: 'Agenda',              icon: 'calendar' },
-      { id: 'chat',         path: '/nutri/chat',         label: 'Chat',                icon: 'message-circle' },
-      { id: 'feed',         path: '/nutri/feed',         label: 'Feed de pratos',      icon: 'camera' },
-      { id: 'prescricoes',  path: '/nutri/prescricoes',  label: 'Prescrições',         icon: 'file-text' },
-      { id: 'biblioteca',    path: '/nutri/biblioteca',    label: 'Biblioteca',          icon: 'book-2' },
-      { id: 'alem-nutricao', path: '/nutri/alem-nutricao', label: 'Além da Nutrição',    icon: 'star' },
-      { id: 'checkins',     path: '/nutri/checkins',     label: 'Check-ins',           icon: 'clipboard-check' },
-      { id: 'questionarios', path: '/nutri/questionarios', label: 'Pré-consulta',       icon: 'clipboard-list' },
-      { id: 'cadastrar',    path: '/nutri/cadastrar',    label: 'Cadastrar paciente',  icon: 'user-plus' },
+      { id: 'visao',     path: '/nutri/visao',     label: 'Visão Geral',    icon: 'layout-dashboard' },
+      { id: 'pacientes', path: '/nutri/pacientes', label: 'Pacientes',      icon: 'users' },
+      { id: 'agenda',    path: '/nutri/agenda',    label: 'Agenda',         icon: 'calendar' },
+      { id: 'checkins',  path: '/nutri/checkins',  label: 'Check-ins',      icon: 'clipboard-check' },
+      { id: 'feed',      path: '/nutri/feed',      label: 'Feed de pratos', icon: 'camera' },
     ],
   },
   {
-    group: 'Gestão do consultório',
+    group: 'Recursos Clínicos',
     items: [
-      { id: 'cerebro',          path: '/nutri/cerebro',         label: 'Cérebro do negócio', icon: 'brain' },
-      { id: 'servicos',         path: '/nutri/servicos',        label: 'Meus serviços',       icon: 'settings' },
-      { id: 'previsibilidade',  path: '/nutri/previsibilidade', label: 'Previsibilidade',     icon: 'trending-up' },
-      { id: 'financeiro',       path: '/nutri/financeiro',      label: 'Financeiro real',     icon: 'credit-card' },
-      { id: 'personalizacao',   path: '/nutri/personalizacao',  label: 'Personalização',      icon: 'palette' },
+      { id: 'biblioteca',    path: '/nutri/biblioteca',    label: 'Biblioteca Clínica', icon: 'book-2' },
+      { id: 'protocolos',    path: '/nutri/protocolos',    label: 'Protocolos',         icon: 'clipboard-heart' },
+      { id: 'alem-nutricao', path: '/nutri/alem-nutricao', label: 'Além da Nutrição',   icon: 'star' },
+    ],
+  },
+  {
+    group: 'Gestão do Consultório',
+    items: [
+      { id: 'cerebro',         path: '/nutri/cerebro',         label: 'Cérebro do Negócio', icon: 'brain' },
+      { id: 'servicos',        path: '/nutri/servicos',        label: 'Meus Serviços',       icon: 'settings' },
+      { id: 'previsibilidade', path: '/nutri/previsibilidade', label: 'Previsibilidade',     icon: 'trending-up' },
+      { id: 'financeiro',      path: '/nutri/financeiro',      label: 'Financeiro Real',     icon: 'credit-card' },
+    ],
+  },
+  {
+    group: 'Configurações',
+    items: [
+      { id: 'personalizacao', path: '/nutri/personalizacao', label: 'Personalização', icon: 'palette' },
     ],
   },
 ];
@@ -45,7 +51,6 @@ export default function NutriLayout() {
   const tema = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [unreadChat, setUnreadChat] = useState(0);
   const location = useLocation();
 
   // Fecha drawer ao trocar de rota (mobile)
@@ -57,32 +62,6 @@ export default function NutriLayout() {
     return { zone: '', label: '' };
   }, [location.pathname]);
 
-  // Conta mensagens não lidas (vindas das pacientes)
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-
-    async function recarregar() {
-      const { count } = await supabase
-        .from('mensagens')
-        .select('id', { count: 'exact', head: true })
-        .eq('nutri_id', user.id)
-        .eq('de', 'paciente')
-        .eq('lida', false);
-      if (active) setUnreadChat(count ?? 0);
-    }
-
-    recarregar();
-    const channel = supabase
-      .channel(`nutri-unread-${user.id}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'mensagens',
-        filter: `nutri_id=eq.${user.id}`,
-      }, recarregar)
-      .subscribe();
-
-    return () => { active = false; supabase.removeChannel(channel); };
-  }, [user]);
 
   const handleLogout = async () => {
     await signOut();
@@ -120,12 +99,9 @@ export default function NutriLayout() {
                 >
                   <span className="nav-icon"><i className={`ti ti-${item.icon}`} aria-hidden="true"></i></span>
                   <span>{item.label}</span>
-                  {item.id === 'chat' && unreadChat > 0 && (
-                    <span className="nav-badge">{unreadChat}</span>
-                  )}
                 </NavLink>
               ))}
-              {group.group === 'Atendimento' && <div className="nav-divider"></div>}
+
             </div>
           ))}
         </nav>
@@ -148,9 +124,6 @@ export default function NutriLayout() {
             aria-label="Abrir menu"
           >
             <i className="ti ti-menu-2" aria-hidden="true"></i>
-            {unreadChat > 0 && (
-              <span className="mobile-toggle-badge">{unreadChat}</span>
-            )}
           </button>
           <span className="topbar-zone">{meta.zone}</span>
           <span className="topbar-sep">·</span>

@@ -17,7 +17,7 @@ export default function Biblioteca() {
   return (
     <>
       <div className="page-title">Biblioteca</div>
-      <div className="page-sub">Conteúdo reutilizável para suas pacientes</div>
+      <div className="page-sub">Materiais terapêuticos para atribuir às suas pacientes</div>
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '0.5px solid var(--border)', paddingBottom: 0 }}>
         {TABS.map(t => (
