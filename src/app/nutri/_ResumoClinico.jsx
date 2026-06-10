@@ -5,6 +5,8 @@ import { dataBR } from '../../lib/utils.js';
 import { calcularLeituraConsistencia } from '../../lib/consistenciaUtils.js';
 import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
 import { gerarPontosAtencao } from '../../lib/visaoProspectiva.js';
+import { gerarSinais } from '../../lib/salaSituacaoUtils.js';
+import SalaSituacao from '../../components/SalaSituacao.jsx';
 
 // ── Jornada Clínica ───────────────────────────────────────────────────────────
 // Leitura automática derivada das consultas. Responde: "onde está no tratamento?"
@@ -209,6 +211,7 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
   const [memoriaClinica, setMemoriaClinica] = useState(undefined);
   const [memoriaExpand,  setMemoriaExpand]  = useState(false);
   const [fixando,        setFixando]        = useState({});
+  const [jornadaAtual,   setJornadaAtual]   = useState(undefined);
 
   useEffect(() => {
     let active = true;
@@ -273,6 +276,7 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
         habitosCountRes, habitosLogsRes,
         checkinsConsRes,
         suplCountRes, suplLogsRes,
+        jornadaRes,
       ] = await Promise.all([
         // ── Existentes ────────────────────────────────────────────────────────
         supabase.from('consultas').select('id, data_hora, tipo')
@@ -323,6 +327,12 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
           .eq('paciente_id', pacienteId).eq('ativo', true),
         supabase.from('suplementos_logs').select('data')
           .eq('paciente_id', pacienteId).eq('tomado', true).gte('data', c30str),
+
+        // ── Jornada ativa (Sala de Situação) ──────────────────────────────
+        supabase.from('jornadas')
+          .select('fase, nome_fase, data_inicio_fase, duracao_semanas_prevista')
+          .eq('paciente_id', pacienteId)
+          .maybeSingle(),
       ]);
 
       if (!active) return;
@@ -335,6 +345,7 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
       setAnamnese(anamRes.data ?? null);
       setCondutaAtual(condutaRes.data ?? null);
       setMetas(metasRes.data ?? []);
+      setJornadaAtual(jornadaRes.data ?? null);
 
       // Calcular leitura de consistência
       const datasRegistros = [
@@ -379,12 +390,22 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
   const btnAcao  = { fontSize: 11, padding: '3px 9px', marginTop: 10 };
 
   const pontosAtencao   = perfilResult ? gerarPontosAtencao(perfilResult) : [];
+  const sinaisSituacao  = gerarSinais({
+    checkin,
+    consistencia,
+    condutaAtual,
+    metas:         metas         ?? [],
+    memoriaClinica: memoriaClinica ?? [],
+    jornada:       jornadaAtual,
+  });
   const essenciais      = (memoriaClinica ?? []).filter(a => a.aprendizado_essencial);
   const recentes        = (memoriaClinica ?? []).filter(a => !a.aprendizado_essencial);
   const visivelRecentes = memoriaExpand ? recentes : recentes.slice(0, 3);
 
   return (
     <>
+      <SalaSituacao sinais={sinaisSituacao} onIrParaTab={onIrParaTab} />
+
       <BlocoJornadaClinica
         pacienteId={pacienteId}
         ultCons={ultCons}
