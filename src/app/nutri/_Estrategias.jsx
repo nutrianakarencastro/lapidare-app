@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { dataBR } from '../../lib/utils.js';
+import {
+  calcularCruzamentos,
+  calcularJanelaBaseline,
+  duracaoDias,
+} from '../../lib/estrategiasUtils.js';
 
 const CATEGORIAS = [
   'Alimentação', 'Sono', 'Suplementação', 'Movimento',
@@ -48,15 +53,36 @@ function formVazio() {
   };
 }
 
+function textoDir(direcao) {
+  return {
+    aumento:      '↑ valores mais altos observados',
+    reducao:      '↓ valores mais baixos observados',
+    estavel:      '→ sem variação expressiva',
+    sem_baseline: '— sem dados anteriores para comparação',
+  }[direcao] ?? '—';
+}
+
+function corDir(direcao) {
+  return {
+    aumento:      'var(--blue)',
+    reducao:      'var(--text2)',
+    estavel:      'var(--text3)',
+    sem_baseline: 'var(--text4)',
+  }[direcao] ?? 'var(--text3)';
+}
+
 export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
   const [ativas,    setAtivas]    = useState(null);
   const [historico, setHistorico] = useState([]);
   const [form,      setForm]      = useState(null);
   const [editId,    setEditId]    = useState(null);
   const [encerrando, setEncerrando] = useState(null);
-  const [logsAbertos, setLogsAbertos] = useState({});
+  const [logsAbertos,  setLogsAbertos]  = useState({});
+  const [obsAbertos,   setObsAbertos]   = useState({});
+  const [obsLoading,   setObsLoading]   = useState({});
   const [busy,     setBusy]     = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const perfilCicloRef = useRef(null);
 
   async function carregar() {
     const { data } = await supabase
@@ -126,11 +152,69 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
       return;
     }
     const { data } = await supabase
-      .from('estrategia_logs')
-      .select('*')
-      .eq('estrategia_id', e.id)
-      .order('data', { ascending: false });
+      .from('estrategia_logs').select('*')
+      .eq('estrategia_id', e.id).order('data', { ascending: false });
     setLogsAbertos(s => ({ ...s, [e.id]: data ?? [] }));
+  }
+
+  async function toggleObs(e) {
+    if (obsAbertos[e.id] !== undefined) {
+      setObsAbertos(s => { const n = { ...s }; delete n[e.id]; return n; });
+      return;
+    }
+    setObsLoading(s => ({ ...s, [e.id]: true }));
+
+    const dataFim = e.data_fim ?? e.encerrada_em?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
+    const dias    = duracaoDias(e.data_inicio, dataFim);
+    const { inicio: blInicio, fim: blFim } = calcularJanelaBaseline(e.data_inicio, dias);
+
+    const [sintDur, sintAnt, intDur, intAnt, periodos, perfilRes, estrLogs] = await Promise.all([
+      supabase.from('ciclo_sintomas_diarios')
+        .select('data, humor, energia, sono, compulsao, ansiedade')
+        .eq('paciente_id', pacienteId).gte('data', e.data_inicio).lte('data', dataFim),
+      supabase.from('ciclo_sintomas_diarios')
+        .select('data, humor, energia, sono, compulsao, ansiedade')
+        .eq('paciente_id', pacienteId).gte('data', blInicio).lte('data', blFim),
+      supabase.from('intestino_logs')
+        .select('data, evacuou, bristol, estufamento, dor_abdominal, esvaziamento_incompleto, urgencia, esforco, gases')
+        .eq('paciente_id', pacienteId).eq('tipo', 'diario').gte('data', e.data_inicio).lte('data', dataFim),
+      supabase.from('intestino_logs')
+        .select('data, evacuou, bristol, estufamento, dor_abdominal, esvaziamento_incompleto, urgencia, esforco, gases')
+        .eq('paciente_id', pacienteId).eq('tipo', 'diario').gte('data', blInicio).lte('data', blFim),
+      supabase.from('ciclo_periodos')
+        .select('inicio, fim').eq('paciente_id', pacienteId)
+        .gte('inicio', blInicio).lte('inicio', dataFim),
+      perfilCicloRef.current
+        ? Promise.resolve({ data: perfilCicloRef.current })
+        : supabase.from('ciclo_perfil').select('situacao_ciclo').eq('paciente_id', pacienteId).maybeSingle(),
+      supabase.from('estrategia_logs').select('aconteceu').eq('estrategia_id', e.id),
+    ]);
+
+    if (!perfilCicloRef.current && perfilRes.data) {
+      perfilCicloRef.current = perfilRes.data;
+    }
+
+    // Estratégias simultâneas: outras encerradas com sobreposição de período
+    const simultaneas = historico.filter(h =>
+      h.id !== e.id &&
+      h.data_inicio <= dataFim &&
+      (h.data_fim ?? h.encerrada_em?.slice(0, 10) ?? '9999') >= e.data_inicio
+    );
+
+    const cruzamentos = calcularCruzamentos({
+      estrategia:          { ...e, data_fim: dataFim },
+      sintomasDurante:     sintDur.data  ?? [],
+      sintomasAntes:       sintAnt.data  ?? [],
+      intestinoDurante:    intDur.data   ?? [],
+      intestinoAntes:      intAnt.data   ?? [],
+      estrategiaLogs:      estrLogs.data ?? [],
+      periodos:            periodos.data ?? [],
+      situacaoCiclo:       perfilRes.data?.situacao_ciclo ?? 'menstrua_regularmente',
+      estrategiasSimultaneas: simultaneas,
+    });
+
+    setObsAbertos(s => ({ ...s, [e.id]: cruzamentos }));
+    setObsLoading(s => ({ ...s, [e.id]: false }));
   }
 
   function abrirEditar(e) {
@@ -157,9 +241,7 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dark)' }}>Estratégias Terapêuticas</div>
-          <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-            {ativas?.length ?? 0}/{MAX_ATIVAS} ativas
-          </div>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>{ativas?.length ?? 0}/{MAX_ATIVAS} ativas</div>
         </div>
         <button
           className="btn"
@@ -187,14 +269,12 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>
             {editId ? 'Editar estratégia' : 'Nova estratégia'}
           </div>
-
           <FL label="Título *">
             <input value={form.titulo} onChange={sf('titulo')} placeholder="Ex: Jantar sem tela" />
           </FL>
           <FL label="Objetivo clínico">
             <input value={form.objetivo} onChange={sf('objetivo')} placeholder="O que queremos observar ou trabalhar" />
           </FL>
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <FL label="Categoria">
               <select value={form.categoria} onChange={sf('categoria')}>
@@ -208,27 +288,18 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
               </select>
             </FL>
           </div>
-
           {form.frequencia_tipo === 'semanal' && (
             <FL label="Vezes por semana">
-              <input
-                type="number" min={1} max={7} style={{ width: 90 }}
-                value={form.frequencia_valor}
-                onChange={sf('frequencia_valor')}
-                placeholder="Ex: 3"
-              />
+              <input type="number" min={1} max={7} style={{ width: 90 }}
+                value={form.frequencia_valor} onChange={sf('frequencia_valor')} placeholder="Ex: 3" />
             </FL>
           )}
           {form.frequencia_tipo === 'personalizada' && (
             <FL label="Descreva a frequência">
-              <input
-                value={form.frequencia_valor}
-                onChange={sf('frequencia_valor')}
-                placeholder="Ex: Segunda, quarta e sexta"
-              />
+              <input value={form.frequencia_valor} onChange={sf('frequencia_valor')}
+                placeholder="Ex: Segunda, quarta e sexta" />
             </FL>
           )}
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <FL label="Início *">
               <input type="date" value={form.data_inicio} onChange={sf('data_inicio')} />
@@ -237,47 +308,33 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
               <input type="date" value={form.data_fim} onChange={sf('data_fim')} />
             </FL>
           </div>
-
           <FL label="Mensagem para a paciente">
-            <textarea
-              value={form.mensagem_paciente}
-              onChange={sf('mensagem_paciente')}
-              rows={2}
+            <textarea value={form.mensagem_paciente} onChange={sf('mensagem_paciente')} rows={2}
               placeholder="O que a paciente verá no app — linguagem acolhedora"
-              style={{ width: '100%', resize: 'vertical', minHeight: 52, boxSizing: 'border-box' }}
-            />
+              style={{ width: '100%', resize: 'vertical', minHeight: 52, boxSizing: 'border-box' }} />
           </FL>
           <FL label="Observações clínicas internas">
-            <textarea
-              value={form.observacoes_nutri}
-              onChange={sf('observacoes_nutri')}
-              rows={2}
+            <textarea value={form.observacoes_nutri} onChange={sf('observacoes_nutri')} rows={2}
               placeholder="Notas internas — não visíveis à paciente"
-              style={{ width: '100%', resize: 'vertical', minHeight: 52, boxSizing: 'border-box' }}
-            />
+              style={{ width: '100%', resize: 'vertical', minHeight: 52, boxSizing: 'border-box' }} />
           </FL>
-
           {feedback?.tipo === 'erro' && (
             <div style={{ fontSize: 12, color: 'var(--red)', padding: '6px 10px', borderRadius: 6, background: 'var(--red-bg)', marginBottom: 10 }}>
               {feedback.msg}
             </div>
           )}
-
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn-outline" style={{ flex: 1, justifyContent: 'center' }}
-              onClick={() => { setForm(null); setEditId(null); }}>
-              Cancelar
-            </button>
+              onClick={() => { setForm(null); setEditId(null); }}>Cancelar</button>
             <button className="btn" style={{ flex: 1, justifyContent: 'center' }}
               onClick={salvar} disabled={busy}>
-              <i className="ti ti-check" aria-hidden="true"></i>
-              {busy ? 'Salvando…' : 'Salvar'}
+              <i className="ti ti-check" aria-hidden="true"></i> {busy ? 'Salvando…' : 'Salvar'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Lista de ativas */}
+      {/* Ativas */}
       {ativas === null ? (
         <div style={{ fontSize: 13, color: 'var(--text3)', padding: '20px 0' }}>Carregando…</div>
       ) : ativas.length === 0 && !form ? (
@@ -301,9 +358,7 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
                     </div>
                   )}
                   <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--dark)' }}>{e.titulo}</div>
-                  {e.objetivo && (
-                    <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{e.objetivo}</div>
-                  )}
+                  {e.objetivo && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{e.objetivo}</div>}
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
                     {labelFreq(e.frequencia_tipo, e.frequencia_valor)} · {periodo(e)}
                   </div>
@@ -320,12 +375,10 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
                   )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
-                  <button className="btn-outline" style={{ fontSize: 10, padding: '3px 9px' }}
-                    onClick={() => abrirEditar(e)}>
+                  <button className="btn-outline" style={{ fontSize: 10, padding: '3px 9px' }} onClick={() => abrirEditar(e)}>
                     <i className="ti ti-edit" aria-hidden="true"></i> Editar
                   </button>
-                  <button className="btn-outline" style={{ fontSize: 10, padding: '3px 9px' }}
-                    onClick={() => toggleLogs(e)}>
+                  <button className="btn-outline" style={{ fontSize: 10, padding: '3px 9px' }} onClick={() => toggleLogs(e)}>
                     <i className="ti ti-chart-bar" aria-hidden="true"></i>
                     {logsAbertos[e.id] !== undefined ? 'Ocultar logs' : 'Ver logs'}
                   </button>
@@ -337,8 +390,6 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
                   </button>
                 </div>
               </div>
-
-              {/* Logs expandidos */}
               {logsAbertos[e.id] !== undefined && (
                 <div style={{ marginTop: 12, borderTop: '0.5px solid var(--border)', paddingTop: 10 }}>
                   {logsAbertos[e.id].length === 0 ? (
@@ -369,57 +420,170 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
       {/* Histórico encerradas */}
       {historico.length > 0 && (
         <div style={{ marginTop: 20 }}>
-          <div className="section-label" style={{ marginBottom: 8 }}>
-            Histórico encerrado ({historico.length})
-          </div>
+          <div className="section-label" style={{ marginBottom: 8 }}>Histórico encerrado ({historico.length})</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {historico.map(e => (
-              <div key={e.id} className="card" style={{ padding: 14, opacity: 0.85 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    {e.categoria && (
-                      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--text3)', marginBottom: 2 }}>
-                        {e.categoria}
-                      </div>
-                    )}
-                    <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--dark)' }}>{e.titulo}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{periodo(e)}</div>
-                    {e.aprendizados && (
-                      <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 8, padding: '7px 10px', background: 'var(--bg2)', borderRadius: 6 }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', display: 'block', marginBottom: 2 }}>APRENDIZADOS</span>
-                        {e.aprendizados}
-                      </div>
-                    )}
+            {historico.map(e => {
+              const obs      = obsAbertos[e.id];
+              const loadObs  = obsLoading[e.id];
+              const obsOpen  = obs !== undefined;
+
+              return (
+                <div key={e.id} className="card" style={{ padding: 14, opacity: 0.9 }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      {e.categoria && (
+                        <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--text3)', marginBottom: 2 }}>
+                          {e.categoria}
+                        </div>
+                      )}
+                      <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--dark)' }}>{e.titulo}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{periodo(e)}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
+                      <button className="btn-outline" style={{ fontSize: 10, padding: '3px 9px' }}
+                        onClick={() => toggleObs(e)} disabled={loadObs}>
+                        <i className="ti ti-chart-dots" aria-hidden="true"></i>
+                        {loadObs ? 'Carregando…' : obsOpen ? 'Ocultar obs.' : 'Ver observações'}
+                      </button>
+                      <button className="btn-outline" style={{ fontSize: 10, padding: '3px 9px' }}
+                        onClick={() => toggleLogs(e)}>
+                        <i className="ti ti-chart-bar" aria-hidden="true"></i>
+                        {logsAbertos[e.id] !== undefined ? 'Ocultar logs' : 'Ver logs'}
+                      </button>
+                    </div>
                   </div>
-                  <button className="btn-outline" style={{ fontSize: 10, padding: '3px 9px', flexShrink: 0 }}
-                    onClick={() => toggleLogs(e)}>
-                    <i className="ti ti-chart-bar" aria-hidden="true"></i>
-                    {logsAbertos[e.id] !== undefined ? 'Ocultar' : 'Ver logs'}
-                  </button>
-                </div>
-                {logsAbertos[e.id] !== undefined && (
-                  <div style={{ marginTop: 10, borderTop: '0.5px solid var(--border)', paddingTop: 8 }}>
-                    {logsAbertos[e.id].length === 0 ? (
-                      <div style={{ fontSize: 12, color: 'var(--text3)' }}>Nenhum registro.</div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {logsAbertos[e.id].map(l => (
-                          <div key={l.id} style={{ display: 'flex', gap: 10, fontSize: 11, alignItems: 'center' }}>
-                            <div style={{ width: 80, flexShrink: 0, color: 'var(--text3)' }}>{dataBR(l.data)}</div>
-                            <span style={{
-                              fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 999, flexShrink: 0,
-                              background: l.aconteceu === 'sim' ? 'var(--green-bg)' : l.aconteceu === 'parcialmente' ? 'var(--orange-bg)' : 'var(--bg2)',
-                              color:      l.aconteceu === 'sim' ? 'var(--green)'   : l.aconteceu === 'parcialmente' ? 'var(--orange)'    : 'var(--text3)',
-                            }}>{labelAconteceu(l.aconteceu)}</span>
-                            {l.observacoes && <span style={{ color: 'var(--text2)', flex: 1 }}>{l.observacoes}</span>}
+
+                  {/* Logs */}
+                  {logsAbertos[e.id] !== undefined && (
+                    <div style={{ borderTop: '0.5px solid var(--border)', paddingTop: 8, marginBottom: 10 }}>
+                      {logsAbertos[e.id].length === 0 ? (
+                        <div style={{ fontSize: 12, color: 'var(--text3)' }}>Nenhum registro.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {logsAbertos[e.id].map(l => (
+                            <div key={l.id} style={{ display: 'flex', gap: 10, fontSize: 11, alignItems: 'center' }}>
+                              <div style={{ width: 80, flexShrink: 0, color: 'var(--text3)' }}>{dataBR(l.data)}</div>
+                              <span style={{
+                                fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 999, flexShrink: 0,
+                                background: l.aconteceu === 'sim' ? 'var(--green-bg)' : l.aconteceu === 'parcialmente' ? 'var(--orange-bg)' : 'var(--bg2)',
+                                color:      l.aconteceu === 'sim' ? 'var(--green)'   : l.aconteceu === 'parcialmente' ? 'var(--orange)'    : 'var(--text3)',
+                              }}>{labelAconteceu(l.aconteceu)}</span>
+                              {l.observacoes && <span style={{ color: 'var(--text2)', flex: 1 }}>{l.observacoes}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Observações do período */}
+                  {obsOpen && (
+                    <div style={{ borderTop: '0.5px solid var(--border)', paddingTop: 12, marginBottom: 10 }}>
+                      {!obs.suficiente ? (
+                        <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                          Dados insuficientes para observação ({obs.percentual ?? 0}% de cobertura — mínimo 40%).
+                        </div>
+                      ) : (
+                        <>
+                          {/* Aviso simultâneas — ALTAMENTE VISÍVEL */}
+                          {obs.avisoSimultaneas && (
+                            <div style={{
+                              background: 'var(--orange-bg)',
+                              border: '1.5px solid var(--orange)',
+                              borderRadius: 8, padding: '10px 14px', marginBottom: 14,
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: 'var(--orange)', fontSize: 12, marginBottom: 4 }}>
+                                <i className="ti ti-alert-triangle" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                                Atenção — estratégias simultâneas no mesmo período
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--text1)', lineHeight: 1.6 }}>
+                                {obs.titulosSimultaneas.map(t => `"${t}"`).join(', ')} também estav{obs.titulosSimultaneas.length > 1 ? 'am' : 'a'} ativa{obs.titulosSimultaneas.length > 1 ? 's' : ''} neste período.
+                                Não é possível isolar o efeito de cada estratégia nesta observação.
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Cobertura */}
+                          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 12 }}>
+                            {obs.cobertura.diasComDado} de {obs.cobertura.diasTotais} dias com registro ({obs.cobertura.percentual}% de cobertura)
                           </div>
-                        ))}
+
+                          {/* Sinais */}
+                          {obs.sinais.length > 0 && (
+                            <div style={{ marginBottom: 14 }}>
+                              <div className="section-label" style={{ marginBottom: 6 }}>Sinais observados no período</div>
+                              {obs.sinais.map(s => (
+                                <div key={s.campo} style={{
+                                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                  padding: '6px 0', borderBottom: '0.5px solid var(--border)', fontSize: 12,
+                                }}>
+                                  <div style={{ color: 'var(--text2)', fontWeight: 500 }}>{s.label}</div>
+                                  <div style={{ color: corDir(s.direcao), fontSize: 11 }}>{textoDir(s.direcao)}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Intestino (nutri only — score numérico) */}
+                          {obs.intestino.diasComRegistro > 0 && (
+                            <div style={{ marginBottom: 14 }}>
+                              <div className="section-label" style={{ marginBottom: 6 }}>Intestino</div>
+                              <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 3 }}>
+                                Score médio: {obs.intestino.scoreMedDurante}
+                                {obs.intestino.scoreMedAntes != null && ` (vs. ${obs.intestino.scoreMedAntes} antes)`}
+                                {' — '}<span style={{ color: corDir(obs.intestino.direcao) }}>{textoDir(obs.intestino.direcao)}</span>
+                              </div>
+                              {obs.intestino.bristolMaisFrequente != null && (
+                                <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                                  Bristol mais frequente: tipo {obs.intestino.bristolMaisFrequente}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Adesão */}
+                          {obs.aderencia.total > 0 && (
+                            <div style={{ marginBottom: 14 }}>
+                              <div className="section-label" style={{ marginBottom: 6 }}>Adesão declarada</div>
+                              <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+                                Sim {obs.aderencia.sim} · Parcialmente {obs.aderencia.parcialmente} · Não {obs.aderencia.nao}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Aviso fase do ciclo — versão clínica */}
+                          {obs.fasesAviso && (
+                            <div style={{
+                              fontSize: 12, color: 'var(--text2)', padding: '8px 12px',
+                              background: 'var(--bg2)', borderRadius: 6, marginBottom: 12, lineHeight: 1.6,
+                            }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text1)' }}>Contexto de ciclo: </span>
+                              {obs.fasesAviso.textoNutri}
+                            </div>
+                          )}
+
+                          {/* Disclaimer */}
+                          <div style={{ fontSize: 11, color: 'var(--text4)', lineHeight: 1.5 }}>
+                            ⚠ {obs.disclaimer}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Aprendizado clínico — sempre visível, após obs */}
+                  {e.aprendizados && (
+                    <div style={{ marginTop: obsOpen ? 0 : 0, padding: '10px 12px', background: 'var(--bg2)', borderRadius: 8, borderTop: '0.5px solid var(--border)', paddingTop: 12 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5 }}>
+                        Aprendizado clínico
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+                      <div style={{ fontSize: 13, color: 'var(--dark)', lineHeight: 1.6 }}>{e.aprendizados}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -428,25 +592,20 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
       {encerrando && (
         <div onClick={() => setEncerrando(null)} style={{
           position: 'fixed', inset: 0, background: 'rgba(28,23,18,.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 100, padding: 24,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 24,
         }}>
           <div onClick={ev => ev.stopPropagation()} style={{
             background: 'var(--white)', borderRadius: 14, padding: 24,
-            maxWidth: 440, width: '100%',
-            border: '0.5px solid var(--border)',
+            maxWidth: 440, width: '100%', border: '0.5px solid var(--border)',
             boxShadow: '0 8px 32px rgba(28,23,18,.12)',
           }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Encerrar estratégia</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>"{encerrando.titulo}"</div>
             <FL label="Aprendizados clínicos (opcional)">
-              <textarea
-                rows={3}
-                value={encerrando.aprendizados}
+              <textarea rows={3} value={encerrando.aprendizados}
                 onChange={ev => setEncerrando(s => ({ ...s, aprendizados: ev.target.value }))}
                 placeholder="O que essa estratégia revelou? O que ficou de aprendizado clínico?"
-                style={{ width: '100%', resize: 'vertical', boxSizing: 'border-box' }}
-              />
+                style={{ width: '100%', resize: 'vertical', boxSizing: 'border-box' }} />
             </FL>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn-outline" style={{ flex: 1, justifyContent: 'center' }}

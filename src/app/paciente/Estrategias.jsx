@@ -317,6 +317,18 @@ export default function Estrategias() {
                       </button>
                     )}
                   </div>
+
+                  {/* Mensagem observacional — Sprint 23.2 */}
+                  {totalLogs > 0 && (
+                    <div style={{
+                      marginTop: 10, padding: '10px 12px',
+                      background: 'var(--bg2)', borderRadius: 8,
+                      fontSize: 12, color: 'var(--text2)', lineHeight: 1.6,
+                    }}>
+                      Seus registros mostraram algumas mudanças durante este período. Converse com sua nutri sobre o significado desses dados no seu contexto.
+                    </div>
+                  )}
+
                   {histAberto[e.id] && (
                     <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 1 }}>
                       {(logs[e.id] ?? []).map(l => (
