@@ -29,6 +29,7 @@ import Metas from './_Metas.jsx';
 import PerfilBiologico from './_PerfilBiologico.jsx';
 import ConsultasClinicas from './_Consultas.jsx';
 import Estrategias from './_Estrategias.jsx';
+import RegistrosClinicos from './_RegistrosClinicos.jsx';
 import DicaJSON from '../../components/DicaJSON.jsx';
 
 export default function PacientePerfil() {
@@ -639,8 +640,9 @@ export default function PacientePerfil() {
           { id: 'condutas',    label: 'Condutas',     icon: 'clipboard-list'  },
           { id: 'metas',        label: 'Metas',        icon: 'target'        },
           { id: 'estrategias', label: 'Estratégias', icon: 'flask'         },
-          { id: 'consultas',   label: 'Consultas',   icon: 'stethoscope'   },
-          { id: 'evolucao',   label: 'Evolução',   icon: 'chart-line'  },
+          { id: 'consultas',   label: 'Consultas',          icon: 'stethoscope'   },
+          { id: 'registros',  label: 'Registros Clínicos', icon: 'notes'          },
+          { id: 'evolucao',   label: 'Evolução',           icon: 'chart-line'     },
           { id: 'anamnese',    label: 'Anamnese',     icon: 'clipboard-text' },
           { id: 'followup',    label: 'Follow-up',    icon: 'notebook' },
           { id: 'plano',       label: 'Plano',        icon: 'salad' },
@@ -688,6 +690,7 @@ export default function PacientePerfil() {
       {tab === 'metas'        && <Metas       pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'estrategias'  && <Estrategias pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'consultas'  && <ConsultasClinicas pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} onIrParaTab={setTab} />}
+      {tab === 'registros'  && <RegistrosClinicos pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'evolucao' && <Evolucao pacienteId={paciente.id} paciente={paciente} nutriId={user.id} onIrParaTab={setTab} />}
       {tab === 'anamnese' && <Anamnese pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'followup' && <FollowUp pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
