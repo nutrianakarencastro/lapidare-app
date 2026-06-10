@@ -1064,9 +1064,28 @@ function FormPerfil({ pacienteId, perfil, onSalvo, onCancelar }) {
   async function salvar() {
     setSalvando(true);
     setErro(null);
+    // Campos nullable com CHECK constraint devem ser null, nunca ''.
+    // trh_tipo e trh_via têm o mesmo padrão — corrigidos preventivamente.
+    const payload = {
+      paciente_id:            pacienteId,
+      situacao_ciclo:         form.situacao_ciclo,
+      estado_reprodutivo:     form.estado_reprodutivo,
+      amamentando:            form.amamentando,
+      usa_contraceptivo:      form.usa_contraceptivo,
+      contraceptivo_tipo:     form.contraceptivo_tipo     || null,
+      contraceptivo_nome:     form.contraceptivo_nome?.trim()     || null,
+      contraceptivo_continuo: form.contraceptivo_continuo,
+      contraceptivo_menstrua: form.contraceptivo_menstrua,
+      contraceptivo_obs:      form.contraceptivo_obs?.trim()      || null,
+      usa_trh:                form.usa_trh,
+      trh_tipo:               form.trh_tipo               || null,
+      trh_via:                form.trh_via                || null,
+      trh_obs:                form.trh_obs?.trim()                || null,
+      obs_geral:              form.obs_geral?.trim()              || null,
+    };
     const { error } = await supabase
       .from('ciclo_perfil')
-      .upsert({ paciente_id: pacienteId, ...form }, { onConflict: 'paciente_id' });
+      .upsert(payload, { onConflict: 'paciente_id' });
     setSalvando(false);
     if (error) { setErro(error.message); return; }
     onSalvo();
