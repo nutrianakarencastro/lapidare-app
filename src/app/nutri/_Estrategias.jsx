@@ -5,6 +5,7 @@ import {
   calcularCruzamentos,
   calcularJanelaBaseline,
   duracaoDias,
+  gerarRascunhoClinico,
 } from '../../lib/estrategiasUtils.js';
 
 const CATEGORIAS = [
@@ -83,6 +84,10 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
   const [busy,     setBusy]     = useState(false);
   const [feedback, setFeedback] = useState(null);
   const perfilCicloRef = useRef(null);
+  const [sinteses,    setSinteses]    = useState({});
+  const [reflexoes,   setReflexoes]   = useState({});
+  const [salvandoApr, setSalvandoApr] = useState({});
+  const [feedbackApr, setFeedbackApr] = useState({});
 
   async function carregar() {
     const { data } = await supabase
@@ -130,6 +135,18 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
     setForm(null);
     setEditId(null);
     carregar();
+  }
+
+  async function salvarAprendizado(estrategiaId, texto) {
+    setSalvandoApr(s => ({ ...s, [estrategiaId]: true }));
+    await supabase.from('estrategias')
+      .update({ aprendizados: texto.trim() || null, updated_at: new Date().toISOString() })
+      .eq('id', estrategiaId);
+    setSalvandoApr(s => ({ ...s, [estrategiaId]: false }));
+    setFeedbackApr(s => ({ ...s, [estrategiaId]: 'salvo' }));
+    setHistorico(h => h.map(e =>
+      e.id === estrategiaId ? { ...e, aprendizados: texto.trim() || null } : e
+    ));
   }
 
   async function encerrar() {
@@ -215,6 +232,8 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
 
     setObsAbertos(s => ({ ...s, [e.id]: cruzamentos }));
     setObsLoading(s => ({ ...s, [e.id]: false }));
+    setSinteses(s => ({ ...s, [e.id]: gerarRascunhoClinico(cruzamentos, e) }));
+    setReflexoes(r => ({ ...r, [e.id]: e.aprendizados ?? '' }));
   }
 
   function abrirEditar(e) {
@@ -567,13 +586,47 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
                           <div style={{ fontSize: 11, color: 'var(--text4)', lineHeight: 1.5 }}>
                             ⚠ {obs.disclaimer}
                           </div>
+
+                          {/* Síntese clínica assistida + Reflexão */}
+                          {sinteses[e.id] && (
+                            <div style={{ marginTop: 16, borderTop: '0.5px solid var(--border)', paddingTop: 14 }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                                Síntese clínica assistida
+                              </div>
+                              <div style={{ fontSize: 13, color: 'var(--text1)', lineHeight: 1.7, marginBottom: 16 }}>
+                                {sinteses[e.id]}
+                              </div>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                                Reflexão clínica da nutricionista
+                              </div>
+                              <textarea
+                                value={reflexoes[e.id] ?? ''}
+                                onChange={ev => setReflexoes(r => ({ ...r, [e.id]: ev.target.value }))}
+                                placeholder="Escreva aqui sua interpretação clínica deste período…"
+                                rows={3}
+                                style={{ width: '100%', resize: 'vertical', minHeight: 72, boxSizing: 'border-box', fontSize: 13, marginBottom: 8 }}
+                              />
+                              {feedbackApr[e.id] === 'salvo' && (
+                                <div style={{ fontSize: 11, color: 'var(--green)', marginBottom: 6 }}>Aprendizado salvo.</div>
+                              )}
+                              <button
+                                className="btn"
+                                style={{ fontSize: 11, padding: '5px 14px' }}
+                                disabled={salvandoApr[e.id]}
+                                onClick={() => salvarAprendizado(e.id, reflexoes[e.id] ?? '')}
+                              >
+                                <i className="ti ti-check" aria-hidden="true"></i>{' '}
+                                {salvandoApr[e.id] ? 'Salvando…' : 'Salvar aprendizado'}
+                              </button>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
                   )}
 
-                  {/* Aprendizado clínico — sempre visível, após obs */}
-                  {e.aprendizados && (
+                  {/* Aprendizado clínico — visível quando observações estão fechadas */}
+                  {e.aprendizados && !obsOpen && (
                     <div style={{ marginTop: obsOpen ? 0 : 0, padding: '10px 12px', background: 'var(--bg2)', borderRadius: 8, borderTop: '0.5px solid var(--border)', paddingTop: 12 }}>
                       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5 }}>
                         Aprendizado clínico

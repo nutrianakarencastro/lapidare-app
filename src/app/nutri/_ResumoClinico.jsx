@@ -204,8 +204,29 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
   const [anamnese,     setAnamnese]     = useState(undefined);
   const [condutaAtual, setCondutaAtual] = useState(undefined);
   const [metas,        setMetas]        = useState(undefined);
-  const [consistencia, setConsistencia] = useState(undefined);
-  const [perfilResult, setPerfilResult] = useState(null);
+  const [consistencia,   setConsistencia]   = useState(undefined);
+  const [perfilResult,   setPerfilResult]   = useState(null);
+  const [memoriaClinica, setMemoriaClinica] = useState(undefined);
+  const [memoriaExpand,  setMemoriaExpand]  = useState(false);
+  const [fixando,        setFixando]        = useState({});
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      const { data } = await supabase
+        .from('estrategias')
+        .select('id, titulo, categoria, aprendizados, encerrada_em, aprendizado_essencial')
+        .eq('paciente_id', pacienteId)
+        .eq('status', 'encerrada')
+        .not('aprendizados', 'is', null)
+        .order('encerrada_em', { ascending: false })
+        .limit(20);
+      if (!active) return;
+      setMemoriaClinica(data ?? []);
+    }
+    load();
+    return () => { active = false; };
+  }, [pacienteId]);
 
   useEffect(() => {
     let active = true;
@@ -338,6 +359,15 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
     return () => { active = false; };
   }, [pacienteId, nutriId]);
 
+  async function toggleEssencial(id, atual) {
+    setFixando(s => ({ ...s, [id]: true }));
+    await supabase.from('estrategias')
+      .update({ aprendizado_essencial: !atual })
+      .eq('id', id);
+    setMemoriaClinica(m => m.map(a => a.id === id ? { ...a, aprendizado_essencial: !atual } : a));
+    setFixando(s => ({ ...s, [id]: false }));
+  }
+
   if (prox === undefined) {
     return <div className="card empty-card"><div className="empty-sub">Carregando…</div></div>;
   }
@@ -348,7 +378,10 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
   const labelSub = { fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 500, marginBottom: 8 };
   const btnAcao  = { fontSize: 11, padding: '3px 9px', marginTop: 10 };
 
-  const pontosAtencao = perfilResult ? gerarPontosAtencao(perfilResult) : [];
+  const pontosAtencao   = perfilResult ? gerarPontosAtencao(perfilResult) : [];
+  const essenciais      = (memoriaClinica ?? []).filter(a => a.aprendizado_essencial);
+  const recentes        = (memoriaClinica ?? []).filter(a => !a.aprendizado_essencial);
+  const visivelRecentes = memoriaExpand ? recentes : recentes.slice(0, 3);
 
   return (
     <>
@@ -599,7 +632,128 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
           </div>
         </div>
       )}
+
+      {/* ── Memória Clínica Viva ── */}
+      {memoriaClinica !== undefined && (
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 12 }}>
+          <div style={{ ...labelSub, marginBottom: memoriaClinica.length === 0 ? 10 : 14 }}>
+            O que aprendemos até aqui 🌿
+          </div>
+
+          {memoriaClinica.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.65 }}>
+              A memória clínica viva dessa paciente é construída aos poucos — a partir dos aprendizados das estratégias encerradas que você considerar importantes de manter em vista. Fixe o que continua sendo verdadeiro sobre ela.
+            </div>
+          ) : (
+            <>
+              {/* Em evidência */}
+              {essenciais.length > 0 && (
+                <div style={{ marginBottom: recentes.length > 0 ? 16 : 0 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
+                    Em evidência 🌿
+                  </div>
+                  {essenciais.map((apr, idx) => (
+                    <EntradaAprendizado
+                      key={apr.id}
+                      apr={apr}
+                      isPinned
+                      fixando={!!fixando[apr.id]}
+                      onToggle={() => toggleEssencial(apr.id, true)}
+                      isLast={idx === essenciais.length - 1}
+                    />
+                  ))}
+                  <div style={{ fontSize: 11, color: 'var(--text4)', fontStyle: 'italic', marginTop: 10, lineHeight: 1.55 }}>
+                    Vale revisitar estes aprendizados de tempos em tempos — o que continua sendo verdadeiro sobre essa paciente?
+                  </div>
+                </div>
+              )}
+
+              {/* Recentes */}
+              {recentes.length > 0 && (
+                <div style={{ borderTop: essenciais.length > 0 ? '0.5px solid var(--border)' : 'none', paddingTop: essenciais.length > 0 ? 14 : 0 }}>
+                  {visivelRecentes.map((apr, idx) => (
+                    <EntradaAprendizado
+                      key={apr.id}
+                      apr={apr}
+                      isPinned={false}
+                      fixando={!!fixando[apr.id]}
+                      onToggle={() => toggleEssencial(apr.id, false)}
+                      isLast={idx === visivelRecentes.length - 1}
+                    />
+                  ))}
+                  {recentes.length > 3 && (
+                    <button
+                      className="btn-outline"
+                      style={{ fontSize: 11, padding: '3px 9px', marginTop: 10 }}
+                      onClick={() => setMemoriaExpand(e => !e)}
+                    >
+                      {memoriaExpand ? 'Ver menos' : `Ver todos os aprendizados (${recentes.length})`}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Quando todos estão em evidência */}
+              {recentes.length === 0 && essenciais.length > 0 && (
+                <div style={{ borderTop: '0.5px solid var(--border)', paddingTop: 10, fontSize: 12, color: 'var(--text4)' }}>
+                  Todos os aprendizados estão em evidência.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </>
+  );
+}
+
+// ── Entrada de Aprendizado (Memória Clínica Viva) ─────────────────────────────
+function EntradaAprendizado({ apr, isPinned, fixando, onToggle, isLast }) {
+  return (
+    <div style={{
+      paddingBottom: isLast ? 0 : 12,
+      marginBottom:  isLast ? 0 : 12,
+      borderBottom:  isLast ? 'none' : '0.5px solid var(--border)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+            {dataBR(apr.encerrada_em?.slice(0, 10) ?? '')}
+          </span>
+          {apr.categoria && (
+            <span style={{
+              fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+              letterSpacing: '.06em', color: 'var(--blue)',
+              background: 'var(--blue-bg, #eff6ff)',
+              padding: '1px 7px', borderRadius: 999,
+            }}>
+              {apr.categoria}
+            </span>
+          )}
+        </div>
+        <button
+          style={{
+            fontSize: 11, background: 'none', border: 'none',
+            cursor: fixando ? 'default' : 'pointer',
+            color: isPinned ? 'var(--blue)' : 'var(--text4)',
+            padding: 0, fontFamily: 'var(--font-sans)',
+            whiteSpace: 'nowrap', flexShrink: 0,
+            opacity: fixando ? 0.5 : 1,
+          }}
+          onClick={onToggle}
+          disabled={fixando}
+          title={isPinned ? 'Remover de evidência' : 'Fixar em evidência'}
+        >
+          {isPinned ? '📌 Fixado' : '📌 Fixar'}
+        </button>
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--dark)', lineHeight: 1.65, marginBottom: 5 }}>
+        {apr.aprendizados}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text4)' }}>
+        Originado em: {apr.titulo} · Estratégia encerrada em {dataBR(apr.encerrada_em?.slice(0, 10) ?? '')}
+      </div>
+    </div>
   );
 }
 

@@ -199,3 +199,64 @@ export function calcularCruzamentos({
     disclaimer: `Observações baseadas em ${diasComDado} de ${diasTotais} dias com registro. Variações podem refletir múltiplos fatores além desta estratégia.`,
   };
 }
+
+// ── Síntese Clínica Assistida (Sprint 23.25) ──────────────────────────────────
+// Transforma o objeto cruzamentos em linguagem natural observacional.
+// Sem números, sem percentuais, sem linguagem causal.
+// Retorna null se os dados forem insuficientes.
+
+export function gerarRascunhoClinico(cruzamentos, estrategia) {
+  if (!cruzamentos?.suficiente) return null;
+
+  const frases = [];
+
+  frases.push(
+    `Durante o período da estratégia "${estrategia.titulo}", foram registradas observações nos sinais acompanhados.`
+  );
+
+  const aumentos = cruzamentos.sinais.filter(s => s.direcao === 'aumento');
+  const reducoes = cruzamentos.sinais.filter(s => s.direcao === 'reducao');
+  const estaveis = cruzamentos.sinais.filter(s => s.direcao === 'estavel');
+  const comDados = cruzamentos.sinais.filter(s => s.direcao !== 'sem_baseline');
+
+  if (aumentos.length > 0) {
+    const nomes = aumentos.map(s => s.label.toLowerCase()).join(', ');
+    frases.push(`Foram observadas mudanças com tendência de aumento em: ${nomes}.`);
+  }
+  if (reducoes.length > 0) {
+    const nomes = reducoes.map(s => s.label.toLowerCase()).join(', ');
+    frases.push(`Foram observadas mudanças com tendência de redução em: ${nomes}.`);
+  }
+  if (estaveis.length > 0 && (aumentos.length > 0 || reducoes.length > 0)) {
+    const nomes = estaveis.map(s => s.label.toLowerCase()).join(', ');
+    frases.push(`Permaneceram estáveis: ${nomes}.`);
+  }
+  if (comDados.length > 0 && aumentos.length === 0 && reducoes.length === 0) {
+    frases.push('Os sinais acompanhados permaneceram estáveis ao longo do período.');
+  }
+
+  const int = cruzamentos.intestino;
+  if (int.diasComRegistro > 0 && int.direcao !== 'sem_baseline') {
+    const descInt = {
+      aumento: 'apresentou aumento no score composto em relação ao período anterior',
+      reducao: 'apresentou redução no score composto em relação ao período anterior',
+      estavel: 'permaneceu estável ao longo do período',
+    }[int.direcao];
+    if (descInt) frases.push(`O padrão intestinal ${descInt}.`);
+  }
+
+  const { sim, parcialmente, nao, total } = cruzamentos.aderencia;
+  if (total > 0) {
+    let descAder;
+    if (sim / total >= 0.7) {
+      descAder = 'predominantemente positiva durante o período';
+    } else if (nao / total >= 0.5) {
+      descAder = 'baixa na maior parte dos registros';
+    } else {
+      descAder = 'variável ao longo do período';
+    }
+    frases.push(`A adesão declarada foi ${descAder}.`);
+  }
+
+  return frases.join(' ');
+}
