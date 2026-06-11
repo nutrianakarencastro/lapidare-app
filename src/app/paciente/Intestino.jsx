@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { podeAcessar } from '../../lib/modelos.js';
@@ -449,6 +450,7 @@ function SheetRastreio({ onSalvar, onFechar, salvando }) {
 
 export default function Intestino() {
   const { user, profile } = useSession();
+  const navigate = useNavigate();
   const pacienteId = profile?.id;
   const [logs, setLogs] = useState(null);
   const [logHoje, setLogHoje] = useState(null);
@@ -456,6 +458,7 @@ export default function Intestino() {
   const [sheet, setSheet] = useState(null); // 'diario' | 'rastreio' | null
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState(null);
+  const [rastreioEnviado, setRastreioEnviado] = useState(false);
 
   const dataInicio30 = (() => {
     const d = new Date();
@@ -509,6 +512,7 @@ export default function Intestino() {
 
   async function salvarRastreio(form) {
     if (!solicitacaoPendente) return;
+    const eraSomenteRastreio = !podeAcessar(profile?.acesso_utera, 'intestino');
     setSalvando(true);
     const payload = {
       paciente_id: pacienteId,
@@ -516,7 +520,7 @@ export default function Intestino() {
       tipo: 'rastreio',
       ...form,
     };
-    const [, atualRes] = await Promise.all([
+    await Promise.all([
       supabase.from('intestino_logs').upsert(payload, { onConflict: 'paciente_id,data,tipo' }),
       supabase.from('intestino_rastreio_solicitacoes')
         .update({ respondido_em: new Date().toISOString() })
@@ -524,9 +528,13 @@ export default function Intestino() {
     ]);
     setSalvando(false);
     setSheet(null);
-    await carregar();
-    setAviso('Rastreio enviado!');
-    setTimeout(() => setAviso(null), 2500);
+    if (eraSomenteRastreio) {
+      setRastreioEnviado(true);
+    } else {
+      await carregar();
+      setAviso('Rastreio enviado!');
+      setTimeout(() => setAviso(null), 2500);
+    }
   }
 
   // ── Estados de carregamento ──────────────────────────────────────────────
@@ -547,7 +555,44 @@ export default function Intestino() {
   const sinais = detectarSinaisAtencao(logs);
   const sinaisVisiveis = sinais.filter(s => s.nivel === 'atencao');
 
-  if (!podeAcessar(profile?.acesso_utera, 'intestino')) {
+  const temAcessoIntestino = podeAcessar(profile?.acesso_utera, 'intestino');
+  const modoSomenteRastreio = !temAcessoIntestino && !!solicitacaoPendente;
+
+  // Tier essencial que acabou de responder rastreio → tela de confirmação
+  if (rastreioEnviado && !temAcessoIntestino) {
+    return (
+      <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: '50%',
+          background: '#eef5e3', border: '2px solid #7ea85a',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 16px',
+        }}>
+          <i className="ti ti-check" style={{ fontSize: 26, color: '#7ea85a' }} aria-hidden="true" />
+        </div>
+        <div style={{ fontSize: 20, fontFamily: 'var(--font-serif)', color: 'var(--dark)', marginBottom: 8 }}>
+          Rastreio enviado!
+        </div>
+        <div style={{ fontSize: 14, color: 'var(--text3)', lineHeight: 1.6, marginBottom: 28 }}>
+          Suas respostas chegaram para a sua nutricionista.<br />
+          Obrigada por responder com cuidado.
+        </div>
+        <button
+          onClick={() => navigate('/paciente/inicio')}
+          style={{
+            padding: '11px 24px', borderRadius: 10, border: 'none', cursor: 'pointer',
+            fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-sans)',
+            background: 'var(--dark)', color: '#fff',
+          }}
+        >
+          Voltar ao início
+        </button>
+      </div>
+    );
+  }
+
+  // Tier essencial sem rastreio pendente → bloqueio normal
+  if (!temAcessoIntestino && !solicitacaoPendente) {
     return <BloqueioModelo modulo="Intestino" tierMinimo={2} />;
   }
 
@@ -595,8 +640,8 @@ export default function Intestino() {
         </div>
       )}
 
-      {/* Botão principal: registro do dia */}
-      <button
+      {/* Botão principal: registro do dia — oculto no modo somente rastreio */}
+      {!modoSomenteRastreio && <button
         onClick={() => setSheet('diario')}
         style={{
           width: '100%', padding: '16px', borderRadius: 14, border: 'none', cursor: 'pointer',
@@ -624,10 +669,10 @@ export default function Intestino() {
           </div>
         </div>
         <i className="ti ti-chevron-right" style={{ opacity: 0.6 }} aria-hidden="true" />
-      </button>
+      </button>}
 
       {/* Resumo: sem dados */}
-      {!diarios.length && (
+      {!modoSomenteRastreio && !diarios.length && (
         <div className="card empty-card">
           <i className="ti ti-leaf" style={{ fontSize: 32, color: 'var(--text4)', display: 'block', marginBottom: 10 }} aria-hidden="true" />
           <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--dark)', marginBottom: 6 }}>
@@ -640,7 +685,7 @@ export default function Intestino() {
       )}
 
       {/* Resumo 30 dias */}
-      {diarios.length > 0 && (
+      {!modoSomenteRastreio && diarios.length > 0 && (
         <>
           <div className="section-label" style={{ marginBottom: 10 }}>Últimos 30 dias</div>
 
@@ -695,8 +740,8 @@ export default function Intestino() {
         </>
       )}
 
-      {/* Disclaimer */}
-      <div style={{
+      {/* Disclaimer — oculto no modo somente rastreio */}
+      {!modoSomenteRastreio && <div style={{
         padding: '12px 14px', borderRadius: 10, marginTop: 4,
         background: 'var(--bg2)', border: '0.5px solid var(--border)',
         fontSize: 11, color: 'var(--text3)', lineHeight: 1.6,
@@ -704,10 +749,10 @@ export default function Intestino() {
       }}>
         <i className="ti ti-info-circle" style={{ fontSize: 14, color: 'var(--text4)', flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
         {DISCLAIMER}
-      </div>
+      </div>}
 
       {/* Sheets */}
-      {sheet === 'diario' && (
+      {sheet === 'diario' && !modoSomenteRastreio && (
         <SheetDiario
           inicial={logHoje ?? {}}
           onSalvar={salvarDiario}

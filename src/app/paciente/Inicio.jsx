@@ -42,6 +42,7 @@ export default function Inicio() {
   const [suplLogsHojeIds, setSuplLogsHojeIds] = useState(new Set());
   const [dmgModulo,    setDmgModulo]    = useState(null);
   const [glicemiaHoje, setGlicemiaHoje] = useState([]);
+  const [rastreioIntestinalPendente, setRastreioIntestinalPendente] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -50,7 +51,7 @@ export default function Inicio() {
       const agora  = new Date().toISOString();
       const hoje   = new Date().toISOString().slice(0, 10);
       const amanha = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-      const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes, agAmRes, modulosRes, glicemiaHojeRes] = await Promise.all([
+      const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes, agAmRes, modulosRes, glicemiaHojeRes, rastreioIntestinoRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em, pdf_path')
           .eq('paciente_id', pacienteId).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
@@ -112,6 +113,12 @@ export default function Inicio() {
         supabase.from('diario_glicemico')
           .select('tipo_refeicao, seq_extra, valor_mg_dl, protocolo')
           .eq('data', hoje),
+        supabase.from('intestino_rastreio_solicitacoes')
+          .select('id, solicitado_em')
+          .is('respondido_em', null)
+          .order('solicitado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
       if (!active) return;
       setPlano(planoRes.data?.dados ?? null);
@@ -133,6 +140,7 @@ export default function Inicio() {
       }
       setDmgModulo(dmg);
       setGlicemiaHoje(glicemiaHojeRes.data ?? []);
+      setRastreioIntestinalPendente(rastreioIntestinoRes.data ?? null);
 
       const habitosLista = habitosRes.data ?? [];
       const logsHoje = {};
@@ -979,6 +987,49 @@ export default function Inicio() {
           </div>
         );
       })()}
+
+      {/* ── Rastreio intestinal solicitado ── */}
+      {rastreioIntestinalPendente && (
+        <div
+          onClick={() => navigate('/paciente/intestino')}
+          style={{
+            margin: '0 16px 12px', padding: '14px 16px',
+            background: '#eef5e3', border: '1.5px solid #7ea85a',
+            borderRadius: 14, cursor: 'pointer',
+            display: 'flex', alignItems: 'flex-start', gap: 12,
+          }}
+        >
+          <div style={{
+            width: 42, height: 42, borderRadius: 11, flexShrink: 0,
+            background: 'rgba(126,168,90,.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <i className="ti ti-clipboard-list" style={{ fontSize: 20, color: '#7ea85a' }} aria-hidden="true" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
+              color: '#4a7a30', fontWeight: 500, marginBottom: 2,
+            }}>
+              Solicitação da sua nutri
+            </div>
+            <div className="serif" style={{ fontSize: 18, color: '#1c3d10', lineHeight: 1.15, marginBottom: 3 }}>
+              Rastreio intestinal
+            </div>
+            <div style={{ fontSize: 12, color: '#4a7a30', lineHeight: 1.5 }}>
+              Sua nutricionista pediu uma avaliação intestinal. Leva cerca de 3 minutos.
+            </div>
+            <div style={{
+              marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 12, fontWeight: 600, padding: '7px 14px',
+              background: '#7ea85a', color: '#fff', borderRadius: 8,
+            }}>
+              Responder agora
+              <i className="ti ti-arrow-right" style={{ fontSize: 13 }} aria-hidden="true" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lembrete de check-in pendente */}
       {checkinPendente && podeAcessar(profile?.acesso_utera, 'checkin') && (
