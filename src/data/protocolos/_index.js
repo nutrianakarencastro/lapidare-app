@@ -27,4 +27,25 @@ export const PROTOCOLOS_INDEX = [
     categorias: ['Hormônios', 'Intestino', 'Fertilidade'],
     arquivo: 'endometriose.md',
   },
+  {
+    id: 'dominancia-estrogenica',
+    titulo: 'Dominância Estrogênica — Equilíbrio Hormonal e Metabolismo do Estrogênio',
+    categoria: 'Hormônios',
+    categorias: ['Hormônios', 'Intestino', 'Metabolismo'],
+    arquivo: 'dominancia-estrogenica.md',
+  },
+  {
+    id: 'sop',
+    titulo: 'SOP — Equilíbrio Metabólico e Hormonal',
+    categoria: 'Hormônios',
+    categorias: ['Hormônios', 'Metabolismo', 'Fertilidade'],
+    arquivo: 'sop.md',
+  },
+  {
+    id: 'obesidade',
+    titulo: 'Obesidade e Sobrepeso Feminino — Metabolismo, Comportamento e Composição Corporal',
+    categoria: 'Metabolismo',
+    categorias: ['Metabolismo', 'Comportamento Alimentar', 'Hormônios', 'Longevidade Feminina'],
+    arquivo: 'obesidade.md',
+  },
 ];
