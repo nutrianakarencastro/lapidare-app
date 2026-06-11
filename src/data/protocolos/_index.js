@@ -69,4 +69,32 @@ export const PROTOCOLOS_INDEX = [
     categorias: ['Metabolismo', 'Hormônios', 'Longevidade Feminina'],
     arquivo: 'cortisol.md',
   },
+  {
+    id: 'osteopenia',
+    titulo: 'Osteopenia — Preservação Óssea e Envelhecimento Funcional',
+    categoria: 'Longevidade Feminina',
+    categorias: ['Longevidade Feminina', 'Metabolismo', 'Menopausa'],
+    arquivo: 'osteopenia.md',
+  },
+  {
+    id: 'diabetes-gestacional',
+    titulo: 'Diabetes Gestacional — Equilíbrio Glicêmico e Proteção Materno-Fetal',
+    categoria: 'Metabolismo',
+    categorias: ['Metabolismo', 'Fertilidade'],
+    arquivo: 'diabetes-gestacional.md',
+  },
+  {
+    id: 'ansiedade-depressao',
+    titulo: 'Ansiedade e Depressão — Regulação Emocional e Recuperação da Vitalidade Feminina',
+    categoria: 'Comportamento Alimentar',
+    categorias: ['Comportamento Alimentar', 'Hormônios', 'Intestino', 'Metabolismo'],
+    arquivo: 'ansiedade-depressao.md',
+  },
+  {
+    id: 'insonia',
+    titulo: 'Insônia — Recuperação do Sono e Regulação Neuroendócrina Feminina',
+    categoria: 'Metabolismo',
+    categorias: ['Metabolismo', 'Hormônios', 'Longevidade Feminina'],
+    arquivo: 'insonia.md',
+  },
 ];
