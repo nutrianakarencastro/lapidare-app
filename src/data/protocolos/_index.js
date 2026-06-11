@@ -7,6 +7,13 @@ export const PROTOCOLOS_INDEX = [
     arquivo: 'perimenopausa.md',
   },
   {
+    id: 'pos-menopausa',
+    titulo: 'Pós-Menopausa — Vitalidade, Funcionalidade e Longevidade Feminina',
+    categoria: 'Menopausa',
+    categorias: ['Menopausa', 'Metabolismo', 'Longevidade Feminina'],
+    arquivo: 'pos-menopausa.md',
+  },
+  {
     id: 'constipacao',
     titulo: 'Constipação e Desordens Intestinais — Função Digestiva e Equilíbrio Sistêmico Feminino',
     categoria: 'Intestino',
@@ -47,5 +54,19 @@ export const PROTOCOLOS_INDEX = [
     categoria: 'Metabolismo',
     categorias: ['Metabolismo', 'Comportamento Alimentar', 'Hormônios', 'Longevidade Feminina'],
     arquivo: 'obesidade.md',
+  },
+  {
+    id: 'tpm',
+    titulo: 'TPM — Regulação do Ciclo e Bem-Estar na Fase Lútea',
+    categoria: 'Hormônios',
+    categorias: ['Hormônios', 'Comportamento Alimentar', 'Intestino'],
+    arquivo: 'tpm.md',
+  },
+  {
+    id: 'cortisol',
+    titulo: 'Cortisol Alto — Regulação do Estresse e Recuperação Metabólica Feminina',
+    categoria: 'Metabolismo',
+    categorias: ['Metabolismo', 'Hormônios', 'Longevidade Feminina'],
+    arquivo: 'cortisol.md',
   },
 ];
