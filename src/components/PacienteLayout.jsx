@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import BrandFooter from './BrandFooter.jsx';
 import { useSession, signOut } from '../lib/session.jsx';
 import { podeAcessar } from '../lib/modelos.js';
 import { useTheme } from '../lib/theme.jsx';
 import { iniciais } from '../lib/utils.js';
+import { supabase } from '../lib/supabase.js';
 import '../styles/paciente.css';
 
 const WHATSAPP_URL = 'https://wa.me/5535999614602';
@@ -23,8 +24,9 @@ const MAIS_ITEMS = [
   { path: '/paciente/estrategias',   modulo: 'estrategias',   icon: 'flask',          label: 'Estratégias',                sub: 'Experimentos clínicos' },
   { path: '/paciente/habitos',       modulo: null,            icon: 'checklist',      label: 'Hábitos',                    sub: 'Tracker diário' },
   { path: '/paciente/ciclo',         modulo: 'ciclo',         icon: 'moon',           label: 'Ciclo & Hormônios',          sub: 'Acompanhe seu ciclo' },
-  { path: '/paciente/intestino',     modulo: 'intestino',     icon: 'leaf',           label: 'Intestino',                  sub: 'Registro e acompanhamento' },
-  { path: '/paciente/alem-nutricao', modulo: 'alem_nutricao', icon: 'star',           label: 'Além da Nutrição',           sub: 'Indicações da nutri' },
+  { path: '/paciente/intestino',        modulo: 'intestino',     icon: 'leaf',     label: 'Intestino',          sub: 'Registro e acompanhamento'  },
+  { path: '/paciente/alem-nutricao',   modulo: 'alem_nutricao', icon: 'star',     label: 'Além da Nutrição',   sub: 'Indicações da nutri'        },
+  { path: '/paciente/diario-glicemico', moduloEspecial: 'diario_glicemico_dmg', icon: 'droplet', label: 'Diário Glicêmico', sub: 'Monitorização gestacional' },
   { path: '/paciente/mapa',          modulo: 'mapa',          icon: 'map',            label: 'Mapa Metabólico',            sub: 'Seus 9 eixos metabólicos' },
   { path: '/paciente/jornada',       modulo: 'jornada',       icon: 'route',          label: 'Minha jornada',              sub: 'Fases e evolução' },
   // CHAT DESATIVADO — canal oficial é WhatsApp. Reativar: descomentar linha abaixo e remover o item whatsapp.
@@ -48,8 +50,9 @@ const HEADERS = {
   '/paciente/habitos':      () =>                ({ eyebrow: 'Hábitos do dia',   title: 'Meus hábitos',      subtitle: 'Acompanhe sua rotina' }),
   '/paciente/mapa':         () =>                ({ eyebrow: 'Saúde metabólica', title: 'Mapa Metabólico',       subtitle: 'Seus 9 eixos de equilíbrio' }),
   '/paciente/ciclo':        () =>                ({ eyebrow: 'Saúde hormonal',   title: 'Ciclo & Hormônios',     subtitle: 'Acompanhe seu ciclo menstrual' }),
-  '/paciente/intestino':    () =>                ({ eyebrow: 'Saúde intestinal', title: 'Meu intestino',          subtitle: 'Registro e acompanhamento' }),
-  '/paciente/alem-nutricao': () =>             ({ eyebrow: 'Estilo de vida',   title: 'Além da Nutrição',       subtitle: 'Indicações da nutri' }),
+  '/paciente/intestino':         () => ({ eyebrow: 'Saúde intestinal',   title: 'Meu intestino',       subtitle: 'Registro e acompanhamento' }),
+  '/paciente/alem-nutricao':    () => ({ eyebrow: 'Estilo de vida',     title: 'Além da Nutrição',    subtitle: 'Indicações da nutri'       }),
+  '/paciente/diario-glicemico': () => ({ eyebrow: 'Diabetes Gestacional', title: 'Diário Glicêmico', subtitle: 'Monitorização diária'     }),
   '/paciente/jornada':      () =>                ({ eyebrow: 'Minha evolução',   title: 'Minha jornada',         subtitle: 'Fases e marcos do acompanhamento' }),
   '/paciente/exames':       () =>                ({ eyebrow: 'Saúde & Exames',   title: 'Meus Exames',           subtitle: 'Análises e resultados' }),
   '/paciente/orientacoes':  () =>                ({ eyebrow: 'Meu conteúdo',     title: 'Orientações',           subtitle: 'Enviadas pela sua nutri'      }),
@@ -63,6 +66,27 @@ export default function PacienteLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [modulosEspeciaisAtivos, setModulosEspeciaisAtivos] = useState(new Set());
+
+  useEffect(() => {
+    if (!profile) return;
+    async function carregarModulos() {
+      const { data } = await supabase
+        .from('paciente_modulos')
+        .select('modulo, ativo, ativado_em')
+        .order('ativado_em', { ascending: false });
+      // Estado atual: a linha mais recente por módulo determina se está ativo
+      const seen = new Set();
+      const ativos = new Set();
+      for (const row of data ?? []) {
+        if (seen.has(row.modulo)) continue;
+        seen.add(row.modulo);
+        if (row.ativo) ativos.add(row.modulo);
+      }
+      setModulosEspeciaisAtivos(ativos);
+    }
+    carregarModulos();
+  }, [profile]);
 
   const primeiroNome = profile?.nome?.split(' ')[0] ?? '';
 
@@ -98,7 +122,7 @@ export default function PacienteLayout() {
         {TABS.map(t => {
           const active = t.path
             ? location.pathname === t.path
-            : ['/paciente/compras', '/paciente/suplementos', '/paciente/estrategias', '/paciente/habitos', '/paciente/mapa', '/paciente/ciclo', '/paciente/intestino', '/paciente/alem-nutricao', '/paciente/jornada', '/paciente/exames', '/paciente/orientacoes', '/paciente/documentos'].includes(location.pathname);
+            : ['/paciente/compras', '/paciente/suplementos', '/paciente/estrategias', '/paciente/habitos', '/paciente/mapa', '/paciente/ciclo', '/paciente/intestino', '/paciente/alem-nutricao', '/paciente/jornada', '/paciente/exames', '/paciente/orientacoes', '/paciente/documentos', '/paciente/diario-glicemico'].includes(location.pathname);
 
           if (!t.path) {
             return (
@@ -134,6 +158,8 @@ export default function PacienteLayout() {
             <div className="grabber"></div>
             <div className="serif" style={{ fontSize: 22, marginBottom: 14 }}>Mais</div>
             {MAIS_ITEMS.map(item => {
+              // Módulos clínicos (moduloEspecial): só aparecem quando ativos
+              if (item.moduloEspecial && !modulosEspeciaisAtivos.has(item.moduloEspecial)) return null;
               const bloqueado = item.modulo && !podeAcessar(profile?.acesso_utera, item.modulo);
               return (
                 <button

@@ -7,6 +7,10 @@ import { textoDias, dataConsultaBR, diasAte, linkCall, consultaEmBreve, gerarGoo
 import { calcularFaseDoCiclo, FASES } from '../../lib/cicloUtils.js';
 import { podeAcessar } from '../../lib/modelos.js';
 import { semanaAtualDe, toggleJornadaMeta } from '../../lib/jornadaUtils.js';
+import {
+  classificar, LABEL_CURTO, REFEICOES_FIXAS,
+  lerTimersHoje, timerVencido, timerEsperadoEm,
+} from '../../lib/glicemiaUtils.js';
 
 export default function Inicio() {
   const tema = useTheme();
@@ -36,6 +40,8 @@ export default function Inicio() {
   const [suplTomados,     setSuplTomados]     = useState(0);
   const [suplData,        setSuplData]        = useState([]);
   const [suplLogsHojeIds, setSuplLogsHojeIds] = useState(new Set());
+  const [dmgModulo,    setDmgModulo]    = useState(null);
+  const [glicemiaHoje, setGlicemiaHoje] = useState([]);
 
   useEffect(() => {
     let active = true;
@@ -44,7 +50,7 @@ export default function Inicio() {
       const agora  = new Date().toISOString();
       const hoje   = new Date().toISOString().slice(0, 10);
       const amanha = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-      const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes, agAmRes] = await Promise.all([
+      const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes, agAmRes, modulosRes, glicemiaHojeRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em, pdf_path')
           .eq('paciente_id', pacienteId).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
@@ -100,6 +106,12 @@ export default function Inicio() {
           .eq('paciente_id', pacienteId)
           .eq('ativo', true)
           .eq('proximo_envio', amanha),
+        supabase.from('paciente_modulos')
+          .select('modulo, ativo, config, ativado_em')
+          .order('ativado_em', { ascending: false }),
+        supabase.from('diario_glicemico')
+          .select('tipo_refeicao, seq_extra, valor_mg_dl, protocolo')
+          .eq('data', hoje),
       ]);
       if (!active) return;
       setPlano(planoRes.data?.dados ?? null);
@@ -110,6 +122,17 @@ export default function Inicio() {
       setAgendamentosAmanha(agAmRes.data ?? []);
       setOrientacoesNovas(orientacoesRes.count ?? 0);
       setExameRecente(examesRes.data ?? null);
+
+      // DMG — módulo e registros do dia
+      const seenMods = new Set();
+      let dmg = null;
+      for (const row of modulosRes.data ?? []) {
+        if (seenMods.has(row.modulo)) continue;
+        seenMods.add(row.modulo);
+        if (row.modulo === 'diario_glicemico_dmg' && row.ativo) { dmg = row; break; }
+      }
+      setDmgModulo(dmg);
+      setGlicemiaHoje(glicemiaHojeRes.data ?? []);
 
       const habitosLista = habitosRes.data ?? [];
       const logsHoje = {};
@@ -310,8 +333,180 @@ export default function Inicio() {
 
   const suplComHorario = suplData.filter(s => s.horarios?.length > 0);
 
+  // DMG — valores derivados para o card na tela Início
+  const dmgProtocolo       = dmgModulo?.config?.protocolo ?? '1h';
+  const dmgTimers          = dmgModulo ? lerTimersHoje() : [];
+  const dmgTimersAtivos    = dmgTimers.filter(t =>
+    !glicemiaHoje.some(r => r.tipo_refeicao === t.tipo) && !timerVencido(t));
+  const dmgTimersVencidos  = dmgTimers.filter(t =>
+    !glicemiaHoje.some(r => r.tipo_refeicao === t.tipo) && timerVencido(t));
+  const dmgProximaPendente = REFEICOES_FIXAS.find(t => !glicemiaHoje.some(r => r.tipo_refeicao === t));
+  const dmgTodasRegistradas = REFEICOES_FIXAS.every(t => glicemiaHoje.some(r => r.tipo_refeicao === t));
+  const dmgTemHipo  = glicemiaHoje.some(r => r.valor_mg_dl < 70);
+  const dmgTemFora  = glicemiaHoje.some(r =>
+    classificar(r.valor_mg_dl, r.tipo_refeicao, r.protocolo) === 'fora_meta');
+
   return (
     <>
+      {/* ── Card Diário Glicêmico DMG — prioridade máxima ─────────────── */}
+      {dmgModulo && (
+        <div
+          onClick={() => navigate('/paciente/diario-glicemico')}
+          style={{
+            margin: '0 16px 12px', padding: '14px 16px',
+            background: dmgTemHipo
+              ? 'var(--orange-bg, #fff7ed)'
+              : dmgTemFora
+              ? 'var(--red-bg)'
+              : 'var(--white)',
+            border: dmgTemHipo || dmgTimersVencidos.length > 0
+              ? '0.5px solid var(--orange)'
+              : dmgTemFora
+              ? '0.5px solid var(--red)'
+              : dmgTodasRegistradas
+              ? '0.5px solid var(--green)'
+              : '0.5px solid var(--hair)',
+            borderRadius: 14, cursor: 'pointer',
+          }}
+        >
+          {/* Banner de ação quando há timer vencido */}
+          {dmgTimersVencidos.length > 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              marginBottom: 10, padding: '7px 10px',
+              background: 'var(--orange)', borderRadius: 8, color: '#fff',
+            }}>
+              <i className="ti ti-bell-ringing" style={{ fontSize: 15, flexShrink: 0 }} aria-hidden="true" />
+              <span style={{ fontSize: 12, fontWeight: 600 }}>
+                Está na hora da sua aferição pós-refeição.
+              </span>
+            </div>
+          )}
+
+          {/* Header */}
+          <div style={{
+            display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', marginBottom: 8,
+          }}>
+            <div>
+              <div style={{
+                fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
+                color: 'var(--muted)', fontWeight: 500, marginBottom: 2,
+              }}>
+                Diário Glicêmico · Hoje
+              </div>
+              {/* Próxima aferição esperada */}
+              {dmgTimersAtivos.length > 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--blue)', fontWeight: 500 }}>
+                  Aferição do {LABEL_CURTO[dmgTimersAtivos[0].tipo]} esperada às {timerEsperadoEm(dmgTimersAtivos[0])}
+                </div>
+              ) : dmgTimersVencidos.length > 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--orange)', fontWeight: 500 }}>
+                  Sua aferição de {LABEL_CURTO[dmgTimersVencidos[0].tipo]} está esperando por você
+                </div>
+              ) : dmgTodasRegistradas ? (
+                <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 500 }}>
+                  Todas as refeições registradas ✓
+                </div>
+              ) : dmgProximaPendente ? (
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  Próxima: {LABEL_CURTO[dmgProximaPendente]}
+                </div>
+              ) : null}
+            </div>
+            <i className="ti ti-chevron-right" style={{ fontSize: 16, color: 'var(--muted)', flexShrink: 0 }} aria-hidden="true" />
+          </div>
+
+          {/* Grid das refeições fixas */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: 6, marginBottom: 12,
+          }}>
+            {REFEICOES_FIXAS.map(tipo => {
+              const reg = glicemiaHoje.find(r => r.tipo_refeicao === tipo);
+              if (!reg) {
+                return (
+                  <div key={tipo} style={{ textAlign: 'center' }}>
+                    <div style={{
+                      fontSize: 9, color: 'var(--muted)',
+                      textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4,
+                    }}>
+                      {LABEL_CURTO[tipo]}
+                    </div>
+                    <div style={{
+                      fontSize: 12, fontWeight: 500, color: 'var(--text4)',
+                      background: 'var(--bg-soft)', borderRadius: 6, padding: '4px 0',
+                    }}>—</div>
+                  </div>
+                );
+              }
+              const cls = classificar(reg.valor_mg_dl, reg.tipo_refeicao, reg.protocolo);
+              const colMap = {
+                meta:         { bg: 'var(--green-bg)',           cor: 'var(--green)'  },
+                fora_meta:    { bg: 'var(--red-bg)',             cor: 'var(--red)'    },
+                hipoglicemia: { bg: 'var(--orange-bg, #fff7ed)', cor: 'var(--orange)' },
+              };
+              const { bg, cor } = colMap[cls];
+              return (
+                <div key={tipo} style={{ textAlign: 'center' }}>
+                  <div style={{
+                    fontSize: 9, color: 'var(--muted)',
+                    textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 4,
+                  }}>
+                    {LABEL_CURTO[tipo]}
+                  </div>
+                  <div style={{
+                    fontSize: 12, fontWeight: 700, color: cor,
+                    background: bg, borderRadius: 6, padding: '4px 0',
+                  }}>
+                    {cls === 'hipoglicemia' ? '⚠ ' : ''}{reg.valor_mg_dl}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Extras — linha condicional */}
+          {(() => {
+            const extras = glicemiaHoje.filter(r => r.tipo_refeicao === 'extra');
+            if (extras.length === 0) return null;
+            const temFora = extras.some(r => classificar(r.valor_mg_dl, r.tipo_refeicao, r.protocolo) !== 'meta');
+            const temHipoEx = extras.some(r => r.valor_mg_dl < 70);
+            const cor = temHipoEx ? 'var(--orange)' : temFora ? 'var(--red)' : 'var(--green)';
+            const bg  = temHipoEx ? 'var(--orange-bg, #fff7ed)' : temFora ? 'var(--red-bg)' : 'var(--green-bg)';
+            return (
+              <div style={{
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'space-between', marginBottom: 12,
+              }}>
+                <span style={{
+                  fontSize: 9, color: 'var(--muted)',
+                  textTransform: 'uppercase', letterSpacing: '.1em',
+                }}>
+                  Extras
+                </span>
+                <span style={{
+                  fontSize: 12, fontWeight: 600, color: cor,
+                  background: bg, padding: '2px 8px', borderRadius: 5,
+                }}>
+                  {extras.length} {extras.length === 1 ? 'registro' : 'registros'}
+                </span>
+              </div>
+            );
+          })()}
+
+          {/* CTA */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 12, fontWeight: 600, padding: '7px 14px',
+            background: 'var(--dark)', color: 'var(--white)', borderRadius: 8,
+          }}>
+            <i className="ti ti-droplet" style={{ fontSize: 13 }} aria-hidden="true" />
+            Registrar glicemia
+          </div>
+        </div>
+      )}
+
       {/* Card de feedback da nutricionista */}
       {feedbackPendente && (
         <div

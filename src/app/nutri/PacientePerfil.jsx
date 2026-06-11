@@ -22,6 +22,7 @@ import OrientacoesPaciente from './_OrientacoesPaciente.jsx';
 import DocumentosNutri from './_DocumentosPaciente.jsx';
 import MapaMetabolicoNutri from './_MapaMetabolico.jsx';
 import ModulosEspeciais from './_ModulosEspeciais.jsx';
+import DiarioGlicemicoDashboard from './_DiarioGlicemicoDashboard.jsx';
 import IntestinoNutri from './_Intestino.jsx';
 import ResumoClinico from './_ResumoClinico.jsx';
 import LinhaTempo from './_LinhaTempo.jsx';
@@ -699,6 +700,7 @@ export default function PacientePerfil() {
           { id: 'exames',        label: 'Exames',      icon: 'flask'    },
           { id: 'orientacoes',   label: 'Orientações', icon: 'notebook' },
           { id: 'documentos',    label: 'Documentos',  icon: 'files'    },
+          { id: 'glicemia',      label: 'Glicemia',    icon: 'droplet'  },
           { id: 'modulos',       label: 'Módulos',     icon: 'puzzle'   },
         ].map(t => (
           <button
@@ -746,8 +748,9 @@ export default function PacientePerfil() {
       {tab === 'jornada'  && <Jornada pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'exames'      && <ExamesNutri pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'orientacoes' && <OrientacoesPaciente pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
-      {tab === 'documentos'  && <DocumentosNutri    pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
-      {tab === 'modulos'     && <ModulosEspeciais   pacienteId={paciente.id} nutriId={user.id} />}
+      {tab === 'documentos'  && <DocumentosNutri         pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
+      {tab === 'glicemia'    && <DiarioGlicemicoDashboard pacienteId={paciente.id} nutriId={user.id} />}
+      {tab === 'modulos'     && <ModulosEspeciais         pacienteId={paciente.id} nutriId={user.id} />}
     </>
   );
 }

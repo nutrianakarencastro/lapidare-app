@@ -52,6 +52,7 @@ import DocumentosPaciente from './app/paciente/Documentos.jsx';
 import IntestinoPaciente from './app/paciente/Intestino.jsx';
 import AlemNutricaoPaciente from './app/paciente/AlemNutricao.jsx';
 import EstrategiasPaciente from './app/paciente/Estrategias.jsx';
+import DiarioGlicemicoPaciente from './app/paciente/DiarioGlicemico.jsx';
 import AlemNutricaoNutri from './app/nutri/AlemNutricao.jsx';
 
 export default function App() {
@@ -117,8 +118,9 @@ export default function App() {
             <Route path="/paciente/exames" element={<ExamesPaciente />} />
             <Route path="/paciente/orientacoes" element={<OrientacoesPaciente />} />
             <Route path="/paciente/documentos"  element={<DocumentosPaciente />} />
-            <Route path="/paciente/intestino"     element={<IntestinoPaciente />} />
-            <Route path="/paciente/alem-nutricao" element={<AlemNutricaoPaciente />} />
+            <Route path="/paciente/intestino"       element={<IntestinoPaciente />} />
+            <Route path="/paciente/alem-nutricao"  element={<AlemNutricaoPaciente />} />
+            <Route path="/paciente/diario-glicemico" element={<DiarioGlicemicoPaciente />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
