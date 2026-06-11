@@ -97,4 +97,32 @@ export const PROTOCOLOS_INDEX = [
     categorias: ['Metabolismo', 'Hormônios', 'Longevidade Feminina'],
     arquivo: 'insonia.md',
   },
+  {
+    id: 'enxaqueca',
+    titulo: 'Enxaqueca Funcional — Modulação de Gatilhos e Qualidade de Vida Feminina',
+    categoria: 'Hormônios',
+    categorias: ['Hormônios', 'Intestino', 'Metabolismo'],
+    arquivo: 'enxaqueca.md',
+  },
+  {
+    id: 'hipotireoidismo',
+    titulo: 'Hipotireoidismo — Energia, Metabolismo e Equilíbrio Feminino',
+    categoria: 'Metabolismo',
+    categorias: ['Metabolismo', 'Hormônios', 'Fertilidade'],
+    arquivo: 'hipotireoidismo.md',
+  },
+  {
+    id: 'hashimoto',
+    titulo: 'Hashimoto — Modulação Imunometabólica e Vitalidade Feminina',
+    categoria: 'Hormônios',
+    categorias: ['Hormônios', 'Intestino', 'Metabolismo'],
+    arquivo: 'hashimoto.md',
+  },
+  {
+    id: 'glp1',
+    titulo: 'Análogos de GLP-1 — Proteção Metabólica e Sustentabilidade dos Resultados',
+    categoria: 'Metabolismo',
+    categorias: ['Metabolismo', 'Comportamento Alimentar', 'Longevidade Feminina'],
+    arquivo: 'glp1.md',
+  },
 ];
