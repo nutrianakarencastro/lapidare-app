@@ -1,6 +1,21 @@
 // Listas compartilhadas entre Cadastrar e PacientePerfil.
 // 'outro_livre' é sentinela de UI — nunca persiste no banco.
 
+export const CATEGORIAS_CLINICAS = [
+  { v: 'hormonios',               l: 'Hormônios' },
+  { v: 'fertilidade_tentantes',   l: 'Fertilidade e Tentantes' },
+  { v: 'gestacional',             l: 'Gestacional' },
+  { v: 'pos_parto',               l: 'Pós-parto' },
+  { v: 'perimenopausa',           l: 'Perimenopausa' },
+  { v: 'menopausa',               l: 'Menopausa' },
+  { v: 'sop',                     l: 'SOP' },
+  { v: 'endometriose_adenomiose', l: 'Endometriose/Adenomiose' },
+  { v: 'obesidade_feminina',      l: 'Obesidade Feminina' },
+  { v: 'intestino',               l: 'Intestino' },
+  { v: 'longevidade_feminina',    l: 'Longevidade Feminina' },
+  { v: 'nutricao_clinica_geral',  l: 'Nutrição Clínica Geral' },
+];
+
 export const MODELOS_CLINICOS = [
   { v: 'consulta',       l: 'Consulta'       },
   { v: 'acompanhamento', l: 'Acompanhamento'  },

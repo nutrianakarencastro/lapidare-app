@@ -6,7 +6,7 @@ import {
   dataBR, iniciais,
   validarPlano, validarLista, contarItensLista,
 } from '../../lib/utils.js';
-import { PLANOS, OBJETIVOS, MODALIDADES, MODELOS_CLINICOS, NIVEIS_ACESSO_UTERA } from '../../lib/opcoesClinicas.js';
+import { PLANOS, OBJETIVOS, MODALIDADES, MODELOS_CLINICOS, NIVEIS_ACESSO_UTERA, CATEGORIAS_CLINICAS } from '../../lib/opcoesClinicas.js';
 import { TEMPLATE_PADRAO, labelFrequencia } from '../../lib/checkinDefault.js';
 import { processarAgendamentosVencidos, executarAgendamento } from '../../lib/checkinScheduler.js';
 import CheckinForm from '../../components/CheckinForm.jsx';
@@ -21,6 +21,7 @@ import ExamesNutri from './_Exames.jsx';
 import OrientacoesPaciente from './_OrientacoesPaciente.jsx';
 import DocumentosNutri from './_DocumentosPaciente.jsx';
 import MapaMetabolicoNutri from './_MapaMetabolico.jsx';
+import ModulosEspeciais from './_ModulosEspeciais.jsx';
 import IntestinoNutri from './_Intestino.jsx';
 import ResumoClinico from './_ResumoClinico.jsx';
 import LinhaTempo from './_LinhaTempo.jsx';
@@ -135,6 +136,7 @@ export default function PacientePerfil() {
       modalidade:             paciente.modalidade             ?? '',
       modelo_acompanhamento:  paciente.modelo_acompanhamento  ?? '',
       acesso_utera:           paciente.acesso_utera           ?? 'completo',
+      categoria_clinica:      paciente.categoria_clinica       ?? '',
     });
     setErroEdit(null);
     setEditandoPerfil(true);
@@ -156,6 +158,7 @@ export default function PacientePerfil() {
       modalidade:            formEdit.modalidade            || null,
       modelo_acompanhamento: formEdit.modelo_acompanhamento || null,
       acesso_utera:          formEdit.acesso_utera          || 'completo',
+      categoria_clinica:     formEdit.categoria_clinica     || null,
     }).eq('id', id);
     setSalvandoEdit(false);
     if (error) { setErroEdit(error.message); return; }
@@ -493,6 +496,26 @@ export default function PacientePerfil() {
               </div>
             </div>
 
+            {/* Categoria clínica */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Categoria clínica</div>
+              <select
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  padding: '8px 10px', borderRadius: 7,
+                  border: '0.5px solid var(--border)', fontSize: 13,
+                  fontFamily: 'var(--font-sans)', background: 'var(--white)',
+                }}
+                value={formEdit.categoria_clinica ?? ''}
+                onChange={e => setFormEdit(f => ({ ...f, categoria_clinica: e.target.value }))}>
+                <option value="">— não classificada —</option>
+                {CATEGORIAS_CLINICAS.map(c => <option key={c.v} value={c.v}>{c.l}</option>)}
+              </select>
+              <div style={{ fontSize: 11, color: 'var(--text4)', marginTop: 4, lineHeight: 1.4 }}>
+                Foco clínico principal. Orienta automações e módulos futuros.
+              </div>
+            </div>
+
             {/* Experiência Útera */}
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Experiência Útera</div>
@@ -628,6 +651,19 @@ export default function PacientePerfil() {
         </div>
       </div>
 
+      {/* Categoria clínica */}
+      {paciente.categoria_clinica && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+          <span style={{
+            fontSize: 11, padding: '3px 10px', borderRadius: 999, fontWeight: 500,
+            background: 'var(--blue-bg, #eff6ff)', color: 'var(--blue)',
+            border: '0.5px solid var(--blue)',
+          }}>
+            {CATEGORIAS_CLINICAS.find(c => c.v === paciente.categoria_clinica)?.l ?? paciente.categoria_clinica}
+          </span>
+        </div>
+      )}
+
       {/* Tabs */}
       <div style={{
         display: 'flex', gap: 2, background: 'var(--bg2)',
@@ -663,6 +699,7 @@ export default function PacientePerfil() {
           { id: 'exames',        label: 'Exames',      icon: 'flask'    },
           { id: 'orientacoes',   label: 'Orientações', icon: 'notebook' },
           { id: 'documentos',    label: 'Documentos',  icon: 'files'    },
+          { id: 'modulos',       label: 'Módulos',     icon: 'puzzle'   },
         ].map(t => (
           <button
             key={t.id}
@@ -710,6 +747,7 @@ export default function PacientePerfil() {
       {tab === 'exames'      && <ExamesNutri pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'orientacoes' && <OrientacoesPaciente pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'documentos'  && <DocumentosNutri    pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
+      {tab === 'modulos'     && <ModulosEspeciais   pacienteId={paciente.id} nutriId={user.id} />}
     </>
   );
 }
