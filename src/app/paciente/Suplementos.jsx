@@ -53,8 +53,19 @@ export default function Suplementos() {
 
   async function abrirPdf(storage_path) {
     const { data, error } = await supabase.storage.from('prescricoes').createSignedUrl(storage_path, 120);
-    if (error) { alert('Não foi possível abrir: ' + error.message); return; }
-    window.open(data.signedUrl, '_blank', 'noopener');
+    if (error) {
+      alert('Não consegui abrir o PDF. Tente novamente ou avise sua nutricionista.');
+      return;
+    }
+    // window.open() é bloqueado no mobile após await (perde o user gesture).
+    // Criar <a> e disparar clique é o padrão aceito pelo iOS Safari e Android Chrome.
+    const a = document.createElement('a');
+    a.href = data.signedUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }
 
   async function copiarCupom(cupom) {
