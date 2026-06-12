@@ -32,7 +32,7 @@ CREATE POLICY farmacias_select_paciente ON public.farmacias
       SELECT 1
       FROM   public.farmacias_paciente fp
       JOIN   public.pacientes          p  ON p.id = fp.paciente_id
-      WHERE  fp.farmacia_id = id
+      WHERE  fp.farmacia_id = farmacias.id
         AND  p.auth_user_id = auth.uid()
     )
   );
