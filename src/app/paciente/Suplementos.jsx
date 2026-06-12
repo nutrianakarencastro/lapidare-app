@@ -370,7 +370,8 @@ export default function Suplementos() {
                             color: 'var(--white)', textDecoration: 'none',
                             fontFamily: 'var(--font-sans)', fontWeight: 500,
                           }}>
-                          <i className="ti ti-shopping-cart" aria-hidden="true"></i> Comprar
+                          <i className="ti ti-shopping-cart" aria-hidden="true"></i>
+                          {s.marca ? `Comprar — ${s.marca}` : 'Comprar no site da marca'}
                         </a>
                       )}
                       {s.cupom_desconto && (
@@ -384,7 +385,7 @@ export default function Suplementos() {
                             color: 'var(--gold-deep)', fontWeight: 500,
                           }}>
                           <i className="ti ti-tag" aria-hidden="true"></i>
-                          {s.cupom_desconto}
+                          Cupom: {s.cupom_desconto}
                           <i className="ti ti-copy" style={{ fontSize: 10, opacity: .6 }} aria-hidden="true"></i>
                         </button>
                       )}
