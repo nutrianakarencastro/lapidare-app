@@ -212,6 +212,8 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
   const [memoriaExpand,  setMemoriaExpand]  = useState(false);
   const [fixando,        setFixando]        = useState({});
   const [jornadaAtual,   setJornadaAtual]   = useState(undefined);
+  const [glicemiaData,   setGlicemiaData]   = useState(null);
+  const [intestinoData,  setIntestinoData]  = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -264,11 +266,15 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
     async function load() {
       const agora = new Date().toISOString();
 
-      // Corte de 30 dias para a leitura de consistência
+      // Cortes de data
       const c30 = new Date();
       c30.setDate(c30.getDate() - 30);
       const c30str = c30.toISOString().slice(0, 10);
       const c30ts  = c30.toISOString();
+
+      const c14 = new Date();
+      c14.setDate(c14.getDate() - 14);
+      const c14str = c14.toISOString().slice(0, 10);
 
       const [
         proxRes, ultConsRes, checkinRes, followupRes, avalRes, anamRes, condutaRes, metasRes,
@@ -277,6 +283,8 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
         checkinsConsRes,
         suplCountRes, suplLogsRes,
         jornadaRes,
+        dmgModRes, dmgLogsRes,
+        intestinoModRes, intestinoLogsRes,
       ] = await Promise.all([
         // ── Existentes ────────────────────────────────────────────────────────
         supabase.from('consultas').select('id, data_hora, tipo')
@@ -333,6 +341,32 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
           .select('fase, nome_fase, data_inicio_fase, duracao_semanas_prevista')
           .eq('paciente_id', pacienteId)
           .maybeSingle(),
+
+        // ── Módulos especiais (Sala de Situação E.1) ──────────────────────
+        supabase.from('paciente_modulos')
+          .select('ativo, config, ativado_em')
+          .eq('paciente_id', pacienteId)
+          .eq('modulo', 'diario_glicemico_dmg')
+          .order('ativado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase.from('diario_glicemico')
+          .select('data, tipo_refeicao, valor_mg_dl, protocolo')
+          .eq('paciente_id', pacienteId)
+          .gte('data', c14str)
+          .order('data', { ascending: false }),
+        supabase.from('paciente_modulos')
+          .select('ativo, config, ativado_em')
+          .eq('paciente_id', pacienteId)
+          .eq('modulo', 'diario_intestinal')
+          .order('ativado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase.from('intestino_logs')
+          .select('data, bristol, estufamento, nauseas, esvaziamento_incompleto')
+          .eq('paciente_id', pacienteId)
+          .eq('tipo', 'diario')
+          .gte('data', c14str),
       ]);
 
       if (!active) return;
@@ -346,6 +380,29 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
       setCondutaAtual(condutaRes.data ?? null);
       setMetas(metasRes.data ?? []);
       setJornadaAtual(jornadaRes.data ?? null);
+
+      // Módulo DMG
+      const dmgMod = dmgModRes.data;
+      if (dmgMod?.ativo) {
+        const diasAtivo = dmgMod.ativado_em
+          ? Math.floor((Date.now() - new Date(dmgMod.ativado_em).getTime()) / 86_400_000)
+          : 0;
+        setGlicemiaData({ ativo: true, registros: dmgLogsRes.data ?? [], diasAtivo });
+      } else {
+        setGlicemiaData(null);
+      }
+
+      // Módulo intestinal
+      const intestinoMod = intestinoModRes.data;
+      if (intestinoMod?.ativo) {
+        setIntestinoData({
+          ativo:         true,
+          periodicidade: intestinoMod.config?.periodicidade ?? 'sob_demanda',
+          registros:     intestinoLogsRes.data ?? [],
+        });
+      } else {
+        setIntestinoData(null);
+      }
 
       // Calcular leitura de consistência
       const datasRegistros = [
@@ -394,9 +451,11 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
     checkin,
     consistencia,
     condutaAtual,
-    metas:         metas         ?? [],
+    metas:          metas          ?? [],
     memoriaClinica: memoriaClinica ?? [],
-    jornada:       jornadaAtual,
+    jornada:        jornadaAtual,
+    glicemia:       glicemiaData,
+    intestino:      intestinoData,
   });
   const essenciais      = (memoriaClinica ?? []).filter(a => a.aprendizado_essencial);
   const recentes        = (memoriaClinica ?? []).filter(a => !a.aprendizado_essencial);

@@ -1021,6 +1021,16 @@ const CONTRAC_TIPO_OPS = [
   { v: 'anel_vaginal', label: 'Anel vaginal'  },
   { v: 'outro',        label: 'Outro'         },
 ];
+const CONTRAC_NAO_HORM_OPS = [
+  { v: 'nenhum',              label: 'Nenhum'                         },
+  { v: 'diu_cobre',           label: 'DIU de cobre'                   },
+  { v: 'preservativo',        label: 'Preservativo'                   },
+  { v: 'diafragma',           label: 'Diafragma'                      },
+  { v: 'tabelinha',           label: 'Tabelinha / percepção de fertilidade' },
+  { v: 'coito_interrompido',  label: 'Coito interrompido'             },
+  { v: 'laqueadura',          label: 'Laqueadura'                     },
+  { v: 'outro',               label: 'Outro'                          },
+];
 const TRH_TIPO_OPS = [
   { v: 'estrogênio',   label: 'Estrogênio'    },
   { v: 'progesterona', label: 'Progesterona'  },
@@ -1048,6 +1058,9 @@ function FormPerfil({ pacienteId, perfil, onSalvo, onCancelar }) {
     contraceptivo_continuo: perfil?.contraceptivo_continuo ?? false,
     contraceptivo_menstrua: perfil?.contraceptivo_menstrua ?? null,
     contraceptivo_obs:    perfil?.contraceptivo_obs    ?? '',
+    usa_contracepcao_nao_hormonal:  perfil?.usa_contracepcao_nao_hormonal ?? false,
+    contracepcao_nao_hormonal_tipo: perfil?.contracepcao_nao_hormonal_tipo ?? '',
+    contracepcao_nao_hormonal_obs:  perfil?.contracepcao_nao_hormonal_obs  ?? '',
     usa_trh:              perfil?.usa_trh              ?? false,
     trh_tipo:             perfil?.trh_tipo             ?? '',
     trh_via:              perfil?.trh_via              ?? '',
@@ -1077,6 +1090,9 @@ function FormPerfil({ pacienteId, perfil, onSalvo, onCancelar }) {
       contraceptivo_continuo: form.contraceptivo_continuo,
       contraceptivo_menstrua: form.contraceptivo_menstrua,
       contraceptivo_obs:      form.contraceptivo_obs?.trim()      || null,
+      usa_contracepcao_nao_hormonal:  form.usa_contracepcao_nao_hormonal,
+      contracepcao_nao_hormonal_tipo: form.contracepcao_nao_hormonal_tipo || null,
+      contracepcao_nao_hormonal_obs:  form.contracepcao_nao_hormonal_obs?.trim() || null,
       usa_trh:                form.usa_trh,
       trh_tipo:               form.trh_tipo               || null,
       trh_via:                form.trh_via                || null,
@@ -1118,33 +1134,54 @@ function FormPerfil({ pacienteId, perfil, onSalvo, onCancelar }) {
           <BtnToggle ativo={form.amamentando} onClick={tog('amamentando')} label="Estou amamentando" icon="heart" />
         </div>
 
-        <SL>Contraceptivo hormonal</SL>
-        <BtnToggle ativo={form.usa_contraceptivo} onClick={tog('usa_contraceptivo')}
-          label="Uso contraceptivo hormonal" icon="pill" />
-        {form.usa_contraceptivo && (
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div>
-              <FL>Tipo</FL>
-              <GrupoOpcoes valor={form.contraceptivo_tipo} opcoes={CONTRAC_TIPO_OPS}
-                onChange={set('contraceptivo_tipo')} cols={3} />
+        {!['gestante', 'pos_parto'].includes(form.estado_reprodutivo) && (<>
+          <SL>Contraceptivo hormonal</SL>
+          <BtnToggle ativo={form.usa_contraceptivo} onClick={tog('usa_contraceptivo')}
+            label="Uso contraceptivo hormonal" icon="pill" />
+          {form.usa_contraceptivo && (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <FL>Tipo</FL>
+                <GrupoOpcoes valor={form.contraceptivo_tipo} opcoes={CONTRAC_TIPO_OPS}
+                  onChange={set('contraceptivo_tipo')} cols={3} />
+              </div>
+              <div>
+                <FL>Nome (opcional)</FL>
+                <input style={inputSt} value={form.contraceptivo_nome} onChange={setE('contraceptivo_nome')}
+                  placeholder="Ex: Yasmin, Mirena…" />
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <BtnToggle ativo={form.contraceptivo_continuo} onClick={tog('contraceptivo_continuo')}
+                  label="Uso contínuo (sem pausa)" icon="refresh" />
+                <BtnToggle ativo={form.contraceptivo_menstrua === true}
+                  onClick={() => set('contraceptivo_menstrua')(form.contraceptivo_menstrua === true ? null : true)}
+                  label="Menstruo com ele" icon="droplet" />
+                <BtnToggle ativo={form.contraceptivo_menstrua === false}
+                  onClick={() => set('contraceptivo_menstrua')(form.contraceptivo_menstrua === false ? null : false)}
+                  label="Não menstruo com ele" icon="droplet-off" />
+              </div>
             </div>
-            <div>
-              <FL>Nome (opcional)</FL>
-              <input style={inputSt} value={form.contraceptivo_nome} onChange={setE('contraceptivo_nome')}
-                placeholder="Ex: Yasmin, Mirena…" />
+          )}
+
+          <SL>Método contraceptivo não hormonal</SL>
+          <BtnToggle ativo={form.usa_contracepcao_nao_hormonal} onClick={tog('usa_contracepcao_nao_hormonal')}
+            label="Utilizo método contraceptivo não hormonal" icon="shield" />
+          {form.usa_contracepcao_nao_hormonal && (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <FL>Método</FL>
+                <GrupoOpcoes valor={form.contracepcao_nao_hormonal_tipo} opcoes={CONTRAC_NAO_HORM_OPS}
+                  onChange={set('contracepcao_nao_hormonal_tipo')} cols={2} />
+              </div>
+              <div>
+                <FL>Observações (opcional)</FL>
+                <input style={inputSt} value={form.contracepcao_nao_hormonal_obs}
+                  onChange={setE('contracepcao_nao_hormonal_obs')}
+                  placeholder="Ex: DIU inserido em 2024…" />
+              </div>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              <BtnToggle ativo={form.contraceptivo_continuo} onClick={tog('contraceptivo_continuo')}
-                label="Uso contínuo (sem pausa)" icon="refresh" />
-              <BtnToggle ativo={form.contraceptivo_menstrua === true}
-                onClick={() => set('contraceptivo_menstrua')(form.contraceptivo_menstrua === true ? null : true)}
-                label="Menstruo com ele" icon="droplet" />
-              <BtnToggle ativo={form.contraceptivo_menstrua === false}
-                onClick={() => set('contraceptivo_menstrua')(form.contraceptivo_menstrua === false ? null : false)}
-                label="Não menstruo com ele" icon="droplet-off" />
-            </div>
-          </div>
-        )}
+          )}
+        </>)}
 
         <SL>Reposição hormonal (TRH)</SL>
         <BtnToggle ativo={form.usa_trh} onClick={tog('usa_trh')}

@@ -426,6 +426,11 @@ const CONTRAC_LABEL = {
   pilula:'Pílula', diu_hormonal:'DIU hormonal', implante:'Implante',
   injetavel:'Injetável', adesivo:'Adesivo', anel_vaginal:'Anel vaginal', outro:'Outro',
 };
+const CONTRAC_NAO_HORM_LABEL = {
+  nenhum:'Nenhum', diu_cobre:'DIU de cobre', preservativo:'Preservativo',
+  diafragma:'Diafragma', tabelinha:'Tabelinha', coito_interrompido:'Coito interrompido',
+  laqueadura:'Laqueadura', outro:'Outro',
+};
 const TRH_LABEL = {
   'estrogênio':'Estrogênio', progesterona:'Progesterona', combinada:'Combinada',
   testosterona:'Testosterona', outro:'Outro',
@@ -452,6 +457,7 @@ function CardPerfilHormonal({ perfil }) {
     estadoLabel,
     perfil.amamentando && 'Amamentando',
     perfil.usa_contraceptivo && (CONTRAC_LABEL[perfil.contraceptivo_tipo] || 'Anticoncepcional'),
+    perfil.usa_contracepcao_nao_hormonal && (CONTRAC_NAO_HORM_LABEL[perfil.contracepcao_nao_hormonal_tipo] || 'Não hormonal'),
     perfil.usa_trh && `TRH: ${TRH_LABEL[perfil.trh_tipo] ?? ''}${perfil.trh_via ? ` (${TRH_VIA_LABEL[perfil.trh_via]})` : ''}`,
   ].filter(Boolean);
 
@@ -477,6 +483,11 @@ function CardPerfilHormonal({ perfil }) {
           Anticoncepcional: {perfil.contraceptivo_nome}
           {perfil.contraceptivo_menstrua === true  && ' · menstrua com ele'}
           {perfil.contraceptivo_menstrua === false && ' · não menstrua com ele'}
+        </div>
+      )}
+      {perfil.usa_contracepcao_nao_hormonal && perfil.contracepcao_nao_hormonal_obs && (
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+          Não hormonal: {perfil.contracepcao_nao_hormonal_obs}
         </div>
       )}
       {perfil.obs_geral && (

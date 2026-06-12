@@ -7,13 +7,19 @@ const COR_PRIORIDADE = {
 export default function SalaSituacao({ sinais, onIrParaTab }) {
   if (!sinais) return null;
 
+  const temModuloEspecial = sinais.some(s => s.acao === 'glicemia' || s.acao === 'intestino');
+
   return (
     <div className="card" style={{ padding: '14px 16px', marginBottom: 16 }}>
-      <div style={{
-        fontSize: 13, fontWeight: 600, color: 'var(--dark)',
-        marginBottom: sinais.length === 0 ? 8 : 12,
-      }}>
-        🚨 Hoje merece atenção
+      <div style={{ marginBottom: sinais.length === 0 ? 8 : 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)' }}>
+          🚨 Hoje merece atenção
+        </div>
+        {temModuloEspecial && (
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+            Baseado nos últimos 14 dias.
+          </div>
+        )}
       </div>
 
       {sinais.length === 0 ? (
