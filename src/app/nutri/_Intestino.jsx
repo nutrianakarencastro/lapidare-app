@@ -335,32 +335,39 @@ export default function IntestinoNutri({ pacienteId, nutriId }) {
                 style={{
                   padding: '12px 16px',
                   borderBottom: i < Math.min(diarios.length, 20) - 1 ? '0.5px solid var(--border)' : 'none',
-                  display: 'flex', alignItems: 'center', gap: 12,
                 }}
               >
-                <div style={{ minWidth: 70, fontSize: 12, color: 'var(--text3)' }}>{dataBR(l.data)}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, flexWrap: 'wrap' }}>
-                  {l.evacuou ? (
-                    <>
-                      {l.bristol && <BristolSVG tipo={l.bristol} size={22} />}
-                      {l.bristol && (
-                        <span style={{ fontSize: 12, color: 'var(--dark)' }}>
-                          {BRISTOL_LABELS[l.bristol]?.label}
-                        </span>
-                      )}
-                      {l.frequencia_dia && (
-                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>{l.frequencia_dia}×</span>
-                      )}
-                    </>
-                  ) : (
-                    <span style={{ fontSize: 12, color: 'var(--text3)' }}>Não evacuou</span>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ minWidth: 70, fontSize: 12, color: 'var(--text3)' }}>{dataBR(l.data)}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, flexWrap: 'wrap' }}>
+                    {l.evacuou ? (
+                      <>
+                        {l.bristol && <BristolSVG tipo={l.bristol} size={22} />}
+                        {l.bristol && (
+                          <span style={{ fontSize: 12, color: 'var(--dark)' }}>
+                            {BRISTOL_LABELS[l.bristol]?.label}
+                          </span>
+                        )}
+                        {l.frequencia_dia && (
+                          <span style={{ fontSize: 11, color: 'var(--text3)' }}>{l.frequencia_dia}×</span>
+                        )}
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 12, color: 'var(--text3)' }}>Não evacuou</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    {l.muco                      && <span title="Muco"                    style={flagStyle('#c4616e')}>M</span>}
+                    {l.esvaziamento_incompleto    && <span title="Esvaziamento incompleto" style={flagStyle('#c4a882')}>EI</span>}
+                    {(l.dor_abdominal ?? 0) >= 2  && <span title="Dor abdominal"          style={flagStyle('#c4a882')}>D</span>}
+                    {(l.nauseas ?? 0) >= 2         && <span title="Náuseas"                style={flagStyle('#c4a882')}>N</span>}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  {l.muco                    && <span title="Muco"                    style={flagStyle('#c4616e')}>M</span>}
-                  {l.esvaziamento_incompleto  && <span title="Esvaziamento incompleto" style={flagStyle('#c4a882')}>EI</span>}
-                  {(l.dor_abdominal ?? 0) >= 2 && <span title="Dor abdominal"          style={flagStyle('#c4a882')}>D</span>}
-                </div>
+                {l.observacoes && (
+                  <div style={{ marginTop: 4, paddingLeft: 82, fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', lineHeight: 1.4 }}>
+                    {l.observacoes}
+                  </div>
+                )}
               </div>
             ))}
             {diarios.length > 20 && (

@@ -221,6 +221,15 @@ const FORM_DIARIO_VAZIO = {
   gases: null, estufamento: null, dor_abdominal: null,
   esforco: null, urgencia: null, esvaziamento_incompleto: null,
   muco: null, gatilhos: [],
+  nauseas: null,
+  observacoes: '',
+};
+
+const PERIODI_LABEL = {
+  diario:      'Diário',
+  semanal:     'Semanal',
+  quinzenal:   'Quinzenal',
+  sob_demanda: 'Sob demanda',
 };
 
 function SheetDiario({ inicial, onSalvar, onFechar, salvando }) {
@@ -296,6 +305,12 @@ function SheetDiario({ inicial, onSalvar, onFechar, salvando }) {
           <Escala03 value={form.dor_abdominal} onChange={v => set('dor_abdominal', v)} />
         </div>
 
+        {/* Náuseas */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 8 }}>Náuseas</div>
+          <Escala03 value={form.nauseas} onChange={v => set('nauseas', v)} labels={['Nenhuma', 'Leve', 'Moderada', 'Forte']} />
+        </div>
+
         {/* Esforço */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 8 }}>Precisou fazer força para evacuar?</div>
@@ -321,9 +336,28 @@ function SheetDiario({ inicial, onSalvar, onFechar, salvando }) {
         </div>
 
         {/* Gatilhos */}
-        <div style={{ marginBottom: 24 }}>
+        <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 8 }}>Percebeu algum gatilho hoje?</div>
           <Chips opcoes={GATILHOS_OPCOES} value={form.gatilhos} onChange={v => set('gatilhos', v)} />
+        </div>
+
+        {/* Observações — linguagem acolhedora */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 8 }}>
+            Quer compartilhar mais alguma coisa?
+          </div>
+          <textarea
+            value={form.observacoes ?? ''}
+            onChange={e => set('observacoes', e.target.value)}
+            placeholder="Qualquer percepção sobre seu intestino que queira registrar…"
+            rows={3}
+            style={{
+              width: '100%', borderRadius: 10, border: '1px solid var(--border)',
+              padding: '10px 12px', fontSize: 13, fontFamily: 'var(--font-sans)',
+              resize: 'none', background: 'var(--bg2)', color: 'var(--dark)',
+              boxSizing: 'border-box',
+            }}
+          />
         </div>
 
         <button
@@ -459,6 +493,7 @@ export default function Intestino() {
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState(null);
   const [rastreioEnviado, setRastreioEnviado] = useState(false);
+  const [moduloDiario, setModuloDiario] = useState(null);
 
   const dataInicio30 = (() => {
     const d = new Date();
@@ -468,7 +503,7 @@ export default function Intestino() {
 
   const carregar = useCallback(async () => {
     if (!user?.id) return;
-    const [logsRes, solRes] = await Promise.all([
+    const [logsRes, solRes, modulosRes] = await Promise.all([
       supabase.from('intestino_logs')
         .select('*')
         .eq('paciente_id', pacienteId)
@@ -481,11 +516,24 @@ export default function Intestino() {
         .order('solicitado_em', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase.from('paciente_modulos')
+        .select('modulo, ativo, config, ativado_em')
+        .order('ativado_em', { ascending: false }),
     ]);
     const todosLogs = logsRes.data ?? [];
     setLogs(todosLogs);
     setLogHoje(todosLogs.find(l => l.data === hoje() && l.tipo === 'diario') ?? null);
     setSolicitacaoPendente(solRes.data ?? null);
+
+    // Módulo diario_intestinal — pega o estado mais recente
+    const seenMods = new Set();
+    let modRow = null;
+    for (const row of modulosRes.data ?? []) {
+      if (seenMods.has(row.modulo)) continue;
+      seenMods.add(row.modulo);
+      if (row.modulo === 'diario_intestinal' && row.ativo) { modRow = row; break; }
+    }
+    setModuloDiario(modRow);
   }, [user?.id]);
 
   useEffect(() => { carregar(); }, [carregar]);
@@ -497,6 +545,7 @@ export default function Intestino() {
       data: hoje(),
       tipo: 'diario',
       ...form,
+      observacoes: form.observacoes?.trim() || null,
     };
     const { error } = logHoje
       ? await supabase.from('intestino_logs').update(payload).eq('id', logHoje.id)
@@ -512,7 +561,7 @@ export default function Intestino() {
 
   async function salvarRastreio(form) {
     if (!solicitacaoPendente) return;
-    const eraSomenteRastreio = !podeAcessar(profile?.acesso_utera, 'intestino');
+    const eraSomenteRastreio = !podeAcessar(profile?.acesso_utera, 'intestino') && !moduloDiario;
     setSalvando(true);
     const payload = {
       paciente_id: pacienteId,
@@ -555,11 +604,12 @@ export default function Intestino() {
   const sinais = detectarSinaisAtencao(logs);
   const sinaisVisiveis = sinais.filter(s => s.nivel === 'atencao');
 
-  const temAcessoIntestino = podeAcessar(profile?.acesso_utera, 'intestino');
-  const modoSomenteRastreio = !temAcessoIntestino && !!solicitacaoPendente;
+  const temAcessoIntestino  = podeAcessar(profile?.acesso_utera, 'intestino');
+  const modoDiarioRecorrente = !!moduloDiario;
+  const modoSomenteRastreio  = !temAcessoIntestino && !modoDiarioRecorrente && !!solicitacaoPendente;
 
-  // Tier essencial que acabou de responder rastreio → tela de confirmação
-  if (rastreioEnviado && !temAcessoIntestino) {
+  // Tier essencial sem módulo que acabou de responder rastreio → tela de confirmação
+  if (rastreioEnviado && !temAcessoIntestino && !modoDiarioRecorrente) {
     return (
       <div style={{ textAlign: 'center', padding: '48px 24px' }}>
         <div style={{
@@ -591,8 +641,8 @@ export default function Intestino() {
     );
   }
 
-  // Tier essencial sem rastreio pendente → bloqueio normal
-  if (!temAcessoIntestino && !solicitacaoPendente) {
+  // Sem acesso, sem módulo e sem rastreio pendente → bloqueio normal
+  if (!temAcessoIntestino && !modoDiarioRecorrente && !solicitacaoPendente) {
     return <BloqueioModelo modulo="Intestino" tierMinimo={2} />;
   }
 
@@ -610,6 +660,58 @@ export default function Intestino() {
           {aviso}
         </div>
       )}
+
+      {/* ── Status do diário recorrente (módulo ativo) ────────────────── */}
+      {modoDiarioRecorrente && (() => {
+        const periodicidade = moduloDiario.config?.periodicidade ?? 'diario';
+        const ultimoLog = diarios[0] ?? null;
+        let corStatus = '#7ea85a', bgStatus = '#eef5e3', msgStatus = '';
+
+        if (periodicidade === 'sob_demanda') {
+          msgStatus = 'Registre quando sentir necessidade';
+          corStatus = 'var(--text3)'; bgStatus = 'var(--bg2)';
+        } else if (!ultimoLog) {
+          msgStatus = 'Nenhum registro ainda — que tal começar hoje?';
+          corStatus = 'var(--orange)'; bgStatus = 'var(--orange-bg, #fff7ed)';
+        } else {
+          const hojeStr = new Date().toISOString().slice(0, 10);
+          const diasDesde = Math.floor((new Date(hojeStr) - new Date(ultimoLog.data)) / 86_400_000);
+          const limites = { diario: 1, semanal: 7, quinzenal: 14 };
+          const limite = limites[periodicidade] ?? 7;
+          if (diasDesde === 0) {
+            msgStatus = 'Registro de hoje enviado ✓';
+          } else if (diasDesde < limite) {
+            const nomePeriodo = periodicidade === 'semanal' ? 'semana' : periodicidade === 'quinzenal' ? 'quinzena' : null;
+            msgStatus = nomePeriodo
+              ? `Em dia ✓ — último há ${diasDesde} dia${diasDesde === 1 ? '' : 's'}`
+              : `Último registro há ${diasDesde} dia${diasDesde === 1 ? '' : 's'}`;
+          } else {
+            msgStatus = `Registro pendente — último há ${diasDesde} dia${diasDesde === 1 ? '' : 's'}`;
+            corStatus = 'var(--orange)'; bgStatus = 'var(--orange-bg, #fff7ed)';
+          }
+        }
+
+        return (
+          <div style={{
+            background: bgStatus, border: `0.5px solid ${corStatus}`,
+            borderRadius: 12, padding: '11px 14px', marginBottom: 14,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div>
+              <div style={{
+                fontSize: 9, letterSpacing: '.18em', textTransform: 'uppercase',
+                color: corStatus, fontWeight: 500, marginBottom: 2,
+              }}>
+                Diário Intestinal · {PERIODI_LABEL[periodicidade] ?? periodicidade}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: corStatus === '#7ea85a' ? '#3d6b27' : corStatus }}>
+                {msgStatus}
+              </div>
+            </div>
+            <i className="ti ti-leaf" style={{ fontSize: 18, color: corStatus, flexShrink: 0 }} aria-hidden="true" />
+          </div>
+        );
+      })()}
 
       {/* Banner: rastreio solicitado pela nutri */}
       {solicitacaoPendente && (
@@ -661,7 +763,17 @@ export default function Intestino() {
           </div>
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>
-              {logHoje ? 'Editar registro de hoje' : 'Registrar hoje'}
+              {logHoje
+                ? 'Editar registro de hoje'
+                : modoDiarioRecorrente
+                  ? (() => {
+                      const p = moduloDiario.config?.periodicidade ?? 'diario';
+                      return p === 'semanal'     ? 'Registrar esta semana'
+                           : p === 'quinzenal'   ? 'Registrar esta quinzena'
+                           : p === 'sob_demanda' ? 'Registrar agora'
+                           : 'Registrar hoje';
+                    })()
+                  : 'Registrar hoje'}
             </div>
             <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
               {logHoje ? 'Já registrado ✓' : 'Como seu intestino se comportou?'}
@@ -684,8 +796,45 @@ export default function Intestino() {
         </div>
       )}
 
-      {/* Resumo 30 dias */}
-      {!modoSomenteRastreio && diarios.length > 0 && (
+      {/* Histórico simples — módulo ativo sem tier 2+ */}
+      {modoDiarioRecorrente && !temAcessoIntestino && diarios.length > 0 && (
+        <>
+          <div className="section-label" style={{ marginBottom: 10 }}>Seus registros recentes</div>
+          <div style={{
+            background: 'var(--white)', border: '0.5px solid var(--border)',
+            borderRadius: 12, overflow: 'hidden', marginBottom: 16,
+          }}>
+            {diarios.slice(0, 7).map((l, i) => (
+              <div key={l.id} style={{
+                padding: '11px 16px',
+                borderBottom: i < Math.min(diarios.length, 7) - 1 ? '0.5px solid var(--border)' : 'none',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ minWidth: 60, fontSize: 12, color: 'var(--text3)' }}>{dataBR(l.data)}</div>
+                  <div style={{ flex: 1, fontSize: 13, color: 'var(--dark)' }}>
+                    {l.evacuou
+                      ? `${BRISTOL_LABELS[l.bristol]?.label ?? 'Evacuou'}${l.frequencia_dia ? ` · ${l.frequencia_dia}×` : ''}`
+                      : 'Não evacuou'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                    {(l.dor_abdominal ?? 0) >= 2  && <span style={flagStyleSimples('#c4a882')}>D</span>}
+                    {(l.nauseas ?? 0) >= 2         && <span style={flagStyleSimples('#c4a882')}>N</span>}
+                    {(l.estufamento ?? 0) >= 2      && <span style={flagStyleSimples('#c4a882')}>E</span>}
+                  </div>
+                </div>
+                {l.observacoes && (
+                  <div style={{ marginTop: 4, paddingLeft: 70, fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', lineHeight: 1.4 }}>
+                    {l.observacoes}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Resumo 30 dias — apenas para tier 2+ */}
+      {temAcessoIntestino && diarios.length > 0 && (
         <>
           <div className="section-label" style={{ marginBottom: 10 }}>Últimos 30 dias</div>
 
@@ -769,4 +918,11 @@ export default function Intestino() {
       )}
     </div>
   );
+}
+
+function flagStyleSimples(cor) {
+  return {
+    fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 99,
+    background: `${cor}22`, color: cor,
+  };
 }
