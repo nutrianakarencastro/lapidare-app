@@ -114,7 +114,7 @@ export default function Suplementos() {
       {/* ══ BLOCO 1: MANIPULAÇÃO ════════════════════════════════════════════ */}
       {temManipulacao && (
         <div style={{
-          background: 'var(--white)', border: '0.5px solid var(--hair)',
+          background: 'var(--paper)', border: '0.5px solid var(--hair)',
           borderRadius: 16, padding: '14px 16px', marginBottom: 14,
         }}>
           <div style={{
@@ -190,7 +190,7 @@ export default function Suplementos() {
                         <button onClick={() => copiarCupom(cupom)} style={{
                           display: 'inline-flex', alignItems: 'center', gap: 6,
                           padding: '5px 12px', borderRadius: 8, cursor: 'pointer',
-                          background: 'var(--gold-soft, var(--white))',
+                          background: 'var(--gold-soft, var(--paper))',
                           border: '0.5px solid var(--gold, var(--hair))',
                           fontSize: 12, fontFamily: 'var(--font-sans)',
                           color: 'var(--gold-deep)', fontWeight: 500, marginBottom: 8,
@@ -206,7 +206,7 @@ export default function Suplementos() {
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: 5,
                               padding: '6px 12px', borderRadius: 8,
-                              background: 'var(--white)', border: '0.5px solid var(--hair)',
+                              background: 'var(--paper)', border: '0.5px solid var(--hair)',
                               fontSize: 12, color: 'var(--ink)', textDecoration: 'none',
                               fontFamily: 'var(--font-sans)',
                             }}>
@@ -219,7 +219,7 @@ export default function Suplementos() {
                               display: 'inline-flex', alignItems: 'center', gap: 5,
                               padding: '6px 12px', borderRadius: 8,
                               background: 'var(--ink)', border: 'none',
-                              fontSize: 12, color: 'var(--white)', textDecoration: 'none',
+                              fontSize: 12, color: 'var(--paper)', textDecoration: 'none',
                               fontFamily: 'var(--font-sans)',
                             }}>
                             <i className="ti ti-message-circle" aria-hidden="true"></i> Entrar em contato
@@ -258,7 +258,7 @@ export default function Suplementos() {
         <>
           {/* Resumo do dia */}
           <div style={{
-            background: 'linear-gradient(135deg, var(--gold-soft, var(--bg-soft)), var(--white))',
+            background: 'linear-gradient(135deg, var(--gold-soft, var(--bg-soft)), var(--paper))',
             border: '0.5px solid var(--hair)',
             borderRadius: 16, padding: 18, marginBottom: 14, textAlign: 'center',
           }}>
@@ -299,7 +299,7 @@ export default function Suplementos() {
                   <button onClick={() => toggle(s)} style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: 14, width: '100%',
-                    background: tomado ? 'var(--green-soft, var(--bg-soft))' : 'var(--white)',
+                    background: tomado ? 'var(--green-soft, var(--bg-soft))' : 'var(--paper)',
                     border: `1px solid ${tomado ? 'var(--green, var(--hair))' : 'var(--hair)'}`,
                     borderBottom: (s.link_compra || objetivos.length > 0) ? 'none' : undefined,
                     borderRadius: (s.link_compra || objetivos.length > 0) ? '12px 12px 0 0' : 12,
@@ -309,7 +309,7 @@ export default function Suplementos() {
                     <div style={{
                       width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
                       background: tomado ? 'var(--green, var(--gold-deep))' : 'var(--bg-soft)',
-                      color: tomado ? 'var(--white)' : 'var(--muted)',
+                      color: tomado ? 'var(--paper)' : 'var(--muted)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 16, border: tomado ? 'none' : '1.5px solid var(--hair)',
                     }}>
@@ -367,7 +367,7 @@ export default function Suplementos() {
                             display: 'inline-flex', alignItems: 'center', gap: 5,
                             padding: '5px 12px', borderRadius: 8,
                             background: 'var(--ink)', fontSize: 11,
-                            color: 'var(--white)', textDecoration: 'none',
+                            color: 'var(--paper)', textDecoration: 'none',
                             fontFamily: 'var(--font-sans)', fontWeight: 500,
                           }}>
                           <i className="ti ti-shopping-cart" aria-hidden="true"></i>
@@ -403,7 +403,7 @@ export default function Suplementos() {
           }}>Últimos 7 dias</div>
 
           <div style={{
-            background: 'var(--white)', border: '0.5px solid var(--hair)',
+            background: 'var(--paper)', border: '0.5px solid var(--hair)',
             borderRadius: 12, padding: 12, marginBottom: 24,
           }}>
             {suplementos.map((s, idx) => (
@@ -424,7 +424,7 @@ export default function Suplementos() {
                         width: 22, height: 22, borderRadius: 6,
                         background: tomado ? 'var(--green, var(--gold-deep))' : (isHoje ? 'var(--bg-soft)' : 'transparent'),
                         border: tomado ? 'none' : '0.5px solid var(--hair)',
-                        color: tomado ? 'var(--white)' : 'var(--muted-2)',
+                        color: tomado ? 'var(--paper)' : 'var(--muted-2)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 9, fontWeight: 500,
                       }} title={d.iso}>
