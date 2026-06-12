@@ -15,7 +15,7 @@ function ImagemCapa({ url, categoriaId, titulo }) {
     return (
       <div style={{
         width: '100%', paddingBottom: '56.25%', position: 'relative',
-        background: 'var(--bg3)', borderRadius: '12px 12px 0 0', overflow: 'hidden',
+        background: 'var(--bg-soft)', borderRadius: '12px 12px 0 0', overflow: 'hidden',
       }}>
         <div style={{
           position: 'absolute', inset: 0,
@@ -23,8 +23,8 @@ function ImagemCapa({ url, categoriaId, titulo }) {
           gap: 8,
         }}>
           <i className={`ti ti-${info?.icon ?? 'star'}`}
-            style={{ fontSize: 32, color: 'var(--text4)' }} aria-hidden="true" />
-          <span style={{ fontSize: 11, color: 'var(--text4)', textAlign: 'center', padding: '0 12px' }}>
+            style={{ fontSize: 32, color: 'var(--muted-2)' }} aria-hidden="true" />
+          <span style={{ fontSize: 11, color: 'var(--muted-2)', textAlign: 'center', padding: '0 12px' }}>
             {titulo}
           </span>
         </div>
@@ -47,13 +47,11 @@ function ImagemCapa({ url, categoriaId, titulo }) {
 // ─── Card de item ─────────────────────────────────────────────────────────────
 
 function CardItem({ item }) {
-  const links = normalizarLinks(item.links);
+  const links    = normalizarLinks(item.links);
+  const linkHref = links.length > 0 ? links[0].url : null;
 
-  return (
-    <div style={{
-      background: 'var(--white)', border: '0.5px solid var(--border)',
-      borderRadius: 12, overflow: 'hidden',
-    }}>
+  const conteudo = (
+    <>
       <ImagemCapa url={item.imagem_url} categoriaId={item.categoria} titulo={item.titulo} />
 
       <div style={{ padding: '14px 16px 16px' }}>
@@ -74,45 +72,53 @@ function CardItem({ item }) {
         </div>
 
         {item.marca && (
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6, fontWeight: 500 }}>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 500 }}>
             {item.marca}
           </div>
         )}
 
         {item.descricao && (
           <div style={{
-            fontSize: 13, color: 'var(--text2)', lineHeight: 1.55, marginBottom: 12,
+            fontSize: 13, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 12,
             display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
           }}>
             {item.descricao}
           </div>
         )}
 
-        {links.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: item.descricao ? 0 : 4 }}>
-            {links.map((l, i) => (
-              <a
-                key={i}
-                href={l.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '8px 14px', borderRadius: 99,
-                  background: 'var(--bg2)', color: 'var(--dark)',
-                  fontSize: 13, fontWeight: 500, textDecoration: 'none',
-                  fontFamily: 'var(--font-sans)',
-                }}
-              >
-                <i className="ti ti-external-link" style={{ fontSize: 12 }} aria-hidden="true" />
-                {l.titulo || 'Abrir'}
-              </a>
-            ))}
+        {linkHref && (
+          <div style={{ marginTop: item.descricao ? 0 : 4 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', borderRadius: 99,
+              background: 'var(--ink)', color: 'var(--paper)',
+              fontSize: 13, fontWeight: 500,
+            }}>
+              <i className="ti ti-external-link" style={{ fontSize: 12 }} aria-hidden="true" />
+              Ver indicação
+            </span>
           </div>
         )}
       </div>
-    </div>
+    </>
   );
+
+  const cardStyle = {
+    background: 'var(--paper)', border: '0.5px solid var(--hair)',
+    borderRadius: 12, overflow: 'hidden',
+    display: 'block', textDecoration: 'none',
+    cursor: linkHref ? 'pointer' : 'default',
+  };
+
+  if (linkHref) {
+    return (
+      <a href={linkHref} target="_blank" rel="noreferrer" style={cardStyle}>
+        {conteudo}
+      </a>
+    );
+  }
+
+  return <div style={cardStyle}>{conteudo}</div>;
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
@@ -181,7 +187,7 @@ export default function AlemNutricao() {
       {!itensFiltrados.length && (
         <div className="card empty-card">
           <i className={`ti ti-${CATEGORIA_MAP[categoriaFiltro]?.icon ?? 'star'}`}
-            style={{ fontSize: 32, color: 'var(--text4)', display: 'block', marginBottom: 10 }}
+            style={{ fontSize: 32, color: 'var(--muted-2)', display: 'block', marginBottom: 10 }}
             aria-hidden="true" />
           <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--dark)', marginBottom: 6 }}>
             {categoriaFiltro === 'todos'
@@ -211,8 +217,8 @@ function chipStyle(ativo) {
     padding: '7px 14px', borderRadius: 99, border: 'none', cursor: 'pointer',
     fontSize: 13, fontWeight: ativo ? 600 : 400, whiteSpace: 'nowrap',
     fontFamily: 'var(--font-sans)',
-    background: ativo ? 'var(--dark)' : 'var(--bg2)',
-    color: ativo ? 'white' : 'var(--text3)',
+    background: ativo ? 'var(--dark)' : 'var(--bg-soft)',
+    color: ativo ? 'white' : 'var(--muted)',
     flexShrink: 0,
   };
 }
