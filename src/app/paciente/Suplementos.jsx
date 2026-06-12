@@ -13,6 +13,8 @@ export default function Suplementos() {
   const [logs,        setLogs]        = useState([]);
   const [pdfs,        setPdfs]        = useState([]);
   const [farmacias,   setFarmacias]   = useState([]);
+  // pdfUrls: { [pdf.id]: { url: string|null, erro: boolean } }
+  const [pdfUrls,     setPdfUrls]     = useState({});
 
   async function carregar() {
     if (!user) return;
@@ -37,6 +39,27 @@ export default function Suplementos() {
   }
   useEffect(() => { carregar(); }, [user]);
 
+  // Pré-gera as signed URLs assim que os PDFs chegam.
+  // Cada PDF vira um <a href> real — sem async no toque.
+  useEffect(() => {
+    if (!pdfs.length) return;
+    let active = true;
+    async function gerarUrls() {
+      const entradas = await Promise.all(
+        pdfs.map(async pdf => {
+          const { data, error } = await supabase.storage
+            .from('prescricoes')
+            .createSignedUrl(pdf.storage_path, 3600);
+          return [pdf.id, error ? { url: null, erro: true } : { url: data.signedUrl, erro: false }];
+        })
+      );
+      if (!active) return;
+      setPdfUrls(Object.fromEntries(entradas));
+    }
+    gerarUrls();
+    return () => { active = false; };
+  }, [pdfs]);
+
   // ── Toggle suplemento tomado (lógica original intacta) ───────────────────
   async function toggle(s) {
     const hoje = HOJE();
@@ -49,23 +72,6 @@ export default function Suplementos() {
       });
     }
     carregar();
-  }
-
-  async function abrirPdf(storage_path) {
-    const { data, error } = await supabase.storage.from('prescricoes').createSignedUrl(storage_path, 120);
-    if (error) {
-      alert('Não consegui abrir o PDF. Tente novamente ou avise sua nutricionista.');
-      return;
-    }
-    // window.open() é bloqueado no mobile após await (perde o user gesture).
-    // Criar <a> e disparar clique é o padrão aceito pelo iOS Safari e Android Chrome.
-    const a = document.createElement('a');
-    a.href = data.signedUrl;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
   }
 
   async function copiarCupom(cupom) {
@@ -142,32 +148,63 @@ export default function Suplementos() {
                 Prescrição de manipulação
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {pdfs.map(pdf => (
-                  <button key={pdf.id}
-                    onClick={() => abrirPdf(pdf.storage_path)}
-                    style={{
+                {pdfs.map(pdf => {
+                  const urlState = pdfUrls[pdf.id];
+                  const pronto   = urlState && !urlState.erro && urlState.url;
+                  const erro     = urlState?.erro;
+
+                  const innerContent = (
+                    <>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                        background: 'var(--gold-soft, var(--bg-soft))',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <i className="ti ti-file-text" style={{ fontSize: 18, color: 'var(--gold-deep)' }} aria-hidden="true"></i>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{pdf.titulo}</div>
+                        <div style={{ fontSize: 11, color: erro ? 'var(--red, #c0392b)' : 'var(--muted)' }}>
+                          {erro
+                            ? 'Não consegui preparar o PDF. Avise sua nutricionista.'
+                            : pronto
+                            ? `${dataBR(pdf.created_at)} · Toque para abrir`
+                            : 'Preparando PDF…'}
+                        </div>
+                      </div>
+                      {pronto && <i className="ti ti-external-link" style={{ fontSize: 14, color: 'var(--muted)', flexShrink: 0 }} aria-hidden="true"></i>}
+                    </>
+                  );
+
+                  if (pronto) {
+                    return (
+                      <a key={pdf.id}
+                        href={urlState.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '10px 12px', borderRadius: 10,
+                          background: 'var(--bg-soft)', border: '0.5px solid var(--hair)',
+                          cursor: 'pointer', textDecoration: 'none', fontFamily: 'var(--font-sans)',
+                          width: '100%', boxSizing: 'border-box',
+                        }}>
+                        {innerContent}
+                      </a>
+                    );
+                  }
+
+                  return (
+                    <div key={pdf.id} style={{
                       display: 'flex', alignItems: 'center', gap: 10,
                       padding: '10px 12px', borderRadius: 10,
                       background: 'var(--bg-soft)', border: '0.5px solid var(--hair)',
-                      cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-sans)',
-                      width: '100%',
+                      fontFamily: 'var(--font-sans)', opacity: erro ? 1 : 0.65,
                     }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                      background: 'var(--gold-soft, var(--bg-soft))',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <i className="ti ti-file-text" style={{ fontSize: 18, color: 'var(--gold-deep)' }} aria-hidden="true"></i>
+                      {innerContent}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{pdf.titulo}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                        {dataBR(pdf.created_at)} · Toque para abrir
-                      </div>
-                    </div>
-                    <i className="ti ti-external-link" style={{ fontSize: 14, color: 'var(--muted)', flexShrink: 0 }} aria-hidden="true"></i>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
