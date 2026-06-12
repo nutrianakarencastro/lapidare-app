@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { EIXOS } from '../../lib/cicloUtils.js';
+import { PROTOCOLOS_INDEX } from '../../data/protocolos/_index.js';
 
 // ── Filtros explícitos ─────────────────────────────────────────────────────
 const FILTROS = [
@@ -14,6 +15,7 @@ const FILTROS = [
   { id: 'checkin',   label: 'Check-ins'   },
   { id: 'documento', label: 'Documentos'  },
   { id: 'mapa',      label: 'Mapa'        },
+  { id: 'protocolo', label: 'Protocolos'  },
 ];
 
 const TIPOS_POR_FILTRO = {
@@ -26,6 +28,7 @@ const TIPOS_POR_FILTRO = {
   checkin:   ['checkin'],
   documento: ['documento'],
   mapa:      ['mapa', 'mapa_melhora'],
+  protocolo: ['protocolo_iniciado', 'protocolo_concluido'],
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -103,7 +106,7 @@ function detectarMelhorasEixo(marcos) {
 }
 
 // ── Normalização central ───────────────────────────────────────────────────
-function normalizarEventos({ consultas, exames, periodos, rastreios, checkins, documentos, marcos, condutas, metas }) {
+function normalizarEventos({ consultas, exames, periodos, rastreios, checkins, documentos, marcos, condutas, metas, protocolos }) {
   const ev = [];
 
   // Consultas realizadas
@@ -293,6 +296,33 @@ function normalizarEventos({ consultas, exames, periodos, rastreios, checkins, d
     });
   }
 
+  // Protocolos iniciados e concluídos
+  for (const r of (protocolos ?? [])) {
+    const titulo = PROTOCOLOS_INDEX.find(p => p.id === r.protocolo_id)?.titulo ?? r.protocolo_id;
+    ev.push({
+      id:        `protocolo-iniciado-${r.id}`,
+      tipo:      'protocolo_iniciado',
+      icone:     '📋',
+      cor:       'var(--blue)',
+      titulo:    `Protocolo iniciado — ${titulo}`,
+      descricao: null,
+      data:      r.aplicado_em,
+      automatico: false,
+    });
+    if (r.status === 'concluido' && r.concluido_em) {
+      ev.push({
+        id:        `protocolo-concluido-${r.id}`,
+        tipo:      'protocolo_concluido',
+        icone:     '📋',
+        cor:       'var(--text3)',
+        titulo:    `Protocolo concluído — ${titulo}`,
+        descricao: r.motivo_conclusao ?? null,
+        data:      r.concluido_em,
+        automatico: false,
+      });
+    }
+  }
+
   return ev.sort((a, b) => b.data.localeCompare(a.data));
 }
 
@@ -323,6 +353,7 @@ export default function LinhaTempo({ pacienteId, nutriId }) {
       const [
         consultasRes, examesRes, periodosRes,
         rastreiosRes, checkinsRes, documentosRes, marcosRes, condutasRes, metasRes,
+        protocolosRes,
       ] = await Promise.all([
         supabase.from('consultas')
           .select('id, data_hora, tipo, obs, resumo')
@@ -372,6 +403,12 @@ export default function LinhaTempo({ pacienteId, nutriId }) {
           .select('id, titulo, eixo, status, criado_em, concluido_em, pausado_em')
           .eq('paciente_id', pacienteId)
           .order('criado_em', { ascending: false }),
+        // Protocolos: todos (ativo e concluido) dentro da janela por aplicado_em
+        supabase.from('paciente_protocolos')
+          .select('id, protocolo_id, status, aplicado_em, concluido_em, motivo_conclusao')
+          .eq('paciente_id', pacienteId)
+          .gte('aplicado_em', corteIso)
+          .order('aplicado_em', { ascending: false }),
       ]);
 
       if (!active) return;
@@ -383,8 +420,9 @@ export default function LinhaTempo({ pacienteId, nutriId }) {
         checkins:   checkinsRes.data   ?? [],
         documentos: documentosRes.data ?? [],
         marcos:     marcosRes.data     ?? [],
-        condutas:   condutasRes.data   ?? [],
-        metas:      metasRes.data      ?? [],
+        condutas:   condutasRes.data    ?? [],
+        metas:      metasRes.data       ?? [],
+        protocolos: protocolosRes.data  ?? [],
       });
     }
     load();

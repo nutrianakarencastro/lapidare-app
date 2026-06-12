@@ -216,6 +216,11 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
   const [jornadaAtual,   setJornadaAtual]   = useState(undefined);
   const [glicemiaData,   setGlicemiaData]   = useState(null);
   const [intestinoData,  setIntestinoData]  = useState(null);
+  const [protocolosAtivos,      setProtocolosAtivos]      = useState([]);
+  const [iniciando,             setIniciando]             = useState(new Set());
+  const [confirmandoConclusao,  setConfirmandoConclusao]  = useState(null);
+  const [motivoConclusao,       setMotivoConclusao]       = useState('');
+  const [concluindo,            setConcluindo]            = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -232,6 +237,22 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
       setMemoriaClinica(data ?? []);
     }
     load();
+    return () => { active = false; };
+  }, [pacienteId]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadProtocolos() {
+      const { data } = await supabase
+        .from('paciente_protocolos')
+        .select('id, protocolo_id, aplicado_em')
+        .eq('paciente_id', pacienteId)
+        .eq('status', 'ativo')
+        .order('aplicado_em', { ascending: false });
+      if (!active) return;
+      setProtocolosAtivos(data ?? []);
+    }
+    loadProtocolos();
     return () => { active = false; };
   }, [pacienteId]);
 
@@ -429,6 +450,35 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
     return () => { active = false; };
   }, [pacienteId, nutriId]);
 
+  async function iniciarProtocolo(protocoloId) {
+    if (iniciando.has(protocoloId)) return;
+    setIniciando(s => new Set(s).add(protocoloId));
+    const { data, error } = await supabase
+      .from('paciente_protocolos')
+      .insert({ paciente_id: pacienteId, nutri_id: nutriId, protocolo_id: protocoloId })
+      .select('id, protocolo_id, aplicado_em')
+      .single();
+    setIniciando(s => { const n = new Set(s); n.delete(protocoloId); return n; });
+    if (!error && data) setProtocolosAtivos(prev => [data, ...prev]);
+  }
+
+  async function concluirProtocolo() {
+    if (!confirmandoConclusao) return;
+    setConcluindo(true);
+    await supabase
+      .from('paciente_protocolos')
+      .update({
+        status:          'concluido',
+        concluido_em:    new Date().toISOString().slice(0, 10),
+        motivo_conclusao: motivoConclusao.trim() || null,
+      })
+      .eq('id', confirmandoConclusao.id);
+    setProtocolosAtivos(prev => prev.filter(p => p.id !== confirmandoConclusao.id));
+    setConfirmandoConclusao(null);
+    setMotivoConclusao('');
+    setConcluindo(false);
+  }
+
   async function toggleEssencial(id, atual) {
     setFixando(s => ({ ...s, [id]: true }));
     await supabase.from('estrategias')
@@ -460,6 +510,7 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
     intestino:      intestinoData,
   });
   const protocolosRelacionados = protocolosSugeridos(categoriaClinica, PROTOCOLOS_INDEX);
+  const idsAtivos = new Set(protocolosAtivos.map(p => p.protocolo_id));
 
   const essenciais      = (memoriaClinica ?? []).filter(a => a.aprendizado_essencial);
   const recentes        = (memoriaClinica ?? []).filter(a => !a.aprendizado_essencial);
@@ -476,30 +527,131 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
         metas={metas}
       />
 
+      {/* ── Protocolos em acompanhamento ── */}
+      {protocolosAtivos.length > 0 && (
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 16 }}>
+          <div style={labelSub}>Protocolos em acompanhamento</div>
+          <div>
+            {protocolosAtivos.map((row, i) => {
+              const meta    = PROTOCOLOS_INDEX.find(p => p.id === row.protocolo_id);
+              const titulo  = meta?.titulo ?? row.protocolo_id;
+              const isConcluindo = confirmandoConclusao?.id === row.id;
+              return (
+                <div key={row.id} style={{
+                  padding: '9px 0',
+                  borderBottom: i < protocolosAtivos.length - 1
+                    ? '0.5px solid var(--border)' : 'none',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <i className="ti ti-clipboard-heart" style={{ fontSize: 14, color: 'var(--blue)', flexShrink: 0 }} aria-hidden="true" />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: 'var(--dark)', lineHeight: 1.4 }}>{titulo}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>
+                        Desde {dataBR(row.aplicado_em)}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => navigate('/nutri/protocolos', { state: { protocoloId: row.protocolo_id } })}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', color: 'var(--text3)' }}
+                    >
+                      <i className="ti ti-chevron-right" style={{ fontSize: 12 }} aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (isConcluindo) { setConfirmandoConclusao(null); setMotivoConclusao(''); }
+                        else { setConfirmandoConclusao(row); setMotivoConclusao(''); }
+                      }}
+                      style={{
+                        fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer',
+                        border: '0.5px solid var(--border)', background: 'var(--bg2)',
+                        color: 'var(--text2)', fontFamily: 'var(--font-sans)',
+                      }}
+                    >
+                      {isConcluindo ? 'Cancelar' : 'Concluir'}
+                    </button>
+                  </div>
+                  {isConcluindo && (
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input
+                        value={motivoConclusao}
+                        onChange={e => setMotivoConclusao(e.target.value)}
+                        placeholder="Motivo (opcional)"
+                        style={{ flex: 1, fontSize: 12 }}
+                      />
+                      <button
+                        onClick={concluirProtocolo}
+                        disabled={concluindo}
+                        style={{
+                          fontSize: 11, padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
+                          border: 'none', background: 'var(--dark)', color: 'var(--white)',
+                          fontFamily: 'var(--font-sans)', flexShrink: 0,
+                        }}
+                      >
+                        {concluindo ? 'Salvando…' : 'Confirmar conclusão'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Protocolos relacionados ── */}
       {protocolosRelacionados.length > 0 && (
         <div className="card" style={{ padding: '14px 16px', marginBottom: 16 }}>
           <div style={labelSub}>Protocolos relacionados</div>
           <div>
-            {protocolosRelacionados.map((p, i) => (
-              <div
-                key={p.id}
-                onClick={() => navigate('/nutri/protocolos', { state: { protocoloId: p.id } })}
-                style={{
+            {protocolosRelacionados.map((p, i) => {
+              const ativo = idsAtivos.has(p.id);
+              return (
+                <div key={p.id} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '9px 0',
                   borderBottom: i < protocolosRelacionados.length - 1
                     ? '0.5px solid var(--border)' : 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                <i className="ti ti-clipboard-heart" style={{ fontSize: 14, color: 'var(--text3)', flexShrink: 0 }} aria-hidden="true" />
-                <div style={{ flex: 1, fontSize: 13, color: 'var(--dark)', lineHeight: 1.4 }}>
-                  {p.titulo}
+                }}>
+                  <i
+                    className={ativo ? 'ti ti-check' : 'ti ti-clipboard-heart'}
+                    style={{ fontSize: 14, color: ativo ? 'var(--green)' : 'var(--text3)', flexShrink: 0 }}
+                    aria-hidden="true"
+                  />
+                  <div style={{ flex: 1, fontSize: 13, color: 'var(--dark)', lineHeight: 1.4 }}>
+                    {p.titulo}
+                  </div>
+                  {ativo ? (
+                    <span style={{
+                      fontSize: 11, padding: '2px 8px', borderRadius: 99,
+                      background: 'var(--bg2)', color: 'var(--text3)',
+                      border: '0.5px solid var(--border)', whiteSpace: 'nowrap',
+                    }}>
+                      Em acompanhamento
+                    </span>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                      <button
+                        onClick={() => iniciarProtocolo(p.id)}
+                        disabled={iniciando.has(p.id)}
+                        style={{
+                          fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer',
+                          border: 'none', background: 'var(--dark)', color: 'var(--white)',
+                          fontFamily: 'var(--font-sans)',
+                        }}
+                      >
+                        {iniciando.has(p.id) ? '…' : 'Iniciar'}
+                      </button>
+                      <button
+                        onClick={() => navigate('/nutri/protocolos', { state: { protocoloId: p.id } })}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 2px', color: 'var(--text3)' }}
+                      >
+                        <i className="ti ti-chevron-right" style={{ fontSize: 12 }} aria-hidden="true" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <i className="ti ti-chevron-right" style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }} aria-hidden="true" />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
