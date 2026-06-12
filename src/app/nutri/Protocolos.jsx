@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { PROTOCOLOS_INDEX } from '../../data/protocolos/_index.js';
 import { parseProtocolo } from '../../lib/parseProtocolo.js';
 
@@ -42,6 +43,20 @@ export default function Protocolos() {
   const [busca, setBusca] = useState('');
   const [categoriaSelecionada, setCategoriaSelecionada] = useState(null);
   const [protocoloAberto, setProtocoloAberto] = useState(null);
+  const location = useLocation();
+  const stateConsumed = useRef(false);
+
+  // Abre diretamente o protocolo quando vindo de navegação contextual.
+  // useRef garante que executa apenas uma vez por montagem.
+  useEffect(() => {
+    if (stateConsumed.current) return;
+    const id = location.state?.protocoloId;
+    if (id) {
+      const protocolo = PROTOCOLOS_INDEX.find(p => p.id === id);
+      if (protocolo) setProtocoloAberto(protocolo);
+    }
+    stateConsumed.current = true;
+  }, [location.state]);
 
   const protocolosFiltrados = useMemo(() => {
     const q = busca.trim().toLowerCase();

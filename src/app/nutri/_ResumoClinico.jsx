@@ -6,6 +6,8 @@ import { calcularLeituraConsistencia } from '../../lib/consistenciaUtils.js';
 import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
 import { gerarPontosAtencao } from '../../lib/visaoProspectiva.js';
 import { gerarSinais } from '../../lib/salaSituacaoUtils.js';
+import { protocolosSugeridos } from '../../lib/protocolosContextuais.js';
+import { PROTOCOLOS_INDEX } from '../../data/protocolos/_index.js';
 import SalaSituacao from '../../components/SalaSituacao.jsx';
 
 // ── Jornada Clínica ───────────────────────────────────────────────────────────
@@ -196,7 +198,7 @@ const COR_LEITURA = {
   retomada:      'var(--orange)',
 };
 
-export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
+export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, categoriaClinica }) {
   const navigate = useNavigate();
   const [prox,         setProx]         = useState(undefined);
   const [ultCons,      setUltCons]      = useState(undefined);
@@ -457,6 +459,8 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
     glicemia:       glicemiaData,
     intestino:      intestinoData,
   });
+  const protocolosRelacionados = protocolosSugeridos(categoriaClinica, PROTOCOLOS_INDEX);
+
   const essenciais      = (memoriaClinica ?? []).filter(a => a.aprendizado_essencial);
   const recentes        = (memoriaClinica ?? []).filter(a => !a.aprendizado_essencial);
   const visivelRecentes = memoriaExpand ? recentes : recentes.slice(0, 3);
@@ -471,6 +475,34 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab }) {
         prox={prox}
         metas={metas}
       />
+
+      {/* ── Protocolos relacionados ── */}
+      {protocolosRelacionados.length > 0 && (
+        <div className="card" style={{ padding: '14px 16px', marginBottom: 16 }}>
+          <div style={labelSub}>Protocolos relacionados</div>
+          <div>
+            {protocolosRelacionados.map((p, i) => (
+              <div
+                key={p.id}
+                onClick={() => navigate('/nutri/protocolos', { state: { protocoloId: p.id } })}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '9px 0',
+                  borderBottom: i < protocolosRelacionados.length - 1
+                    ? '0.5px solid var(--border)' : 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <i className="ti ti-clipboard-heart" style={{ fontSize: 14, color: 'var(--text3)', flexShrink: 0 }} aria-hidden="true" />
+                <div style={{ flex: 1, fontSize: 13, color: 'var(--dark)', lineHeight: 1.4 }}>
+                  {p.titulo}
+                </div>
+                <i className="ti ti-chevron-right" style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }} aria-hidden="true" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Consultas ── */}
       <div className="g2">

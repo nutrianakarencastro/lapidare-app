@@ -723,7 +723,7 @@ export default function PacientePerfil() {
         ))}
       </div>
 
-      {tab === 'resumo'      && <ResumoClinico pacienteId={paciente.id} nutriId={user.id} onIrParaTab={setTab} />}
+      {tab === 'resumo'      && <ResumoClinico pacienteId={paciente.id} nutriId={user.id} onIrParaTab={setTab} categoriaClinica={paciente.categoria_clinica ?? null} />}
       {tab === 'linha-tempo' && <LinhaTempo pacienteId={paciente.id} nutriId={user.id} />}
       {tab === 'condutas'    && <Condutas   pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
       {tab === 'metas'        && <Metas       pacienteId={paciente.id} nutriId={user.id} pacienteNome={paciente.nome} />}
