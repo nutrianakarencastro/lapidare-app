@@ -366,7 +366,7 @@ export default function Inicio() {
               ? 'var(--orange-bg, #fff7ed)'
               : dmgTemFora
               ? 'var(--red-bg)'
-              : 'var(--white)',
+              : 'var(--paper)',
             border: dmgTemHipo || dmgTimersVencidos.length > 0
               ? '0.5px solid var(--orange)'
               : dmgTemFora
@@ -507,7 +507,7 @@ export default function Inicio() {
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             fontSize: 12, fontWeight: 600, padding: '7px 14px',
-            background: 'var(--dark)', color: 'var(--white)', borderRadius: 8,
+            background: 'var(--dark)', color: 'var(--paper)', borderRadius: 8,
           }}>
             <i className="ti ti-droplet" style={{ fontSize: 13 }} aria-hidden="true" />
             Registrar glicemia
@@ -555,7 +555,7 @@ export default function Inicio() {
         <div onClick={() => navigate('/paciente/orientacoes')}
           style={{
             margin: '0 16px 12px', padding: '14px 16px',
-            background: 'linear-gradient(135deg, var(--gold-soft, var(--bg-soft)), var(--white))',
+            background: 'linear-gradient(135deg, var(--gold-soft, var(--bg-soft)), var(--paper))',
             border: '0.5px solid var(--gold-deep)',
             borderRadius: 14, cursor: 'pointer',
             display: 'flex', alignItems: 'center', gap: 12,
@@ -592,8 +592,8 @@ export default function Inicio() {
             style={{
               margin: '0 16px 12px', padding: '14px 16px',
               background: nova
-                ? 'linear-gradient(135deg, var(--gold-soft, var(--bg-soft)), var(--white))'
-                : 'var(--white)',
+                ? 'linear-gradient(135deg, var(--gold-soft, var(--bg-soft)), var(--paper))'
+                : 'var(--paper)',
               border: nova ? '0.5px solid var(--gold-deep)' : '0.5px solid var(--hair)',
               borderRadius: 14, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 12,
@@ -628,7 +628,7 @@ export default function Inicio() {
       {calTemConteudo && (
         <div style={{
           margin: '0 16px 14px',
-          background: 'var(--white)',
+          background: 'var(--paper)',
           border: '0.5px solid var(--hair)',
           borderRadius: 16,
           padding: '14px 16px',
@@ -698,7 +698,7 @@ export default function Inicio() {
       {suplComHorario.length > 0 && (
         <div style={{
           margin: '0 16px 14px', padding: 16,
-          background: 'var(--white)',
+          background: 'var(--paper)',
           border: '0.5px solid var(--hair)',
           borderRadius: 16,
         }}>
@@ -757,7 +757,7 @@ export default function Inicio() {
       {habitos.length > 0 && (
         <div style={{
           margin: '0 16px 14px', padding: 16,
-          background: 'var(--white)',
+          background: 'var(--paper)',
           border: `0.5px solid ${habitosCumpridos === habitos.length ? 'var(--green, var(--hair))' : 'var(--hair)'}`,
           borderRadius: 16,
         }}>
@@ -814,7 +814,7 @@ export default function Inicio() {
                     <button onClick={() => setValorHabito(h, ok ? 0 : 1)}
                       style={{
                         width: 32, height: 32, borderRadius: '50%',
-                        background: ok ? 'var(--green, var(--gold-deep))' : 'var(--white)',
+                        background: ok ? 'var(--green, var(--gold-deep))' : 'var(--paper)',
                         color: ok ? '#fff' : 'var(--muted-2)',
                         border: `1.5px solid ${ok ? 'var(--green, var(--gold-deep))' : 'var(--hair)'}`,
                         cursor: 'pointer', fontSize: 14, padding: 0,
@@ -833,7 +833,7 @@ export default function Inicio() {
                         <button onClick={() => setValorHabito(h, Math.max(0, Number((v - passo).toFixed(1))))}
                           style={{
                             width: 26, height: 26, borderRadius: 6,
-                            background: 'var(--white)', border: '1px solid var(--hair)',
+                            background: 'var(--paper)', border: '1px solid var(--hair)',
                             cursor: 'pointer', fontSize: 14, color: 'var(--ink)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}>−</button>
@@ -848,7 +848,7 @@ export default function Inicio() {
                         <button onClick={() => setValorHabito(h, Number((v + passo).toFixed(1)))}
                           style={{
                             width: 26, height: 26, borderRadius: 6,
-                            background: 'var(--white)', border: '1px solid var(--hair)',
+                            background: 'var(--paper)', border: '1px solid var(--hair)',
                             cursor: 'pointer', fontSize: 14, color: 'var(--ink)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}>+</button>
@@ -902,7 +902,7 @@ export default function Inicio() {
         return (
           <div style={{
             margin: '0 16px 12px', padding: '14px 16px',
-            background: 'var(--white)', border: '0.5px solid var(--hair)',
+            background: 'var(--paper)', border: '0.5px solid var(--hair)',
             borderRadius: 16,
           }}>
             {/* Header */}
@@ -964,12 +964,12 @@ export default function Inicio() {
                       }}>
                       <div style={{
                         width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                        background: m.concluida ? 'var(--green, var(--gold-deep))' : 'var(--white)',
+                        background: m.concluida ? 'var(--green, var(--gold-deep))' : 'var(--paper)',
                         border: `1.5px solid ${m.concluida ? 'var(--green, var(--gold-deep))' : 'var(--hair)'}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
                         {m.concluida && (
-                          <i className="ti ti-check" style={{ fontSize: 9, color: 'var(--white)' }} aria-hidden="true" />
+                          <i className="ti ti-check" style={{ fontSize: 9, color: 'var(--paper)' }} aria-hidden="true" />
                         )}
                       </div>
                       <span style={{
