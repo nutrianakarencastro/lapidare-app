@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { podeAcessar } from '../../lib/modelos.js';
@@ -44,17 +44,61 @@ function ImagemCapa({ url, categoriaId, titulo }) {
   );
 }
 
-// ─── Card de item ─────────────────────────────────────────────────────────────
+// ─── DIAGNÓSTICO TEMPORÁRIO ── remover após identificar a causa ───────────────
+const DBG = true;
 
 function CardItem({ item }) {
-  const links    = normalizarLinks(item.links);
-  const linkHref = links.length > 0 ? links[0].url : null;
+  const links       = normalizarLinks(item.links);
+  const linkHref    = links.length > 0 ? links[0].url : null;
+  const linkOriginal = Array.isArray(item.links) && item.links.length > 0
+    ? (item.links[0]?.url ?? '(campo url ausente)')
+    : '(links vazio ou nulo)';
+
+  const clickado   = useRef(false);
+  const [cliques, setCliques] = useState(0);
+
+  function handleClick(e) {
+    e.preventDefault();
+    clickado.current = true;
+    setCliques(n => n + 1);
+    if (linkHref) window.location.href = linkHref;
+  }
+
+  const cardStyle = {
+    background: 'var(--paper)', border: '0.5px solid var(--hair)',
+    borderRadius: 12, overflow: 'hidden',
+    display: 'block', textDecoration: 'none',
+    cursor: linkHref ? 'pointer' : 'default',
+  };
+
+  const dbgStyle = {
+    margin: '10px 16px 14px',
+    padding: '8px 10px',
+    borderRadius: 8,
+    background: '#fff3cd',
+    border: '1px solid #ffc107',
+    fontSize: 10,
+    fontFamily: 'monospace',
+    color: '#333',
+    lineHeight: 1.6,
+    wordBreak: 'break-all',
+  };
+
+  const debug = DBG && (
+    <div style={dbgStyle}>
+      <strong>🔍 DIAGNÓSTICO</strong><br />
+      <b>link original:</b> {linkOriginal}<br />
+      <b>link normalizado:</b> {linkHref ?? '(nulo — card não é <a>)'}<br />
+      <b>renderiza como {'<a>'}:</b> {linkHref ? '✅ SIM' : '❌ NÃO'}<br />
+      <b>cliques registrados:</b> {cliques} {cliques > 0 ? '✅ click dispara' : '⬜ aguardando toque'}<br />
+    </div>
+  );
 
   const conteudo = (
     <>
       <ImagemCapa url={item.imagem_url} categoriaId={item.categoria} titulo={item.titulo} />
 
-      <div style={{ padding: '14px 16px 16px' }}>
+      <div style={{ padding: '14px 16px 4px' }}>
         {item.destaque && (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -87,7 +131,7 @@ function CardItem({ item }) {
         )}
 
         {linkHref && (
-          <div style={{ marginTop: item.descricao ? 0 : 4 }}>
+          <div style={{ marginTop: item.descricao ? 0 : 4, marginBottom: 12 }}>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '8px 16px', borderRadius: 99,
@@ -100,23 +144,16 @@ function CardItem({ item }) {
           </div>
         )}
       </div>
+
+      {debug}
     </>
   );
 
-  const cardStyle = {
-    background: 'var(--paper)', border: '0.5px solid var(--hair)',
-    borderRadius: 12, overflow: 'hidden',
-    display: 'block', textDecoration: 'none',
-    cursor: linkHref ? 'pointer' : 'default',
-  };
-
   if (linkHref) {
     return (
-      // eslint-disable-next-line jsx-a11y/anchor-is-valid
-      <a href={linkHref} target="_blank" rel="noreferrer" style={cardStyle}
-        onClick={() => {}}>
+      <div style={cardStyle} onClick={handleClick}>
         {conteudo}
-      </a>
+      </div>
     );
   }
 
