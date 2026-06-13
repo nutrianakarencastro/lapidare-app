@@ -112,7 +112,9 @@ function CardItem({ item }) {
 
   if (linkHref) {
     return (
-      <a href={linkHref} target="_blank" rel="noreferrer" style={cardStyle}>
+      // eslint-disable-next-line jsx-a11y/anchor-is-valid
+      <a href={linkHref} target="_blank" rel="noreferrer" style={cardStyle}
+        onClick={() => {}}>
         {conteudo}
       </a>
     );

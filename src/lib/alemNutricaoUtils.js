@@ -19,10 +19,18 @@ export function ordenarItens(itens) {
   });
 }
 
-// Garante que links é sempre um array válido de { titulo, url }
+// Garante que links é sempre um array válido de { titulo, url }.
+// Adiciona https:// se o protocolo estiver ausente — sem protocolo, o browser
+// interpreta a URL como caminho relativo ao SPA e a navegação falha silenciosamente.
 export function normalizarLinks(links) {
   if (!Array.isArray(links)) return [];
-  return links.filter(l => l && typeof l === 'object' && l.url?.trim());
+  return links
+    .filter(l => l && typeof l === 'object' && l.url?.trim())
+    .map(l => {
+      const url = l.url.trim();
+      const normalizada = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+      return { ...l, url: normalizada };
+    });
 }
 
 export const MAX_LINKS = 10;
