@@ -37,46 +37,19 @@ CREATE POLICY "paciente_all_ciclo_perfil" ON public.ciclo_perfil
 
 
 -- =============================================================
--- BLOCO 2 — ciclo_perfil: corrigir FK de auth.users → pacientes
+-- BLOCO 2 — ciclo_perfil: FK auth.users → public.pacientes
 --
--- O campo paciente_id foi definido como:
---   REFERENCES auth.users(id) ON DELETE CASCADE
 -- Após B.1, pacientes.id ≠ auth.uid() para novas pacientes,
--- fazendo o INSERT falhar com FK violation antes mesmo do RLS.
+-- fazendo o INSERT falhar com FK violation antes do RLS.
 --
--- Segurança dos dados existentes:
---   Pacientes antigas: pacientes.id = auth.uid() (backfill B.1)
---   → o valor armazenado existe em public.pacientes. Sem órfãos.
---
--- O nome do constraint é descoberto dinamicamente para garantir
--- compatibilidade se o Supabase gerou um nome diferente do padrão.
+-- Segurança: pacientes antigas têm pacientes.id = auth.uid()
+-- (backfill B.1) — os valores armazenados existem em
+-- public.pacientes. Sem órfãos.
 -- =============================================================
 
-DO $$
-DECLARE
-  v_constraint text;
-BEGIN
-  -- Busca o nome do FK constraint atual de ciclo_perfil
-  SELECT tc.constraint_name INTO v_constraint
-  FROM information_schema.table_constraints tc
-  JOIN information_schema.constraint_column_usage ccu
-    ON tc.constraint_name = ccu.constraint_name
-  WHERE tc.table_schema      = 'public'
-    AND tc.table_name        = 'ciclo_perfil'
-    AND tc.constraint_type   = 'FOREIGN KEY'
-    AND ccu.table_name       = 'users'   -- aponta para auth.users
-    AND ccu.table_schema     = 'auth';
+ALTER TABLE public.ciclo_perfil
+  DROP CONSTRAINT IF EXISTS ciclo_perfil_paciente_id_fkey;
 
-  IF v_constraint IS NOT NULL THEN
-    EXECUTE format(
-      'ALTER TABLE public.ciclo_perfil DROP CONSTRAINT %I',
-      v_constraint
-    );
-  END IF;
-END;
-$$;
-
--- Adiciona FK correto apontando para public.pacientes
 ALTER TABLE public.ciclo_perfil
   ADD CONSTRAINT ciclo_perfil_paciente_id_fkey
   FOREIGN KEY (paciente_id)
