@@ -4,12 +4,13 @@ import { podeAcessar } from '../../lib/modelos.js';
 import BloqueioModelo from '../../components/BloqueioModelo.jsx';
 import { dataBR } from '../../lib/utils.js';
 import { semanaAtualDe, useJornada } from '../../lib/jornadaUtils.js';
+import { PROTOCOLOS_RUNTIME } from '../../lib/protocolosRuntime.js';
 
 export default function Jornada() {
   const { profile } = useSession();
   const pacienteId = profile?.id;
   const navigate = useNavigate();
-  const { jornada, historico, habitos, loading, toggleMeta } = useJornada(pacienteId);
+  const { jornada, historico, habitos, protocolos, loading, toggleMeta } = useJornada(pacienteId);
 
   if (loading) {
     return (
@@ -129,6 +130,46 @@ export default function Jornada() {
               {jornada.objetivo_fase && (
                 <div style={{ fontSize: 13, color: 'var(--ink-soft)', lineHeight: 1.5, marginBottom: 12 }}>
                   {jornada.objetivo_fase}
+                </div>
+              )}
+
+              {/* Protocolos ativos — versão paciente */}
+              {protocolos.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{
+                    fontSize: 10, letterSpacing: '.15em', textTransform: 'uppercase',
+                    color: 'var(--muted)', fontWeight: 600, marginBottom: 8,
+                  }}>
+                    Estamos trabalhando agora em
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {protocolos.slice(0, 3).map(p => {
+                      const info = PROTOCOLOS_RUNTIME[p.protocolo_id];
+                      if (!info) return null;
+                      return (
+                        <div key={p.protocolo_id} style={{
+                          padding: '12px 14px', borderRadius: 12,
+                          background: 'linear-gradient(135deg, var(--gold-soft, #fdf8f0), var(--white))',
+                          border: '0.5px solid var(--gold)',
+                        }}>
+                          <div style={{
+                            fontSize: 13, fontWeight: 600, color: 'var(--ink)',
+                            fontFamily: 'var(--font-serif)', marginBottom: info.essencia ? 6 : 0,
+                          }}>
+                            {info.titulo}
+                          </div>
+                          {info.essencia && (
+                            <div style={{
+                              fontSize: 12, color: 'var(--ink-soft)',
+                              lineHeight: 1.6, fontStyle: 'italic',
+                            }}>
+                              "{info.essencia}"
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

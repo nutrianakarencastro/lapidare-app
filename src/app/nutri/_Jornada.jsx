@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { dataBR } from '../../lib/utils.js';
+import { PROTOCOLOS_RUNTIME } from '../../lib/protocolosRuntime.js';
 
 const inpSt = {
   width: '100%', boxSizing: 'border-box',
@@ -44,6 +46,7 @@ function novaJornada(nutriId, pacienteId) {
 }
 
 export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
+  const navigate = useNavigate();
   const [jornada,   setJornada]   = useState(undefined);
   const [historico, setHistorico] = useState([]);
   const [form,      setForm]      = useState(null);
@@ -57,9 +60,10 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   const [metasAtivas,       setMetasAtivas]       = useState([]);
   const [estrategiasAtivas, setEstrategiasAtivas] = useState([]);
   const [condutaAtual,      setCondutaAtual]      = useState(null);
+  const [protocolosAtivos,  setProtocolosAtivos]  = useState([]);
 
   async function carregar() {
-    const [jRes, hRes, habRes, metasRes, estratRes, condutaRes] = await Promise.all([
+    const [jRes, hRes, habRes, metasRes, estratRes, condutaRes, protRes] = await Promise.all([
       supabase.from('jornadas').select('*').eq('paciente_id', pacienteId).maybeSingle(),
       supabase.from('jornada_historico').select('*')
         .eq('paciente_id', pacienteId)
@@ -81,6 +85,11 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
         .eq('paciente_id', pacienteId).eq('nutri_id', nutriId)
         .eq('is_atual', true)
         .limit(1).maybeSingle(),
+      supabase.from('paciente_protocolos')
+        .select('id, protocolo_id, aplicado_em')
+        .eq('paciente_id', pacienteId)
+        .eq('status', 'ativo')
+        .order('aplicado_em', { ascending: true }),
     ]);
     const j = jRes.data ?? null;
     setJornada(j);
@@ -90,6 +99,7 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
     setMetasAtivas(metasRes.data ?? []);
     setEstrategiasAtivas(estratRes.data ?? []);
     setCondutaAtual(condutaRes.data ?? null);
+    setProtocolosAtivos(protRes.data ?? []);
   }
 
   useEffect(() => { carregar(); }, [pacienteId]);
@@ -551,7 +561,7 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
       )}
 
       {/* ── Contexto clínico desta fase ──────────────────────────────────── */}
-      {(metasAtivas.length > 0 || estrategiasAtivas.length > 0 || condutaAtual) && (
+      {(protocolosAtivos.length > 0 || metasAtivas.length > 0 || estrategiasAtivas.length > 0 || condutaAtual) && (
         <div className="card" style={{ marginTop: 12 }}>
           <div className="card-header">
             <div>
@@ -560,6 +570,51 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
             </div>
           </div>
           <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Protocolos que orientam esta fase */}
+            {protocolosAtivos.length > 0 && (
+              <div>
+                <div style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: '.08em',
+                  textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6,
+                }}>
+                  Protocolos que orientam esta fase · {protocolosAtivos.length}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {protocolosAtivos.map(row => {
+                    const info = PROTOCOLOS_RUNTIME[row.protocolo_id];
+                    return (
+                      <div key={row.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '9px 12px', borderRadius: 8,
+                        background: 'var(--bg2)', border: '0.5px solid var(--border)',
+                      }}>
+                        <i className="ti ti-file-medical" style={{ fontSize: 15, color: 'var(--gold-deep)', flexShrink: 0 }} aria-hidden="true" />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--dark)' }}>
+                            {info?.titulo ?? row.protocolo_id}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--text4)', marginTop: 1 }}>
+                            Aplicado em {dataBR(row.aplicado_em)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => navigate('/nutri/protocolos', { state: { protocoloId: row.protocolo_id } })}
+                          style={{
+                            background: 'none', border: '0.5px solid var(--border)',
+                            borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+                            fontSize: 11, color: 'var(--text2)', fontFamily: 'var(--font-sans)',
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            whiteSpace: 'nowrap', flexShrink: 0,
+                          }}>
+                          Ver <i className="ti ti-arrow-right" style={{ fontSize: 10 }} aria-hidden="true" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Conduta atual */}
             {condutaAtual && (
