@@ -367,12 +367,20 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
     const tipo = tipoSang || 'nao';
     const payload = { paciente_id: pacienteId, data: dia, sangramento_dia: tipo };
     if (tipo !== 'nao') {
-      if (detSang.cor_sangue_dia)        payload.cor_sangue_dia        = detSang.cor_sangue_dia;
-      if (detSang.intensidade_fluxo_dia) payload.intensidade_fluxo_dia = detSang.intensidade_fluxo_dia;
-      payload.coagulos_dia = detSang.coagulos_dia;
+      payload.cor_sangue_dia        = detSang.cor_sangue_dia        || null;
+      payload.intensidade_fluxo_dia = detSang.intensidade_fluxo_dia || null;
+      payload.coagulos_dia          = detSang.coagulos_dia          || null;
       if (detSang.absorventes_dia !== null) payload.absorventes_dia = detSang.absorventes_dia;
       if (detSang.notas_sangramento_dia) payload.notas_sangramento_dia = detSang.notas_sangramento_dia;
+    } else {
+      // Limpa explicitamente campos com CHECK constraint quando não há sangramento.
+      // Necessário para UPDATEs em rows existentes: Postgres reavalia o CHECK em
+      // todos os campos da row, mesmo os não incluídos no SET.
+      payload.cor_sangue_dia        = null;
+      payload.intensidade_fluxo_dia = null;
+      payload.coagulos_dia          = null;
     }
+    console.log('payload ciclo_sintomas_diarios [ModalDia]', payload);
     await supabase.from('ciclo_sintomas_diarios').upsert(payload, { onConflict: 'paciente_id,data' });
     setSalvandoSang(false);
     onSalvarPeriodo();
@@ -734,6 +742,7 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
     const sanitized = Object.fromEntries(
       Object.entries(form).map(([k, v]) => [k, v === '' ? null : v])
     );
+    console.log('payload ciclo_sintomas_diarios [FormSintomas]', { paciente_id: pacienteId, data: dia, ...sanitized });
     const { error } = await supabase.from('ciclo_sintomas_diarios').upsert(
       { paciente_id: pacienteId, data: dia, ...sanitized },
       { onConflict: 'paciente_id,data' }
