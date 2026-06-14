@@ -718,9 +718,13 @@ const INTESTINO_OPS = [
   { v: 'alternado', label: 'Alternado' },
 ];
 
-function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
+function FormSintomas({ dia, existente, periodos, situacaoCiclo, estadoReprodutivo, onSalvo, onCancelar }) {
   const { user, profile } = useSession();
   const pacienteId = profile?.id;
+
+  // Oculta bloco de sangramento para quem não menstrua por razão clínica.
+  const exibeSangramento = !['ciclo_suprimido', 'nao_menstrua'].includes(situacaoCiclo)
+    && !['menopausa', 'gestante', 'pos_parto'].includes(estadoReprodutivo);
   const [form, setForm] = useState(() => existente ? { ...novoSintoma(), ...existente } : novoSintoma());
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState(null);
@@ -742,6 +746,14 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
     const sanitized = Object.fromEntries(
       Object.entries(form).map(([k, v]) => [k, v === '' ? null : v])
     );
+    // Quando não há sangramento, nulifica campos dependentes para não violar CHECK
+    // nem deixar dados semanticamente inválidos em updates de rows existentes.
+    const temSangramento = ['escape', 'menstruacao'].includes(sanitized.sangramento_dia);
+    if (!temSangramento) {
+      sanitized.cor_sangue_dia        = null;
+      sanitized.intensidade_fluxo_dia = null;
+      sanitized.coagulos_dia          = null;
+    }
     console.log('payload ciclo_sintomas_diarios [FormSintomas]', { paciente_id: pacienteId, data: dia, ...sanitized });
     const { error } = await supabase.from('ciclo_sintomas_diarios').upsert(
       { paciente_id: pacienteId, data: dia, ...sanitized },
@@ -787,12 +799,14 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
         <FL>Libido</FL>
         <Escala5 valor={form.libido} onChange={v => sv('libido', v)} emojis={['Sem','Baixa','Média','Alta','Muita']} />
 
-        <SL>Sangramento do dia</SL>
-        <FL>Como foi hoje?</FL>
-        <GrupoOpcoes valor={form.sangramento_dia} opcoes={TIPO_SANGRAMENTO_OPS}
-          onChange={v => sv('sangramento_dia', v)} cols={3} />
+        {exibeSangramento && <SL>Sangramento do dia</SL>}
+        {exibeSangramento && <FL>Como foi hoje?</FL>}
+        {exibeSangramento && (
+          <GrupoOpcoes valor={form.sangramento_dia} opcoes={TIPO_SANGRAMENTO_OPS}
+            onChange={v => sv('sangramento_dia', v)} cols={3} />
+        )}
 
-        {['escape', 'menstruacao'].includes(form.sangramento_dia) && (
+        {exibeSangramento && ['escape', 'menstruacao'].includes(form.sangramento_dia) && (
           <>
             <FL>Cor do sangue</FL>
             <GrupoOpcoes valor={form.cor_sangue_dia} opcoes={COR_SANGUE_OPS}
@@ -1450,7 +1464,8 @@ export default function Ciclo() {
     return <div style={{ padding: 32, textAlign: 'center', color: 'var(--muted)' }}>Carregando…</div>;
   }
 
-  const situacaoCiclo        = perfil?.situacao_ciclo ?? 'menstrua_regularmente';
+  const situacaoCiclo        = perfil?.situacao_ciclo    ?? 'menstrua_regularmente';
+  const estadoReprodutivo    = perfil?.estado_reprodutivo ?? 'nenhum';
   const podeMarcarMenstruacao = !['ciclo_suprimido', 'nao_menstrua'].includes(situacaoCiclo);
   const sintomaDiaSel        = sintomas.find(s => s.data === diaSel);
 
@@ -1473,6 +1488,7 @@ export default function Ciclo() {
         existente={existente}
         periodos={periodos}
         situacaoCiclo={situacaoCiclo}
+        estadoReprodutivo={estadoReprodutivo}
         onSalvo={async () => { setDiaSintoma(null); await carregar(); }}
         onCancelar={() => setDiaSintoma(null)}
       />
