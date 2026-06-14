@@ -75,33 +75,16 @@ para qualquer paciente criada após a Sprint B.1.
 
 ---
 
-## PENDENTE — Sprint 31.0B.4
+## SPRINT 31.0B.4 — CONCLUÍDA APÓS HOMOLOGAÇÃO
 
-### ⚠️ RPCs de confirmação de consulta
+### ✅ RPCs de confirmação de consulta
 
-**SITUAÇÃO:** INCERTO — conflito de ordem de aplicação entre migrations do mesmo dia.
+**DIAGNÓSTICO CONFIRMADO:** `consultas_confirmacao.sql` (alfabeticamente posterior a
+`b5_1_rls_criticas.sql` no mesmo dia 2026-06-09) sobrescreveu as correções de B.5.1,
+revertendo ambas as RPCs para `paciente_id = auth.uid()`.
 
-`2026-06-09_b5_1_rls_criticas.sql` corrigiu `paciente_confirmar_consulta()` e
-`paciente_visualizar_consulta()` com `meu_paciente_id()`.
-`2026-06-09_consultas_confirmacao.sql` (alfabeticamente posterior, mesmo dia) pode ter
-reescrito ambas com `paciente_id = auth.uid()`.
-
-**Verificar antes de qualquer migration:**
-```sql
-SELECT routine_name,
-  CASE
-    WHEN routine_definition ILIKE '%meu_paciente_id()%'        THEN '✅ OK'
-    WHEN routine_definition ILIKE '%paciente_id = auth.uid()%' THEN '❌ QUEBRADO'
-    ELSE '⚠️ checar manualmente'
-  END AS status
-FROM information_schema.routines
-WHERE routine_schema = 'public'
-  AND routine_name IN ('paciente_confirmar_consulta', 'paciente_visualizar_consulta');
-```
-
-**RISCO:** Confirmação de presença e remarcação de consulta não funcionam para novas pacientes.
-
-**MIGRATION:** SIM (condicional — aplicar somente se verificação retornar ❌ QUEBRADO)
+**CORREÇÃO:** `2026-06-13_sprint31_0b4_rls_rpcs_consulta.sql` — reaplica
+`meu_paciente_id()` nas duas RPCs mantendo todas as validações de negócio.
 
 ---
 
@@ -132,20 +115,21 @@ WHERE routine_schema = 'public'
 | `documentos` SELECT | ✅ FECHADO | 31.0B.3 |
 | Storage `documentos` SELECT | ✅ FECHADO | 31.0B.3 |
 | `orientacoes_pacientes` + RPCs | ✅ FECHADO | B.5.1 + B.5.2 |
-| `paciente_confirmar_consulta()` | ⚠️ INCERTO | 31.0B.4 |
-| `paciente_visualizar_consulta()` | ⚠️ INCERTO | 31.0B.4 |
+| `paciente_confirmar_consulta()` | ✅ FECHADO | 31.0B.4 |
+| `paciente_visualizar_consulta()` | ✅ FECHADO | 31.0B.4 |
 
 ---
 
 ## PROGRESSO DA SPRINT 31.0
 
 ```
-Fechados:    23 módulos  ████████████████████░░  92%
-Incertos:     2 módulos  (Sprint 31.0B.4 — RPCs de consulta)
+Fechados:    25 módulos  ██████████████████████  100%
 ─────────────────────────────────────────────────────────────
 Total auditados: 25 módulos
 ```
 
+**Sprint 31.0 RLS Final — ENCERRADA.**
+
 ---
 
-_Atualizado em: 2026-06-14 | Sprint 31.0B.3 homologada_
+_Atualizado em: 2026-06-14 | Sprint 31.0B.4 concluída — auditoria encerrada_
