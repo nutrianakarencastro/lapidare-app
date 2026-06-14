@@ -729,10 +729,13 @@ function FormSintomas({ dia, existente, periodos, onSalvo, onCancelar }) {
   async function salvar() {
     setErro(null);
     setBusy(true);
-    const payload = { paciente_id: pacienteId, data: dia, ...form };
-    delete payload.id; delete payload.created_at; delete payload.paciente_id;
+    // Converte '' → null antes de enviar ao DB.
+    // CHECK constraints do Postgres passam com NULL mas falham com '' vazia.
+    const sanitized = Object.fromEntries(
+      Object.entries(form).map(([k, v]) => [k, v === '' ? null : v])
+    );
     const { error } = await supabase.from('ciclo_sintomas_diarios').upsert(
-      { paciente_id: pacienteId, data: dia, ...form },
+      { paciente_id: pacienteId, data: dia, ...sanitized },
       { onConflict: 'paciente_id,data' }
     );
     setBusy(false);
