@@ -51,6 +51,7 @@ function formVazio() {
     data_inicio: new Date().toISOString().slice(0, 10),
     data_fim: '',
     mensagem_paciente: '', observacoes_nutri: '',
+    vincularFase: false,
   };
 }
 
@@ -84,21 +85,28 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
   const [busy,     setBusy]     = useState(false);
   const [feedback, setFeedback] = useState(null);
   const perfilCicloRef = useRef(null);
-  const [sinteses,    setSinteses]    = useState({});
-  const [reflexoes,   setReflexoes]   = useState({});
-  const [salvandoApr, setSalvandoApr] = useState({});
-  const [feedbackApr, setFeedbackApr] = useState({});
+  const [sinteses,       setSinteses]       = useState({});
+  const [reflexoes,      setReflexoes]      = useState({});
+  const [salvandoApr,    setSalvandoApr]    = useState({});
+  const [feedbackApr,    setFeedbackApr]    = useState({});
+  const [jornadaFaseUuid, setJornadaFaseUuid] = useState(null);
 
   async function carregar() {
-    const { data } = await supabase
-      .from('estrategias')
-      .select('*')
-      .eq('paciente_id', pacienteId)
-      .eq('nutri_id', nutriId)
-      .order('created_at', { ascending: false });
-    const lista = data ?? [];
+    const [estrRes, jornadaRes] = await Promise.all([
+      supabase.from('estrategias')
+        .select('*')
+        .eq('paciente_id', pacienteId)
+        .eq('nutri_id', nutriId)
+        .order('created_at', { ascending: false }),
+      supabase.from('jornadas')
+        .select('fase_uuid')
+        .eq('paciente_id', pacienteId)
+        .maybeSingle(),
+    ]);
+    const lista = estrRes.data ?? [];
     setAtivas(lista.filter(e => e.status === 'ativa'));
     setHistorico(lista.filter(e => e.status === 'encerrada'));
+    setJornadaFaseUuid(jornadaRes.data?.fase_uuid ?? null);
   }
 
   useEffect(() => { carregar(); }, [pacienteId, nutriId]);
@@ -123,6 +131,7 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
       data_fim:          form.data_fim                 || null,
       mensagem_paciente: form.mensagem_paciente.trim() || null,
       observacoes_nutri: form.observacoes_nutri.trim() || null,
+      fase_uuid_origem:  form.vincularFase ? (jornadaFaseUuid ?? null) : null,
     };
     if (editId) {
       await supabase.from('estrategias')
@@ -248,6 +257,7 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
       data_fim:          e.data_fim          ?? '',
       mensagem_paciente: e.mensagem_paciente ?? '',
       observacoes_nutri: e.observacoes_nutri ?? '',
+      vincularFase:      !!e.fase_uuid_origem,
     });
     setFeedback(null);
   }
@@ -337,6 +347,16 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
               placeholder="Notas internas — não visíveis à paciente"
               style={{ width: '100%', resize: 'vertical', minHeight: 52, boxSizing: 'border-box' }} />
           </FL>
+          {jornadaFaseUuid && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text2)', cursor: 'pointer', marginBottom: 10 }}>
+              <input
+                type="checkbox"
+                checked={!!form.vincularFase}
+                onChange={ev => setForm(f => ({ ...f, vincularFase: ev.target.checked }))}
+              />
+              Vincular à fase atual da jornada
+            </label>
+          )}
           {feedback?.tipo === 'erro' && (
             <div style={{ fontSize: 12, color: 'var(--red)', padding: '6px 10px', borderRadius: 6, background: 'var(--red-bg)', marginBottom: 10 }}>
               {feedback.msg}
@@ -371,11 +391,18 @@ export default function Estrategias({ pacienteId, nutriId, pacienteNome }) {
             <div key={e.id} className="card" style={{ padding: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  {e.categoria && (
-                    <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--blue)', marginBottom: 3 }}>
-                      {e.categoria}
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
+                    {e.categoria && (
+                      <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--blue)' }}>
+                        {e.categoria}
+                      </span>
+                    )}
+                    {e.fase_uuid_origem && (
+                      <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 10, background: 'var(--blue-bg, #eff6ff)', color: 'var(--blue)' }}>
+                        desta fase
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--dark)' }}>{e.titulo}</div>
                   {e.objetivo && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{e.objetivo}</div>}
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>

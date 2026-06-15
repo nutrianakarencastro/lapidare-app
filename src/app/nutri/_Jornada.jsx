@@ -57,14 +57,15 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   const [aviso,     setAviso]     = useState(null);
   const [encerrando, setEncerrando] = useState(false);
   const [histAberto, setHistAberto] = useState(false);
-  const [metasAtivas,       setMetasAtivas]       = useState([]);
-  const [estrategiasAtivas, setEstrategiasAtivas] = useState([]);
-  const [condutaAtual,      setCondutaAtual]      = useState(null);
-  const [protocolosAtivos,  setProtocolosAtivos]  = useState([]);
-  const [metasPorFase,      setMetasPorFase]      = useState({});
+  const [metasAtivas,         setMetasAtivas]         = useState([]);
+  const [estrategiasAtivas,   setEstrategiasAtivas]   = useState([]);
+  const [condutaAtual,        setCondutaAtual]        = useState(null);
+  const [protocolosAtivos,    setProtocolosAtivos]    = useState([]);
+  const [metasPorFase,        setMetasPorFase]        = useState({});
+  const [estrategiasPorFase,  setEstrategiasPorFase]  = useState({});
 
   async function carregar() {
-    const [jRes, hRes, habRes, metasRes, estratRes, condutaRes, protRes, metasFaseRes] = await Promise.all([
+    const [jRes, hRes, habRes, metasRes, estratRes, condutaRes, protRes, metasFaseRes, estratFaseRes] = await Promise.all([
       supabase.from('jornadas').select('*').eq('paciente_id', pacienteId).maybeSingle(),
       supabase.from('jornada_historico').select('*')
         .eq('paciente_id', pacienteId)
@@ -77,7 +78,7 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
         .in('status', ['ativa', 'em_evolucao'])
         .order('prioridade'),
       supabase.from('estrategias')
-        .select('id, titulo, categoria, frequencia_tipo, frequencia_valor')
+        .select('id, titulo, categoria, frequencia_tipo, frequencia_valor, fase_uuid_origem')
         .eq('paciente_id', pacienteId).eq('nutri_id', nutriId)
         .eq('status', 'ativa')
         .order('created_at', { ascending: false }),
@@ -93,6 +94,10 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
         .order('aplicado_em', { ascending: true }),
       supabase.from('metas_terapeuticas')
         .select('id, titulo, eixo, status, fase_uuid_origem')
+        .eq('paciente_id', pacienteId).eq('nutri_id', nutriId)
+        .not('fase_uuid_origem', 'is', null),
+      supabase.from('estrategias')
+        .select('id, titulo, categoria, status, fase_uuid_origem')
         .eq('paciente_id', pacienteId).eq('nutri_id', nutriId)
         .not('fase_uuid_origem', 'is', null),
     ]);
@@ -111,6 +116,12 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
       porFase[m.fase_uuid_origem].push(m);
     }
     setMetasPorFase(porFase);
+    const estratPorFase = {};
+    for (const e of estratFaseRes.data ?? []) {
+      if (!estratPorFase[e.fase_uuid_origem]) estratPorFase[e.fase_uuid_origem] = [];
+      estratPorFase[e.fase_uuid_origem].push(e);
+    }
+    setEstrategiasPorFase(estratPorFase);
   }
 
   useEffect(() => { carregar(); }, [pacienteId]);
@@ -203,6 +214,11 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
     m => m.fase_uuid_origem && jornada?.fase_uuid && m.fase_uuid_origem === jornada.fase_uuid
   );
   const metasGerais = metasAtivas.filter(m => !m.fase_uuid_origem);
+
+  const estrategiasDaFase = estrategiasAtivas.filter(
+    e => e.fase_uuid_origem && jornada?.fase_uuid && e.fase_uuid_origem === jornada.fase_uuid
+  );
+  const estrategiasGerais = estrategiasAtivas.filter(e => !e.fase_uuid_origem);
 
   return (
     <>
@@ -501,7 +517,8 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
           {histAberto && (
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {historico.map(h => {
-                const metasDaFaseHist = h.fase_uuid ? (metasPorFase[h.fase_uuid] ?? []) : [];
+                const metasDaFaseHist      = h.fase_uuid ? (metasPorFase[h.fase_uuid]      ?? []) : [];
+                const estrategiasDaFaseHist = h.fase_uuid ? (estrategiasPorFase[h.fase_uuid] ?? []) : [];
                 return (
                 <div key={h.id} style={{
                   padding: '12px 14px', borderRadius: 10,
@@ -577,6 +594,44 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
                             {m.status === 'concluida' ? 'Concluída'
                             : m.status === 'pausada'   ? 'Pausada'
                             : 'Ativa'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {estrategiasDaFaseHist.length > 0 && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '0.5px solid var(--border)' }}>
+                      <div style={{
+                        fontSize: 10, fontWeight: 600, letterSpacing: '.06em',
+                        textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 5,
+                      }}>
+                        Estratégias utilizadas nesta fase
+                      </div>
+                      {estrategiasDaFaseHist.map(e => (
+                        <div key={e.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          fontSize: 12, color: 'var(--text2)', marginBottom: 3,
+                        }}>
+                          <span style={{
+                            width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                            background: e.status === 'encerrada' ? 'var(--text4)' : 'var(--blue)',
+                          }} />
+                          <span style={{
+                            flex: 1,
+                            opacity: e.status === 'encerrada' ? 0.7 : 1,
+                          }}>
+                            {e.titulo}
+                          </span>
+                          {e.categoria && (
+                            <span style={{ fontSize: 9, color: 'var(--text4)' }}>{e.categoria}</span>
+                          )}
+                          <span style={{
+                            fontSize: 9, fontWeight: 600, padding: '1px 6px',
+                            borderRadius: 10, flexShrink: 0,
+                            background: e.status === 'encerrada' ? 'var(--bg2)' : 'var(--blue-bg, #eff6ff)',
+                            color:      e.status === 'encerrada' ? 'var(--text3)' : 'var(--blue)',
+                          }}>
+                            {e.status === 'encerrada' ? 'Encerrada' : 'Ativa'}
                           </span>
                         </div>
                       ))}
@@ -692,27 +747,26 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
               </div>
             )}
 
-            {/* Estratégias ativas */}
-            {estrategiasAtivas.length > 0 && (
+            {/* Estratégias desta fase */}
+            {estrategiasDaFase.length > 0 && (
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>
-                  Estratégias ativas · {estrategiasAtivas.length}
+                  Estratégias desta fase · {estrategiasDaFase.length}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {estrategiasAtivas.map(e => (
-                    <div key={e.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '8px 10px', borderRadius: 7,
-                      background: 'var(--bg2)', border: '0.5px solid var(--border)',
-                    }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 500 }}>{e.titulo}</div>
-                        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
-                          {[e.categoria, labelFreqJornada(e.frequencia_tipo, e.frequencia_valor)].filter(Boolean).join(' · ')}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                  {estrategiasDaFase.map(e => <EstrategiaAtivaRow key={e.id} e={e} />)}
+                </div>
+              </div>
+            )}
+
+            {/* Estratégias ativas gerais (sem fase vinculada) */}
+            {estrategiasGerais.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>
+                  Estratégias ativas · {estrategiasGerais.length}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {estrategiasGerais.map(e => <EstrategiaAtivaRow key={e.id} e={e} />)}
                 </div>
               </div>
             )}
@@ -798,6 +852,24 @@ function MetaAtivaRow({ m }) {
       }}>
         {m.status === 'em_evolucao' ? 'Em evolução' : 'Ativa'}
       </span>
+    </div>
+  );
+}
+
+// ── Linha de estratégia ativa (contexto clínico desta fase) ──────────────────
+function EstrategiaAtivaRow({ e }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '8px 10px', borderRadius: 7,
+      background: 'var(--bg2)', border: '0.5px solid var(--border)',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 500 }}>{e.titulo}</div>
+        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
+          {[e.categoria, labelFreqJornada(e.frequencia_tipo, e.frequencia_valor)].filter(Boolean).join(' · ')}
+        </div>
+      </div>
     </div>
   );
 }
