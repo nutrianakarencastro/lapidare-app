@@ -38,16 +38,17 @@ function hoje() {
 
 function formVazio() {
   return {
-    titulo:       '',
-    eixo:         '',
-    descricao:    '',
-    criterio:     '',
-    status:       'ativa',
-    prioridade:   'media',
-    criado_em:    hoje(),
-    concluido_em: '',
-    pausado_em:   '',
-    observacoes:  '',
+    titulo:           '',
+    eixo:             '',
+    descricao:        '',
+    criterio:         '',
+    status:           'ativa',
+    prioridade:       'media',
+    criado_em:        hoje(),
+    concluido_em:     '',
+    pausado_em:       '',
+    observacoes:      '',
+    fase_uuid_origem: null,
   };
 }
 
@@ -69,6 +70,7 @@ export default function Metas({ pacienteId, nutriId, pacienteNome }) {
   const [filtro, setFiltro]       = useState('todas');
   const [perfilResult, setPerfilResult] = useState(null);
   const [condutaAtual, setCondutaAtual] = useState(null);
+  const [jornadaAtiva, setJornadaAtiva] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -107,12 +109,19 @@ export default function Metas({ pacienteId, nutriId, pacienteNome }) {
   }, [pacienteId, nutriId]);
 
   async function carregar() {
-    const { data } = await supabase.from('metas_terapeuticas')
-      .select('*')
-      .eq('paciente_id', pacienteId)
-      .eq('nutri_id', nutriId)
-      .order('criado_em', { ascending: false });
-    setRegistros(data ?? []);
+    const [metasRes, jornadaRes] = await Promise.all([
+      supabase.from('metas_terapeuticas')
+        .select('*')
+        .eq('paciente_id', pacienteId)
+        .eq('nutri_id', nutriId)
+        .order('criado_em', { ascending: false }),
+      supabase.from('jornadas')
+        .select('fase_uuid, nome_fase')
+        .eq('paciente_id', pacienteId)
+        .maybeSingle(),
+    ]);
+    setRegistros(metasRes.data ?? []);
+    setJornadaAtiva(jornadaRes.data ?? null);
   }
 
   useEffect(() => { carregar(); }, [pacienteId, nutriId]);
@@ -136,18 +145,19 @@ export default function Metas({ pacienteId, nutriId, pacienteNome }) {
     setBusy(true);
 
     const payload = {
-      paciente_id:  pacienteId,
-      nutri_id:     nutriId,
-      titulo:       form.titulo.trim(),
-      eixo:         form.eixo        || null,
-      descricao:    form.descricao.trim()   || null,
-      criterio:     form.criterio.trim()    || null,
-      status:       form.status,
-      prioridade:   form.prioridade,
-      criado_em:    form.criado_em,
-      concluido_em: form.concluido_em || null,
-      pausado_em:   form.pausado_em   || null,
-      observacoes:  form.observacoes.trim() || null,
+      paciente_id:      pacienteId,
+      nutri_id:         nutriId,
+      titulo:           form.titulo.trim(),
+      eixo:             form.eixo              || null,
+      descricao:        form.descricao.trim()  || null,
+      criterio:         form.criterio.trim()   || null,
+      status:           form.status,
+      prioridade:       form.prioridade,
+      criado_em:        form.criado_em,
+      concluido_em:     form.concluido_em      || null,
+      pausado_em:       form.pausado_em        || null,
+      observacoes:      form.observacoes.trim()|| null,
+      fase_uuid_origem: form.fase_uuid_origem  || null,
     };
 
     const { error } = editId
@@ -186,16 +196,17 @@ export default function Metas({ pacienteId, nutriId, pacienteNome }) {
     setEditId(m.id);
     setFeedback(null);
     setForm({
-      titulo:       m.titulo,
-      eixo:         m.eixo         ?? '',
-      descricao:    m.descricao    ?? '',
-      criterio:     m.criterio     ?? '',
-      status:       m.status,
-      prioridade:   m.prioridade,
-      criado_em:    m.criado_em,
-      concluido_em: m.concluido_em ?? '',
-      pausado_em:   m.pausado_em   ?? '',
-      observacoes:  m.observacoes  ?? '',
+      titulo:           m.titulo,
+      eixo:             m.eixo             ?? '',
+      descricao:        m.descricao        ?? '',
+      criterio:         m.criterio         ?? '',
+      status:           m.status,
+      prioridade:       m.prioridade,
+      criado_em:        m.criado_em,
+      concluido_em:     m.concluido_em     ?? '',
+      pausado_em:       m.pausado_em       ?? '',
+      observacoes:      m.observacoes      ?? '',
+      fase_uuid_origem: m.fase_uuid_origem ?? null,
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -333,6 +344,36 @@ export default function Metas({ pacienteId, nutriId, pacienteNome }) {
             <label className="field-label" style={{ marginTop: 12 }}>Observações clínicas</label>
             <textarea rows={2} value={form.observacoes} onChange={sf('observacoes')}
               placeholder="Contexto clínico, decisões, nuances relevantes…" />
+
+            {/* Fase de origem */}
+            {jornadaAtiva && (
+              <div style={{ marginTop: 12 }}>
+                <label className="field-label">Fase de origem</label>
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                  padding: '9px 12px', borderRadius: 8,
+                  background: form.fase_uuid_origem ? 'var(--blue-bg, #eff6ff)' : 'var(--bg2)',
+                  border: `0.5px solid ${form.fase_uuid_origem ? 'var(--blue)' : 'var(--border)'}`,
+                  transition: 'all .15s',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={!!form.fase_uuid_origem}
+                    onChange={e => setForm(f => ({
+                      ...f,
+                      fase_uuid_origem: e.target.checked ? jornadaAtiva.fase_uuid : null,
+                    }))}
+                    style={{ width: 15, height: 15, cursor: 'pointer', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 13, color: 'var(--dark)' }}>
+                    Vincular à fase atual — <strong>{jornadaAtiva.nome_fase}</strong>
+                  </span>
+                </label>
+                <div style={{ fontSize: 11, color: 'var(--text4)', marginTop: 4, lineHeight: 1.4 }}>
+                  Registra em qual fase esta meta nasceu. Não impede que continue em fases futuras.
+                </div>
+              </div>
+            )}
 
             {feedback && (
               <div style={{

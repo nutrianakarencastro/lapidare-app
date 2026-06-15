@@ -61,9 +61,10 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   const [estrategiasAtivas, setEstrategiasAtivas] = useState([]);
   const [condutaAtual,      setCondutaAtual]      = useState(null);
   const [protocolosAtivos,  setProtocolosAtivos]  = useState([]);
+  const [metasPorFase,      setMetasPorFase]      = useState({});
 
   async function carregar() {
-    const [jRes, hRes, habRes, metasRes, estratRes, condutaRes, protRes] = await Promise.all([
+    const [jRes, hRes, habRes, metasRes, estratRes, condutaRes, protRes, metasFaseRes] = await Promise.all([
       supabase.from('jornadas').select('*').eq('paciente_id', pacienteId).maybeSingle(),
       supabase.from('jornada_historico').select('*')
         .eq('paciente_id', pacienteId)
@@ -71,7 +72,7 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
       supabase.from('habitos').select('id, nome, emoji, tipo')
         .eq('paciente_id', pacienteId).eq('ativo', true).order('ordem'),
       supabase.from('metas_terapeuticas')
-        .select('id, titulo, eixo, prioridade, status')
+        .select('id, titulo, eixo, prioridade, status, fase_uuid_origem')
         .eq('paciente_id', pacienteId).eq('nutri_id', nutriId)
         .in('status', ['ativa', 'em_evolucao'])
         .order('prioridade'),
@@ -90,6 +91,10 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
         .eq('paciente_id', pacienteId)
         .eq('status', 'ativo')
         .order('aplicado_em', { ascending: true }),
+      supabase.from('metas_terapeuticas')
+        .select('id, titulo, eixo, status, fase_uuid_origem')
+        .eq('paciente_id', pacienteId).eq('nutri_id', nutriId)
+        .not('fase_uuid_origem', 'is', null),
     ]);
     const j = jRes.data ?? null;
     setJornada(j);
@@ -100,6 +105,12 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
     setEstrategiasAtivas(estratRes.data ?? []);
     setCondutaAtual(condutaRes.data ?? null);
     setProtocolosAtivos(protRes.data ?? []);
+    const porFase = {};
+    for (const m of metasFaseRes.data ?? []) {
+      if (!porFase[m.fase_uuid_origem]) porFase[m.fase_uuid_origem] = [];
+      porFase[m.fase_uuid_origem].push(m);
+    }
+    setMetasPorFase(porFase);
   }
 
   useEffect(() => { carregar(); }, [pacienteId]);
@@ -159,53 +170,20 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
 
   async function encerrarFase(iniciarNova) {
     setBusy(true);
-    const hoje = new Date().toISOString().slice(0, 10);
-    const semanas = Math.max(1, Math.ceil(
-      (new Date(hoje + 'T12:00:00') - new Date((form.data_inicio_fase ?? jornada.data_inicio_fase) + 'T12:00:00')) / (7 * 86400000)
-    ));
-
-    const { error: errHist } = await supabase.from('jornada_historico').insert({
-      paciente_id:       pacienteId,
-      nutri_id:          nutriId,
-      fase:              form.fase ?? jornada.fase,
-      nome_fase:         form.nome_fase?.trim() || jornada.nome_fase,
-      objetivo_fase:     form.objetivo_fase?.trim() || jornada.objetivo_fase || null,
-      consulta_numero:   form.consulta_numero !== '' && form.consulta_numero != null ? Number(form.consulta_numero) : (jornada.consulta_numero ?? null),
-      data_inicio_fase:  form.data_inicio_fase ?? jornada.data_inicio_fase,
-      data_fim_fase:     hoje,
-      semanas_cumpridas: semanas,
-      metas_semana:      form.metas_semana ?? jornada.metas_semana ?? [],
-      evolucao_resumida: form.evolucao_resumida?.trim() || jornada.evolucao_resumida || null,
-      observacoes:       form.observacoes?.trim() || jornada.observacoes || null,
+    const { error } = await supabase.rpc('nutri_encerrar_fase', {
+      p_jornada_id:        jornada.id,
+      p_iniciar_nova:      iniciarNova,
+      p_objetivo_fase:     form.objetivo_fase?.trim()     || null,
+      p_evolucao_resumida: form.evolucao_resumida?.trim() || null,
+      p_observacoes:       form.observacoes?.trim()       || null,
+      p_metas_semana:      form.metas_semana ?? [],
     });
-
-    if (errHist) { feedback('Erro ao arquivar: ' + errHist.message); setBusy(false); return; }
-
-    if (iniciarNova) {
-      const novaFase = (form.fase ?? jornada.fase) + 1;
-      const { error: errUpd } = await supabase.from('jornadas').update({
-        fase:                     novaFase,
-        nome_fase:                `Fase ${novaFase}`,
-        objetivo_fase:            null,
-        consulta_numero:          null,
-        data_inicio_fase:         hoje,
-        duracao_semanas_prevista: 4,
-        metas_semana:             [],
-        proximo_marco:            null,
-        data_proximo_marco:       null,
-        evolucao_resumida:        null,
-        observacoes:              null,
-        updated_at:               new Date().toISOString(),
-      }).eq('id', jornada.id);
-      if (errUpd) { feedback('Fase arquivada, mas erro ao criar nova fase: ' + errUpd.message); setBusy(false); carregar(); return; }
-      feedback('Fase encerrada. Nova fase iniciada.');
-    } else {
-      const { error: errDel } = await supabase.from('jornadas').delete().eq('id', jornada.id);
-      if (errDel) { feedback('Fase arquivada, mas erro ao encerrar: ' + errDel.message); setBusy(false); carregar(); return; }
-      feedback('Acompanhamento encerrado. Histórico preservado.');
-    }
-
     setBusy(false);
+    if (error) { feedback('Erro ao encerrar fase: ' + error.message); return; }
+    feedback(iniciarNova
+      ? 'Fase encerrada. Nova fase iniciada.'
+      : 'Acompanhamento encerrado. Histórico preservado.'
+    );
     setEncerrando(false);
     carregar();
   }
@@ -220,6 +198,11 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   }
 
   const primeiroNome = pacienteNome?.split(' ')[0] ?? 'paciente';
+
+  const metasDaFase = metasAtivas.filter(
+    m => m.fase_uuid_origem && jornada?.fase_uuid && m.fase_uuid_origem === jornada.fase_uuid
+  );
+  const metasGerais = metasAtivas.filter(m => !m.fase_uuid_origem);
 
   return (
     <>
@@ -517,7 +500,9 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
 
           {histAberto && (
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {historico.map(h => (
+              {historico.map(h => {
+                const metasDaFaseHist = h.fase_uuid ? (metasPorFase[h.fase_uuid] ?? []) : [];
+                return (
                 <div key={h.id} style={{
                   padding: '12px 14px', borderRadius: 10,
                   border: '0.5px solid var(--border)', background: 'var(--white)',
@@ -553,8 +538,53 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
                       {h.observacoes}
                     </div>
                   )}
+                  {metasDaFaseHist.length > 0 && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '0.5px solid var(--border)' }}>
+                      <div style={{
+                        fontSize: 10, fontWeight: 600, letterSpacing: '.06em',
+                        textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 5,
+                      }}>
+                        Objetivos terapêuticos desta fase
+                      </div>
+                      {metasDaFaseHist.map(m => (
+                        <div key={m.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          fontSize: 12, color: 'var(--text2)', marginBottom: 3,
+                        }}>
+                          <span style={{
+                            width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                            background: m.status === 'concluida' ? 'var(--green)'
+                                      : m.status === 'pausada'   ? 'var(--text4)'
+                                      : 'var(--blue)',
+                          }} />
+                          <span style={{
+                            flex: 1,
+                            textDecoration: m.status === 'concluida' ? 'line-through' : 'none',
+                            opacity: m.status === 'pausada' ? 0.6 : 1,
+                          }}>
+                            {m.titulo}
+                          </span>
+                          <span style={{
+                            fontSize: 9, fontWeight: 600, padding: '1px 6px',
+                            borderRadius: 10, flexShrink: 0,
+                            background: m.status === 'concluida' ? 'var(--green-bg)'
+                                      : m.status === 'pausada'   ? 'var(--bg2)'
+                                      : 'var(--blue-bg, #eff6ff)',
+                            color:      m.status === 'concluida' ? 'var(--green)'
+                                      : m.status === 'pausada'   ? 'var(--text3)'
+                                      : 'var(--blue)',
+                          }}>
+                            {m.status === 'concluida' ? 'Concluída'
+                            : m.status === 'pausada'   ? 'Pausada'
+                            : 'Ativa'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -638,38 +668,26 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
               </div>
             )}
 
-            {/* Metas terapêuticas ativas */}
-            {metasAtivas.length > 0 && (
+            {/* Objetivos terapêuticos desta fase */}
+            {metasDaFase.length > 0 && (
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>
-                  Metas terapêuticas · {metasAtivas.length} ativa{metasAtivas.length !== 1 ? 's' : ''}
+                  Objetivos terapêuticos desta fase · {metasDaFase.length}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {metasAtivas.map(m => (
-                    <div key={m.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '8px 10px', borderRadius: 7,
-                      background: 'var(--bg2)', border: '0.5px solid var(--border)',
-                    }}>
-                      <span style={{
-                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                        background: { alta: 'var(--red)', media: 'var(--orange)', baixa: 'var(--text3)' }[m.prioridade] ?? 'var(--text3)',
-                      }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 500 }}>{m.titulo}</div>
-                        {m.eixo && (
-                          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{m.eixo}</div>
-                        )}
-                      </div>
-                      <span style={{
-                        fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 10,
-                        background: m.status === 'em_evolucao' ? 'var(--green-bg)' : 'var(--blue-bg, #eff6ff)',
-                        color:      m.status === 'em_evolucao' ? 'var(--green)'    : 'var(--blue)',
-                      }}>
-                        {m.status === 'em_evolucao' ? 'Em evolução' : 'Ativa'}
-                      </span>
-                    </div>
-                  ))}
+                  {metasDaFase.map(m => <MetaAtivaRow key={m.id} m={m} />)}
+                </div>
+              </div>
+            )}
+
+            {/* Metas terapêuticas gerais (sem fase vinculada) */}
+            {metasGerais.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6 }}>
+                  Metas terapêuticas gerais · {metasGerais.length}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {metasGerais.map(m => <MetaAtivaRow key={m.id} m={m} />)}
                 </div>
               </div>
             )}
@@ -752,5 +770,34 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
         </div>
       )}
     </>
+  );
+}
+
+// ── Linha de meta ativa (reutilizada nas duas seções do contexto clínico) ────
+function MetaAtivaRow({ m }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '8px 10px', borderRadius: 7,
+      background: 'var(--bg2)', border: '0.5px solid var(--border)',
+    }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+        background: { alta: 'var(--red)', media: 'var(--orange)', baixa: 'var(--text3)' }[m.prioridade] ?? 'var(--text3)',
+      }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, color: 'var(--dark)', fontWeight: 500 }}>{m.titulo}</div>
+        {m.eixo && (
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{m.eixo}</div>
+        )}
+      </div>
+      <span style={{
+        fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 10,
+        background: m.status === 'em_evolucao' ? 'var(--green-bg)' : 'var(--blue-bg, #eff6ff)',
+        color:      m.status === 'em_evolucao' ? 'var(--green)'    : 'var(--blue)',
+      }}>
+        {m.status === 'em_evolucao' ? 'Em evolução' : 'Ativa'}
+      </span>
+    </div>
   );
 }
