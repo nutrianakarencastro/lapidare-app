@@ -637,6 +637,9 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
                       ))}
                     </div>
                   )}
+                  {h.snapshot_clinico && (
+                    <SnapshotFase s={h.snapshot_clinico} semanas={h.semanas_cumpridas} />
+                  )}
                 </div>
                 );
               })}
@@ -870,6 +873,84 @@ function EstrategiaAtivaRow({ e }) {
           {[e.categoria, labelFreqJornada(e.frequencia_tipo, e.frequencia_valor)].filter(Boolean).join(' · ')}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Snapshot da fase encerrada — "O que aconteceu" ───────────────────────────
+function SnapshotFase({ s, semanas }) {
+  const pesoDelta = s.peso?.inicio_kg != null && s.peso?.fim_kg != null
+    ? (s.peso.fim_kg - s.peso.inicio_kg)
+    : null;
+
+  const protocolosTitulos = (s.protocolos ?? [])
+    .map(p => PROTOCOLOS_RUNTIME[p.id]?.titulo ?? p.id)
+    .filter(Boolean);
+
+  return (
+    <div style={{ marginTop: 8, paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
+      <div style={{
+        fontSize: 10, fontWeight: 600, letterSpacing: '.06em',
+        textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 8,
+      }}>
+        O que aconteceu
+      </div>
+
+      {/* Duração */}
+      <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 6 }}>
+        {s.dias_da_fase} dias · {semanas} semana{semanas !== 1 ? 's' : ''}
+      </div>
+
+      {/* Peso */}
+      {s.peso && (
+        <SnapshotLinha label="Peso">
+          {s.peso.inicio_kg != null
+            ? `${s.peso.inicio_kg} kg → ${s.peso.fim_kg} kg`
+            : `${s.peso.fim_kg} kg`
+          }
+          {pesoDelta !== null && (
+            <span style={{ color: 'var(--text3)', marginLeft: 6 }}>
+              ({pesoDelta > 0 ? '+' : ''}{pesoDelta.toFixed(1)} kg)
+            </span>
+          )}
+        </SnapshotLinha>
+      )}
+
+      {/* Conduta */}
+      {s.conduta && (
+        <SnapshotLinha label="Conduta">
+          "{s.conduta.titulo}"
+        </SnapshotLinha>
+      )}
+
+      {/* Protocolos */}
+      {protocolosTitulos.length > 0 && (
+        <SnapshotLinha label="Protocolos">
+          {protocolosTitulos.join(' · ')}
+        </SnapshotLinha>
+      )}
+
+      {/* Estratégias */}
+      <SnapshotLinha label="Estratégias">
+        {s.estrategias.ativas} ativas · {s.estrategias.encerradas} encerradas
+        {s.estrategias.aderencia_media_pct != null
+          ? ` · ${s.estrategias.aderencia_media_pct}% de adesão`
+          : ' · adesão sem dados'}
+      </SnapshotLinha>
+
+      {/* Check-ins */}
+      <SnapshotLinha label="Check-ins">
+        {s.checkins.respondidos} de {s.checkins.enviados} respondidos
+      </SnapshotLinha>
+    </div>
+  );
+}
+
+function SnapshotLinha({ label, children }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, fontSize: 12, marginBottom: 4, alignItems: 'baseline' }}>
+      <span style={{ color: 'var(--text3)', flexShrink: 0, minWidth: 76 }}>{label}</span>
+      <span style={{ color: 'var(--text2)' }}>{children}</span>
     </div>
   );
 }
