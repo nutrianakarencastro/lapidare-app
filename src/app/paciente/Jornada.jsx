@@ -82,15 +82,18 @@ export default function Jornada() {
               {h.consulta_numero != null && `Consulta ${h.consulta_numero} · `}
               {dataBR(h.data_inicio_fase)} → {dataBR(h.data_fim_fase)} · {h.semanas_cumpridas} semana{h.semanas_cumpridas !== 1 ? 's' : ''}
             </div>
-            {h.evolucao_resumida && (
-              <div style={{
-                marginTop: 8, padding: '8px 10px', borderRadius: 8,
-                background: 'var(--bg-soft)', fontSize: 12, color: 'var(--ink-soft)',
-                lineHeight: 1.5, fontStyle: 'italic',
-              }}>
-                "{h.evolucao_resumida}"
-              </div>
-            )}
+            {(() => {
+              const exibir = (h.narrativa_publicada && h.narrativa_aprovada) ? h.narrativa_aprovada : (h.evolucao_resumida ?? null);
+              return exibir ? (
+                <div style={{
+                  marginTop: 8, padding: '8px 10px', borderRadius: 8,
+                  background: 'var(--bg-soft)', fontSize: 12, color: 'var(--ink-soft)',
+                  lineHeight: 1.5, fontStyle: 'italic',
+                }}>
+                  "{exibir}"
+                </div>
+              ) : null;
+            })()}
           </div>
         </div>
       ))}

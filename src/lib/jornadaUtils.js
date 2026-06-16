@@ -36,7 +36,7 @@ export function useJornada(pacienteId) {
           .eq('paciente_id', pacienteId)
           .maybeSingle(),
         supabase.from('jornada_historico')
-          .select('fase, nome_fase, objetivo_fase, consulta_numero, data_inicio_fase, data_fim_fase, semanas_cumpridas, metas_semana, evolucao_resumida')
+          .select('fase, nome_fase, objetivo_fase, consulta_numero, data_inicio_fase, data_fim_fase, semanas_cumpridas, metas_semana, evolucao_resumida, narrativa_aprovada, narrativa_publicada')
           .eq('paciente_id', pacienteId)
           .order('data_inicio_fase', { ascending: true }),
         supabase.from('habitos')

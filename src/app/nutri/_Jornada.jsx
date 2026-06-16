@@ -63,6 +63,9 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   const [protocolosAtivos,    setProtocolosAtivos]    = useState([]);
   const [metasPorFase,        setMetasPorFase]        = useState({});
   const [estrategiasPorFase,  setEstrategiasPorFase]  = useState({});
+  const [narrativasEdit,      setNarrativasEdit]      = useState({});
+  const [narrativasBusy,      setNarrativasBusy]      = useState({});
+  const [narrativasFeedback,  setNarrativasFeedback]  = useState({});
 
   async function carregar() {
     const [jRes, hRes, habRes, metasRes, estratRes, condutaRes, protRes, metasFaseRes, estratFaseRes] = await Promise.all([
@@ -196,6 +199,31 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
       : 'Acompanhamento encerrado. Histórico preservado.'
     );
     setEncerrando(false);
+    carregar();
+  }
+
+  async function publicarNarrativa(histId, texto) {
+    setNarrativasBusy(b => ({ ...b, [histId]: true }));
+    const { error } = await supabase.from('jornada_historico')
+      .update({
+        narrativa_aprovada:    texto.trim() || null,
+        narrativa_aprovada_em: new Date().toISOString(),
+        narrativa_publicada:   true,
+      })
+      .eq('id', histId);
+    setNarrativasBusy(b => ({ ...b, [histId]: false }));
+    if (!error) {
+      setNarrativasFeedback(f => ({ ...f, [histId]: 'ok' }));
+      carregar();
+    }
+  }
+
+  async function ocultarNarrativa(histId) {
+    setNarrativasBusy(b => ({ ...b, [histId]: true }));
+    await supabase.from('jornada_historico')
+      .update({ narrativa_publicada: false })
+      .eq('id', histId);
+    setNarrativasBusy(b => ({ ...b, [histId]: false }));
     carregar();
   }
 
@@ -640,6 +668,77 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
                   {h.snapshot_clinico && (
                     <SnapshotFase s={h.snapshot_clinico} semanas={h.semanas_cumpridas} />
                   )}
+                  {(h.narrativa_automatica || h.narrativa_aprovada) && (() => {
+                    const textoAtual  = narrativasEdit[h.id] ?? (h.narrativa_aprovada ?? h.narrativa_automatica ?? '');
+                    const busy        = !!narrativasBusy[h.id];
+                    const publicada   = !!h.narrativa_publicada;
+                    return (
+                      <div style={{ marginTop: 8, paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
+                        <div style={{
+                          fontSize: 10, fontWeight: 600, letterSpacing: '.06em',
+                          textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 6,
+                        }}>
+                          Narrativa da fase
+                        </div>
+                        <textarea
+                          value={textoAtual}
+                          onChange={ev => setNarrativasEdit(e => ({ ...e, [h.id]: ev.target.value }))}
+                          rows={4}
+                          style={{
+                            width: '100%', boxSizing: 'border-box', resize: 'vertical',
+                            minHeight: 88, fontSize: 12, lineHeight: 1.6,
+                            padding: '8px 10px', borderRadius: 7,
+                            border: '0.5px solid var(--border)',
+                            background: 'var(--white)', color: 'var(--dark)',
+                            fontFamily: 'var(--font-sans)',
+                          }}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7, flexWrap: 'wrap' }}>
+                          {publicada ? (
+                            <>
+                              <span style={{
+                                fontSize: 10, fontWeight: 600, padding: '2px 8px',
+                                borderRadius: 10, background: 'var(--green-bg)', color: 'var(--green)',
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                              }}>
+                                <i className="ti ti-check" style={{ fontSize: 11 }} aria-hidden="true" />
+                                Publicada em {dataBR(h.narrativa_aprovada_em)}
+                              </span>
+                              <button
+                                className="btn"
+                                style={{ fontSize: 10, padding: '3px 10px' }}
+                                disabled={busy}
+                                onClick={() => publicarNarrativa(h.id, textoAtual)}
+                              >
+                                {busy ? 'Salvando…' : 'Atualizar'}
+                              </button>
+                              <button
+                                className="btn-outline"
+                                style={{ fontSize: 10, padding: '3px 10px', color: 'var(--text3)' }}
+                                disabled={busy}
+                                onClick={() => ocultarNarrativa(h.id)}
+                              >
+                                Ocultar da paciente
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              className="btn"
+                              style={{ fontSize: 11, padding: '5px 14px' }}
+                              disabled={busy || !textoAtual.trim()}
+                              onClick={() => publicarNarrativa(h.id, textoAtual)}
+                            >
+                              <i className="ti ti-send" aria-hidden="true" />
+                              {busy ? 'Publicando…' : 'Publicar para a paciente'}
+                            </button>
+                          )}
+                          {narrativasFeedback[h.id] === 'ok' && !busy && (
+                            <span style={{ fontSize: 10, color: 'var(--green)' }}>Salvo.</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 );
               })}
