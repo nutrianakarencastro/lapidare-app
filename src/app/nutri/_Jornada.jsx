@@ -739,6 +739,42 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
                       </div>
                     );
                   })()}
+                  {h.proximos_passos_sugeridos?.length > 0 && (
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: '0.5px solid var(--border)' }}>
+                      <div style={{
+                        fontSize: 10, fontWeight: 600, letterSpacing: '.06em',
+                        textTransform: 'uppercase', color: 'var(--text3)', marginBottom: 5,
+                      }}>
+                        Próximos passos sugeridos
+                      </div>
+                      {h.proximos_passos_sugeridos.map((p, i) => (
+                        <div key={i} style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          fontSize: 12, color: 'var(--text2)', marginBottom: 3,
+                        }}>
+                          <span style={{
+                            width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+                            background: p.prioridade === 'alta'     ? 'var(--red,    #e05252)'
+                                      : p.prioridade === 'moderada' ? 'var(--yellow, #d97706)'
+                                      : 'var(--text4)',
+                          }} />
+                          <span style={{ flex: 1 }}>{p.titulo}</span>
+                          <span style={{
+                            fontSize: 9, fontWeight: 600, padding: '1px 6px',
+                            borderRadius: 10, flexShrink: 0,
+                            background: p.prioridade === 'alta'     ? 'var(--red-bg,    #fef2f2)'
+                                      : p.prioridade === 'moderada' ? 'var(--yellow-bg, #fffbeb)'
+                                      : 'var(--bg2)',
+                            color:      p.prioridade === 'alta'     ? 'var(--red,    #e05252)'
+                                      : p.prioridade === 'moderada' ? 'var(--yellow, #d97706)'
+                                      : 'var(--text3)',
+                          }}>
+                            {p.prioridade === 'alta' ? 'Alta' : p.prioridade === 'moderada' ? 'Moderada' : 'Baixa'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 );
               })}
