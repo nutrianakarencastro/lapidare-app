@@ -16,7 +16,11 @@ export default function BrandFooter({ compact = false }) {
       fontFamily: 'var(--font-sans)',
       userSelect: 'none',
     }}>
-      Desenvolvido por <strong style={{ fontWeight: 600 }}>DS EMPREENDEDORISMO DIGITAL</strong>
+      <strong style={{ fontWeight: 600 }}>Útera™</strong>
+      <br />
+      Metodologia e Sistema de Acompanhamento Nutricional Longitudinal Feminino
+      <br />
+      © AKC
     </div>
   );
 }
