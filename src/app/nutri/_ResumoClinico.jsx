@@ -878,6 +878,12 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
         <PontosAtencaoCard pontos={pontosAtencao} />
       )}
 
+      {/* ── Perfil Biológico ── */}
+      <PerfilBiologicoResumoCard
+        perfil={perfilResult}
+        onVerCompleto={() => onIrParaTab?.('perfil-biologico')}
+      />
+
       {/* ── Última anamnese ── */}
       {anamnese && (
         <div className="card" style={{ padding: '14px 16px', marginBottom: 12 }}>
@@ -1020,6 +1026,175 @@ function EntradaAprendizado({ apr, isPinned, fixando, onToggle, isLast }) {
     </div>
   );
 }
+
+// ── Perfil Biológico — Resumo ─────────────────────────────────────────────────
+function PerfilBiologicoResumoCard({ perfil, onVerCompleto }) {
+  if (!perfil) {
+    return (
+      <div className="card" style={{ padding: '14px 16px', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 500 }}>
+            Perfil Biológico
+          </div>
+          <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: 'var(--bg2)', color: 'var(--text3)' }}>
+            Em construção
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text4)', fontStyle: 'italic' }}>
+          Carregando dados de registros…
+        </div>
+      </div>
+    );
+  }
+
+  const { dadosBase, padroes, padroesEmFormacao, corpoComportamento, convergencias, mapaGatilhos, tempoRetomada } = perfil;
+  const estagio = dadosBase?.estagio;
+  const insuficiente = estagio === 'insuficiente';
+
+  const badgeCor = estagio === 'consolidado'
+    ? { bg: 'var(--green-bg, #f0fdf4)', txt: 'var(--green, #16a34a)' }
+    : estagio === 'inicial'
+    ? { bg: 'var(--yellow-bg, #fffbeb)', txt: 'var(--yellow, #d97706)' }
+    : { bg: 'var(--bg2)', txt: 'var(--text3)' };
+
+  const badgeLabel = estagio === 'consolidado' ? 'Consolidado'
+    : estagio === 'inicial' ? 'Inicial'
+    : 'Em construção';
+
+  const linha = { display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 7 };
+  const bullet = (cor) => ({
+    width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 5,
+    background: cor,
+  });
+  const txtModulo = { fontSize: 12, color: 'var(--text2)', lineHeight: 1.5, flex: 1 };
+  const txtVazio  = { fontSize: 12, color: 'var(--text4)', fontStyle: 'italic', flex: 1 };
+
+  return (
+    <div className="card" style={{ padding: '14px 16px', marginBottom: 12 }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text3)', fontWeight: 500 }}>
+          Perfil Biológico
+        </div>
+        <span style={{
+          fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
+          background: badgeCor.bg, color: badgeCor.txt,
+        }}>
+          {badgeLabel}
+        </span>
+      </div>
+
+      {/* Estado insuficiente */}
+      {insuficiente ? (
+        <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6, marginBottom: 10 }}>
+          Os módulos analíticos ficam disponíveis a partir de{' '}
+          <strong>14 dias registrados</strong> e <strong>1 ciclo completo</strong>.
+          {dadosBase.diasRegistrados > 0 && (
+            <> A paciente tem <strong>{dadosBase.diasRegistrados}</strong> dia{dadosBase.diasRegistrados !== 1 ? 's' : ''} registrado{dadosBase.diasRegistrados !== 1 ? 's' : ''}.</>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 10 }}>
+
+          {/* Padrões por Fase */}
+          <div style={linha}>
+            <span style={bullet(padroes?.length > 0 ? 'var(--blue, #3b82f6)' : 'var(--border)')} />
+            {padroes?.length > 0 ? (
+              <span style={txtModulo}>
+                <strong>Padrões por Fase</strong> —{' '}
+                {padroes[0].grupoLabel} concentrado na fase {padroes[0].faseDomLabel}
+                {padroes.length > 1 && ` + ${padroes.length - 1} outro${padroes.length - 1 > 1 ? 's' : ''}`}
+              </span>
+            ) : (
+              <span style={txtVazio}><strong>Padrões por Fase</strong> — dados insuficientes</span>
+            )}
+          </div>
+
+          {/* Padrões em Formação */}
+          {padroesEmFormacao?.length > 0 && (
+            <div style={linha}>
+              <span style={bullet('var(--yellow, #d97706)')} />
+              <span style={txtModulo}>
+                <strong>Padrões em Formação</strong> —{' '}
+                {padroesEmFormacao.length} padrão{padroesEmFormacao.length > 1 ? 's' : ''} inicial{padroesEmFormacao.length > 1 ? 'is' : ''} identificado{padroesEmFormacao.length > 1 ? 's' : ''}
+              </span>
+            </div>
+          )}
+
+          {/* Corpo → Comportamento */}
+          <div style={linha}>
+            <span style={bullet(corpoComportamento?.disponivel && corpoComportamento.associacoes?.length > 0 ? 'var(--blue, #3b82f6)' : 'var(--border)')} />
+            {corpoComportamento?.disponivel && corpoComportamento.associacoes?.length > 0 ? (
+              <span style={txtModulo}>
+                <strong>Corpo → Comportamento</strong> —{' '}
+                {corpoComportamento.associacoes.length} associaç{corpoComportamento.associacoes.length === 1 ? 'ão observada' : 'ões observadas'}
+              </span>
+            ) : (
+              <span style={txtVazio}><strong>Corpo → Comportamento</strong> — dados insuficientes</span>
+            )}
+          </div>
+
+          {/* Convergências Clínicas */}
+          <div style={linha}>
+            <span style={bullet(convergencias?.length > 0 ? 'var(--blue, #3b82f6)' : 'var(--border)')} />
+            {convergencias?.length > 0 ? (
+              <span style={txtModulo}>
+                <strong>Convergências Clínicas</strong> —{' '}
+                {convergencias.map(c => c.eixoNome).join(', ')}
+              </span>
+            ) : (
+              <span style={txtVazio}><strong>Convergências Clínicas</strong> — dados insuficientes</span>
+            )}
+          </div>
+
+          {/* Fatores Associados */}
+          <div style={linha}>
+            <span style={bullet(mapaGatilhos?.disponivel && (mapaGatilhos.fatores?.length > 0 || mapaGatilhos.influenciaCiclo) ? 'var(--red, #e05252)' : 'var(--border)')} />
+            {mapaGatilhos?.disponivel && (mapaGatilhos.fatores?.length > 0 || mapaGatilhos.influenciaCiclo) ? (
+              <span style={txtModulo}>
+                <strong>Fatores Associados</strong> —{' '}
+                {[
+                  ...(mapaGatilhos.fatores ?? []).map(f => f.label),
+                  ...(mapaGatilhos.influenciaCiclo ? ['fase lútea'] : []),
+                ].join(', ')}
+              </span>
+            ) : (
+              <span style={txtVazio}><strong>Fatores Associados</strong> — dados insuficientes</span>
+            )}
+          </div>
+
+          {/* Tempo de Retomada */}
+          <div style={{ ...linha, marginBottom: 0 }}>
+            <span style={bullet(tempoRetomada?.disponivel ? 'var(--green, #16a34a)' : 'var(--border)')} />
+            {tempoRetomada?.disponivel ? (
+              <span style={txtModulo}>
+                <strong>Tempo de Retomada</strong> — mediana de{' '}
+                {tempoRetomada.mediana} dia{tempoRetomada.mediana !== 1 ? 's' : ''}
+              </span>
+            ) : (
+              <span style={txtVazio}><strong>Tempo de Retomada</strong> — dados insuficientes</span>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* CTA */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          className="btn-outline"
+          style={{ fontSize: 11, padding: '3px 9px' }}
+          onClick={onVerCompleto}
+          disabled={insuficiente}
+        >
+          <i className="ti ti-dna" aria-hidden="true" /> Ver análise completa
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 // ── Pontos de Atenção ─────────────────────────────────────────────────────────
 function PontosAtencaoCard({ pontos }) {
