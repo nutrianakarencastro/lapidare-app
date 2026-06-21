@@ -60,6 +60,8 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   const [metasAtivas,         setMetasAtivas]         = useState([]);
   const [estrategiasAtivas,   setEstrategiasAtivas]   = useState([]);
   const [condutaAtual,        setCondutaAtual]        = useState(null);
+  const [sugestaoUsada,   setSugestaoUsada]   = useState(new Set());
+  const [sugestaoBusy,    setSugestaoBusy]    = useState(new Set());
   const [protocolosAtivos,    setProtocolosAtivos]    = useState([]);
   const [metasPorFase,        setMetasPorFase]        = useState({});
   const [estrategiasPorFase,  setEstrategiasPorFase]  = useState({});
@@ -151,6 +153,58 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
   function feedback(msg) {
     setAviso(msg);
     setTimeout(() => setAviso(null), 3500);
+  }
+
+  // ── Mapeamento código → tipo de ação (7C.2) ─────────────────────────────────
+  const CODIGO_ACAO = {
+    DEFINIR_ESTRATEGIA:          'estrategia',
+    REVISAR_ESTRATEGIAS:         'estrategia',
+    REFORCAR_ESTRATEGIAS:        'estrategia',
+    CONSOLIDAR_ESTRATEGIAS:      'estrategia',
+    INVESTIGAR_BARREIRAS:        'meta',
+    INVESTIGAR_METABOLICO:       'meta',
+    AJUSTAR_CONDUTA_NUTRICIONAL: 'meta',
+  };
+
+  async function usarSugestao(passo, idx) {
+    const tipo = CODIGO_ACAO[passo.codigo];
+    if (!tipo || !jornada?.fase_uuid) return;
+
+    setSugestaoBusy(prev => new Set(prev).add(idx));
+
+    const hoje = new Date().toISOString().slice(0, 10);
+    let error;
+
+    if (tipo === 'meta') {
+      const priorMapeada = passo.prioridade === 'alta'     ? 'alta'
+                         : passo.prioridade === 'moderada' ? 'media'
+                         : 'baixa';
+      ({ error } = await supabase.from('metas_terapeuticas').insert({
+        paciente_id:      pacienteId,
+        nutri_id:         nutriId,
+        titulo:           passo.titulo,
+        prioridade:       priorMapeada,
+        status:           'ativa',
+        fase_uuid_origem: jornada.fase_uuid,
+        criado_em:        hoje,
+      }));
+    } else {
+      ({ error } = await supabase.from('estrategias').insert({
+        nutri_id:         nutriId,
+        paciente_id:      pacienteId,
+        titulo:           passo.titulo,
+        fase_uuid_origem: jornada.fase_uuid,
+        data_inicio:      hoje,
+        status:           'ativa',
+      }));
+    }
+
+    setSugestaoBusy(prev => { const s = new Set(prev); s.delete(idx); return s; });
+
+    if (error) { feedback('Erro ao criar: ' + error.message); return; }
+
+    setSugestaoUsada(prev => new Set(prev).add(idx));
+    carregar();
   }
 
   async function salvar() {
@@ -260,6 +314,83 @@ export default function Jornada({ pacienteId, nutriId, pacienteNome }) {
         }}>
           <i className={`ti ti-${aviso.startsWith('Erro') ? 'alert-circle' : 'check'}`} aria-hidden="true" />
           {aviso}
+        </div>
+      )}
+
+      {/* ── Sugestões para esta fase (7C.1) ──────────────────────────────── */}
+      {jornada && historico[0]?.proximos_passos_sugeridos?.length > 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Sugestões para esta fase</div>
+              <div className="card-sub">Baseado na Fase {historico[0].fase} · gerado ao encerrar</div>
+            </div>
+          </div>
+          <div className="card-body" style={{ paddingTop: 4 }}>
+            {historico[0].proximos_passos_sugeridos.map((p, i) => {
+              const isLast    = i === historico[0].proximos_passos_sugeridos.length - 1;
+              const tipo      = CODIGO_ACAO[p.codigo] ?? null;
+              const usado     = sugestaoUsada.has(i);
+              const carregando = sugestaoBusy.has(i);
+              const corBullet = p.prioridade === 'alta'     ? 'var(--red,    #e05252)'
+                              : p.prioridade === 'moderada' ? 'var(--yellow, #d97706)'
+                              : 'var(--text4)';
+              const bgBadge  = p.prioridade === 'alta'     ? 'var(--red-bg,    #fef2f2)'
+                              : p.prioridade === 'moderada' ? 'var(--yellow-bg, #fffbeb)'
+                              : 'var(--bg2)';
+              const txtBadge = p.prioridade === 'alta'     ? 'var(--red,    #e05252)'
+                              : p.prioridade === 'moderada' ? 'var(--yellow, #d97706)'
+                              : 'var(--text3)';
+              const labelBadge = p.prioridade === 'alta' ? 'Alta'
+                               : p.prioridade === 'moderada' ? 'Moderada' : 'Baixa';
+              return (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 8,
+                  paddingBottom: isLast ? 0 : 10,
+                  marginBottom: isLast ? 0 : 10,
+                  borderBottom: isLast ? 'none' : '0.5px solid var(--border)',
+                }}>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    flexShrink: 0, marginTop: 5, background: corBullet,
+                  }} />
+                  <div style={{ flex: 1, fontSize: 13, color: 'var(--text2)', lineHeight: 1.55 }}>
+                    {p.titulo}
+                  </div>
+                  <span style={{
+                    fontSize: 9, fontWeight: 600, padding: '2px 7px',
+                    borderRadius: 10, flexShrink: 0,
+                    background: bgBadge, color: txtBadge,
+                  }}>
+                    {labelBadge}
+                  </span>
+                  {usado ? (
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, padding: '2px 8px',
+                      borderRadius: 10, flexShrink: 0,
+                      background: 'var(--green-bg, #f0fdf4)', color: 'var(--green, #16a34a)',
+                    }}>
+                      ✓ Criado
+                    </span>
+                  ) : tipo ? (
+                    <button
+                      className="btn-outline"
+                      style={{ fontSize: 10, padding: '2px 9px', flexShrink: 0 }}
+                      disabled={carregando}
+                      onClick={() => usarSugestao(p, i)}
+                    >
+                      {carregando
+                        ? 'Criando…'
+                        : tipo === 'meta' ? 'Criar meta' : 'Criar estratégia'}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+            <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
+              Gerado automaticamente ao encerrar a fase anterior. Não representa prescrição clínica.
+            </div>
+          </div>
         </div>
       )}
 
