@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { calcularPerfilBiologico, calcularMapaGatilhos } from '../../lib/perfilBiologicoUtils.js';
 import { calcularRegistrosCarga, calcularCorrelacaoSupl } from '../../lib/registrosHabitos.js';
+import { gerarInsights } from '../../lib/insightsBiologicos.js';
 
 const COR_CONF = {
   alta:     'var(--green)',
@@ -567,6 +568,69 @@ function EstagioHeader({ dadosBase }) {
   );
 }
 
+// ── Insights Clínicos Prioritários ────────────────────────────────────────────
+const TIPO_CONFIG = {
+  fator_dominante:      { cor: 'var(--blue,   #3b82f6)', bg: 'var(--blue-bg,   #eff6ff)', label: 'Fator dominante' },
+  ciclo:                { cor: 'var(--purple,  #7c3aed)', bg: '#f5f3ff',                   label: 'Ciclo' },
+  associacao_relevante: { cor: 'var(--teal,   #0d9488)', bg: '#f0fdfa',                   label: 'Associação' },
+  recuperacao:          { cor: 'var(--green,  #16a34a)', bg: 'var(--green-bg,  #f0fdf4)', label: 'Recuperação' },
+  tendencia_emergente:  { cor: 'var(--amber,  #d97706)', bg: 'var(--yellow-bg, #fffbeb)', label: 'Tendência' },
+};
+
+function InsightsCard({ insights }) {
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div className="card-header">
+        <div>
+          <div className="card-title">Insights Clínicos Prioritários</div>
+          <div className="card-sub">Síntese observacional dos padrões mais relevantes dos registros</div>
+        </div>
+      </div>
+      <div className="card-body" style={{ paddingTop: 4 }}>
+        {insights.map((ins, i) => {
+          const cfg    = TIPO_CONFIG[ins.tipo] ?? { cor: 'var(--text3)', bg: 'var(--bg2)', label: ins.tipo };
+          const isLast = i === insights.length - 1;
+          return (
+            <div key={ins.tipo} style={{
+              paddingBottom: isLast ? 0 : 14,
+              marginBottom:  isLast ? 0 : 14,
+              borderBottom:  isLast ? 'none' : '0.5px solid var(--border)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
+                <span style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase',
+                  padding: '2px 8px', borderRadius: 10,
+                  background: cfg.bg, color: cfg.cor,
+                }}>
+                  {cfg.label}
+                </span>
+                {ins.badge && (
+                  <span style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600 }}>
+                    {ins.badge}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 3 }}>
+                {ins.titulo}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.6 }}>
+                {ins.texto}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text4)', marginTop: 4 }}>
+                {ins.fonte}
+              </div>
+            </div>
+          );
+        })}
+        <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text4)', fontStyle: 'italic', lineHeight: 1.5 }}>
+          Baseado nos registros da paciente. Não representa diagnóstico funcional. A interpretação clínica é da nutricionista.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ── Componente principal ───────────────────────────────────────────────────────
 export default function PerfilBiologico({ pacienteId }) {
   const [resultado,        setResultado]        = useState(null);
@@ -665,6 +729,7 @@ export default function PerfilBiologico({ pacienteId }) {
   }
 
   const { dadosBase, principalPadrao, padroes, padroesEmFormacao, intestinoCiclo, corpoComportamento, convergencias, priorizacao, mapaGatilhos, tempoRetomada } = resultado;
+  const insights = gerarInsights(resultado);
 
   // ── Insuficiente ─────────────────────────────────────────────────────────────
   if (dadosBase.estagio === 'insuficiente') {
@@ -689,6 +754,7 @@ export default function PerfilBiologico({ pacienteId }) {
     return (
       <>
         <EstagioHeader dadosBase={dadosBase} />
+        {insights.length > 0 && <InsightsCard insights={insights} />}
 
         {padroesEmFormacao.length === 0 ? (
           <div className="card empty-card">
@@ -726,6 +792,7 @@ export default function PerfilBiologico({ pacienteId }) {
   return (
     <>
       <EstagioHeader dadosBase={dadosBase} />
+      {insights.length > 0 && <InsightsCard insights={insights} />}
 
       {/* ── Principal padrão ── */}
       {principalPadrao && (
