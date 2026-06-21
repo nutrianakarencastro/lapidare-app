@@ -5,6 +5,8 @@ import { dataBR } from '../../lib/utils.js';
 import { calcularLeituraConsistencia } from '../../lib/consistenciaUtils.js';
 import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
 import { gerarPontosAtencao } from '../../lib/visaoProspectiva.js';
+import { gerarInsights }      from '../../lib/insightsBiologicos.js';
+import { sintetizarMemoria }  from '../../lib/memoriaViva.js';
 import { gerarSinais } from '../../lib/salaSituacaoUtils.js';
 import { protocolosSugeridos } from '../../lib/protocolosContextuais.js';
 import { PROTOCOLOS_INDEX } from '../../data/protocolos/_index.js';
@@ -210,8 +212,9 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
   const [metas,        setMetas]        = useState(undefined);
   const [consistencia,   setConsistencia]   = useState(undefined);
   const [perfilResult,   setPerfilResult]   = useState(null);
-  const [memoriaClinica, setMemoriaClinica] = useState(undefined);
-  const [memoriaExpand,  setMemoriaExpand]  = useState(false);
+  const [memoriaClinica,    setMemoriaClinica]    = useState(undefined);
+  const [narrativasMemoria, setNarrativasMemoria] = useState(undefined);
+  const [memoriaExpand,     setMemoriaExpand]     = useState(false);
   const [fixando,        setFixando]        = useState({});
   const [jornadaAtual,   setJornadaAtual]   = useState(undefined);
   const [glicemiaData,   setGlicemiaData]   = useState(null);
@@ -237,6 +240,23 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
       setMemoriaClinica(data ?? []);
     }
     load();
+    return () => { active = false; };
+  }, [pacienteId]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadNarrativas() {
+      const { data } = await supabase
+        .from('jornada_historico')
+        .select('id, fase, nome_fase, narrativa_aprovada, narrativa_aprovada_em, data_fim_fase')
+        .eq('paciente_id', pacienteId)
+        .not('narrativa_aprovada', 'is', null)
+        .order('data_fim_fase', { ascending: false })
+        .limit(10);
+      if (!active) return;
+      setNarrativasMemoria(data ?? []);
+    }
+    loadNarrativas();
     return () => { active = false; };
   }, [pacienteId]);
 
@@ -512,9 +532,14 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
   const protocolosRelacionados = protocolosSugeridos(categoriaClinica, PROTOCOLOS_INDEX);
   const idsAtivos = new Set(protocolosAtivos.map(p => p.protocolo_id));
 
-  const essenciais      = (memoriaClinica ?? []).filter(a => a.aprendizado_essencial);
-  const recentes        = (memoriaClinica ?? []).filter(a => !a.aprendizado_essencial);
-  const visivelRecentes = memoriaExpand ? recentes : recentes.slice(0, 3);
+  const insightsMemoria  = perfilResult ? gerarInsights(perfilResult) : [];
+  const memoriaUnificada = sintetizarMemoria({
+    aprendizados:        memoriaClinica    ?? [],
+    narrativasAprovadas: narrativasMemoria ?? [],
+    insights:            insightsMemoria,
+    hoje:                new Date(),
+  });
+  const visivelMemoria = memoriaExpand ? memoriaUnificada : memoriaUnificada.slice(0, 5);
 
   return (
     <>
@@ -903,71 +928,38 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
         </div>
       )}
 
-      {/* ── Memória Clínica Viva ── */}
+      {/* ── Memória Clínica Viva 2.0 ── */}
       {memoriaClinica !== undefined && (
         <div className="card" style={{ padding: '14px 16px', marginBottom: 12 }}>
-          <div style={{ ...labelSub, marginBottom: memoriaClinica.length === 0 ? 10 : 14 }}>
-            O que aprendemos até aqui 🌿
+          <div style={{ ...labelSub, marginBottom: memoriaUnificada.length === 0 ? 10 : 14 }}>
+            O que sabemos sobre esta paciente
           </div>
 
-          {memoriaClinica.length === 0 ? (
+          {memoriaUnificada.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.65 }}>
-              A memória clínica viva dessa paciente é construída aos poucos — a partir dos aprendizados das estratégias encerradas que você considerar importantes de manter em vista. Fixe o que continua sendo verdadeiro sobre ela.
+              A memória clínica é construída com o tempo — a partir dos aprendizados de estratégias encerradas, narrativas de fase aprovadas e padrões biológicos consistentes dos registros.
             </div>
           ) : (
             <>
-              {/* Em evidência */}
-              {essenciais.length > 0 && (
-                <div style={{ marginBottom: recentes.length > 0 ? 16 : 0 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
-                    Em evidência 🌿
-                  </div>
-                  {essenciais.map((apr, idx) => (
-                    <EntradaAprendizado
-                      key={apr.id}
-                      apr={apr}
-                      isPinned
-                      fixando={!!fixando[apr.id]}
-                      onToggle={() => toggleEssencial(apr.id, true)}
-                      isLast={idx === essenciais.length - 1}
-                    />
-                  ))}
-                  <div style={{ fontSize: 11, color: 'var(--text4)', fontStyle: 'italic', marginTop: 10, lineHeight: 1.55 }}>
-                    Vale revisitar estes aprendizados de tempos em tempos — o que continua sendo verdadeiro sobre essa paciente?
-                  </div>
-                </div>
-              )}
-
-              {/* Recentes */}
-              {recentes.length > 0 && (
-                <div style={{ borderTop: essenciais.length > 0 ? '0.5px solid var(--border)' : 'none', paddingTop: essenciais.length > 0 ? 14 : 0 }}>
-                  {visivelRecentes.map((apr, idx) => (
-                    <EntradaAprendizado
-                      key={apr.id}
-                      apr={apr}
-                      isPinned={false}
-                      fixando={!!fixando[apr.id]}
-                      onToggle={() => toggleEssencial(apr.id, false)}
-                      isLast={idx === visivelRecentes.length - 1}
-                    />
-                  ))}
-                  {recentes.length > 3 && (
-                    <button
-                      className="btn-outline"
-                      style={{ fontSize: 11, padding: '3px 9px', marginTop: 10 }}
-                      onClick={() => setMemoriaExpand(e => !e)}
-                    >
-                      {memoriaExpand ? 'Ver menos' : `Ver todos os aprendizados (${recentes.length})`}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Quando todos estão em evidência */}
-              {recentes.length === 0 && essenciais.length > 0 && (
-                <div style={{ borderTop: '0.5px solid var(--border)', paddingTop: 10, fontSize: 12, color: 'var(--text4)' }}>
-                  Todos os aprendizados estão em evidência.
-                </div>
+              {visivelMemoria.map((item, idx) => (
+                <EntradaMemoria
+                  key={item.id}
+                  item={item}
+                  fixando={item.origem === 'estrategia' ? !!fixando[item.id] : false}
+                  onToggle={item.origem === 'estrategia'
+                    ? () => toggleEssencial(item.id, item.aprendizado_essencial)
+                    : null}
+                  isLast={idx === visivelMemoria.length - 1}
+                />
+              ))}
+              {memoriaUnificada.length > 5 && (
+                <button
+                  className="btn-outline"
+                  style={{ fontSize: 11, padding: '3px 9px', marginTop: 10 }}
+                  onClick={() => setMemoriaExpand(e => !e)}
+                >
+                  {memoriaExpand ? 'Ver menos' : `Ver tudo (${memoriaUnificada.length})`}
+                </button>
               )}
             </>
           )}
@@ -977,51 +969,56 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
   );
 }
 
-// ── Entrada de Aprendizado (Memória Clínica Viva) ─────────────────────────────
-function EntradaAprendizado({ apr, isPinned, fixando, onToggle, isLast }) {
+// ── Entrada da Memória Clínica Viva 2.0 ──────────────────────────────────────
+const NIVEL_CONFIG_MEM = {
+  consolidado:  { cor: 'var(--green, #16a34a)', bg: 'var(--green-bg, #f0fdf4)' },
+  consolidacao: { cor: 'var(--blue,  #3b82f6)', bg: 'var(--blue-bg,  #eff6ff)' },
+  observacao:   { cor: 'var(--text3)',           bg: 'var(--bg2)'               },
+};
+
+function EntradaMemoria({ item, fixando, onToggle, isLast }) {
+  const cfg = NIVEL_CONFIG_MEM[item.nivel] ?? NIVEL_CONFIG_MEM.observacao;
   return (
     <div style={{
       paddingBottom: isLast ? 0 : 12,
       marginBottom:  isLast ? 0 : 12,
       borderBottom:  isLast ? 'none' : '0.5px solid var(--border)',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 5 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-            {dataBR(apr.encerrada_em?.slice(0, 10) ?? '')}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, flexWrap: 'wrap' }}>
+        <span style={{
+          fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5,
+          padding: '2px 8px', borderRadius: 10,
+          background: cfg.bg, color: cfg.cor,
+        }}>
+          {item.badge}
+        </span>
+        {item.data && (
+          <span style={{ fontSize: 10, color: 'var(--text4)' }}>
+            {dataBR(item.data)}
           </span>
-          {apr.categoria && (
-            <span style={{
-              fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-              letterSpacing: '.06em', color: 'var(--blue)',
-              background: 'var(--blue-bg, #eff6ff)',
-              padding: '1px 7px', borderRadius: 999,
-            }}>
-              {apr.categoria}
-            </span>
-          )}
-        </div>
-        <button
-          style={{
-            fontSize: 11, background: 'none', border: 'none',
-            cursor: fixando ? 'default' : 'pointer',
-            color: isPinned ? 'var(--blue)' : 'var(--text4)',
-            padding: 0, fontFamily: 'var(--font-sans)',
-            whiteSpace: 'nowrap', flexShrink: 0,
-            opacity: fixando ? 0.5 : 1,
-          }}
-          onClick={onToggle}
-          disabled={fixando}
-          title={isPinned ? 'Remover de evidência' : 'Fixar em evidência'}
-        >
-          {isPinned ? '📌 Fixado' : '📌 Fixar'}
-        </button>
+        )}
+        {onToggle && (
+          <button
+            style={{
+              marginLeft: 'auto', fontSize: 11, background: 'none', border: 'none',
+              cursor: fixando ? 'default' : 'pointer', padding: 0,
+              color: item.aprendizado_essencial ? 'var(--blue)' : 'var(--text4)',
+              fontFamily: 'var(--font-sans)', opacity: fixando ? 0.5 : 1,
+              whiteSpace: 'nowrap', flexShrink: 0,
+            }}
+            onClick={onToggle}
+            disabled={fixando}
+            title={item.aprendizado_essencial ? 'Remover de evidência' : 'Fixar em evidência'}
+          >
+            {item.aprendizado_essencial ? '📌 Fixado' : '📌 Fixar'}
+          </button>
+        )}
       </div>
-      <div style={{ fontSize: 13, color: 'var(--dark)', lineHeight: 1.65, marginBottom: 5 }}>
-        {apr.aprendizados}
+      <div style={{ fontSize: 13, color: 'var(--dark)', lineHeight: 1.65, marginBottom: 4 }}>
+        {item.texto}
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text4)' }}>
-        Originado em: {apr.titulo} · Estratégia encerrada em {dataBR(apr.encerrada_em?.slice(0, 10) ?? '')}
+      <div style={{ fontSize: 10, color: 'var(--text4)' }}>
+        {item.meta}
       </div>
     </div>
   );
