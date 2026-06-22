@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { podeAcessar } from '../../lib/modelos.js';
 import BloqueioModelo from '../../components/BloqueioModelo.jsx';
-import { dataBR } from '../../lib/utils.js';
+import { dataBR, dataHojeISO } from '../../lib/utils.js';
 
 function labelFreq(tipo, valor) {
   if (tipo === 'diaria')        return 'Todo dia';
@@ -27,7 +27,7 @@ function labelDificuldade(v) {
   return { facil: 'Fácil', desafiador: 'Desafiador', muito_dificil: 'Muito difícil' }[v] ?? '—';
 }
 
-const HOJE = new Date().toISOString().slice(0, 10);
+const HOJE = dataHojeISO();
 
 const ACONTECEU_OPTS = [
   { v: 'sim',          label: 'Sim',           color: 'var(--green)',  bg: 'var(--green-bg)'  },

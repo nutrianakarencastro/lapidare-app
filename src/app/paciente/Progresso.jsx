@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
-import { dataBR } from '../../lib/utils.js';
+import { dataBR, dataHojeISO } from '../../lib/utils.js';
 
 const TIPOS_FOTO = [
   { id: 'frente',          label: 'Frente' },
@@ -394,7 +394,7 @@ function FotosEvolucao() {
       paciente_id: pacienteId,
       storage_path: path,
       tipo,
-      data_foto: new Date().toISOString().slice(0, 10),
+      data_foto: dataHojeISO(),
       obs: obs.trim() || null,
     });
     setBusy(false);

@@ -10,10 +10,11 @@ import {
   LOCALIZACAO_DOR_OPCOES, RELACAO_CICLO_OPCOES,
   bristolMaisFrequente, mediaEvacuacoesPorSemana, detectarSinaisAtencao,
 } from '../../lib/intestinoUtils.js';
+import { dataHojeISO, formatarDataISO } from '../../lib/utils.js';
 
 const DISCLAIMER = 'Este registro é uma ferramenta de acompanhamento funcional e não substitui avaliação médica.';
 
-const hoje = () => new Date().toISOString().slice(0, 10);
+const hoje = () => dataHojeISO();
 
 // ─── SVG Bristol ─────────────────────────────────────────────────────────────
 
@@ -498,7 +499,7 @@ export default function Intestino() {
   const dataInicio30 = (() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
-    return d.toISOString().slice(0, 10);
+    return formatarDataISO(d);
   })();
 
   const carregar = useCallback(async () => {
@@ -674,7 +675,7 @@ export default function Intestino() {
           msgStatus = 'Nenhum registro ainda — que tal começar hoje?';
           corStatus = 'var(--orange)'; bgStatus = 'var(--orange-bg, #fff7ed)';
         } else {
-          const hojeStr = new Date().toISOString().slice(0, 10);
+          const hojeStr = dataHojeISO();
           const diasDesde = Math.floor((new Date(hojeStr) - new Date(ultimoLog.data)) / 86_400_000);
           const limites = { diario: 1, semanal: 7, quinzenal: 14 };
           const limite = limites[periodicidade] ?? 7;

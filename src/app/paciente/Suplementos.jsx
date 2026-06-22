@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
-import { dataBR } from '../../lib/utils.js';
+import { dataBR, dataHojeISO, formatarDataISO } from '../../lib/utils.js';
 import { OBJETIVOS_CLINICOS } from '../../lib/suplementacaoConfig.js';
 
-const HOJE = () => new Date().toISOString().slice(0, 10);
+const HOJE = () => dataHojeISO();
 
 export default function Suplementos() {
   const { user, profile } = useSession();
@@ -23,7 +23,7 @@ export default function Suplementos() {
         .eq('paciente_id', pacienteId).eq('ativo', true).order('ordem'),
       supabase.from('suplementos_logs').select('*')
         .eq('paciente_id', pacienteId)
-        .gte('data', new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10))
+        .gte('data', formatarDataISO(new Date(Date.now() - 30 * 86_400_000)))
         .order('data', { ascending: false }),
       supabase.from('prescricoes').select('id, titulo, storage_path, created_at')
         .eq('paciente_id', pacienteId).eq('tipo', 'suplementacao')
@@ -97,7 +97,7 @@ export default function Suplementos() {
     if (!suplementos || suplementos.length === 0) return 0;
     let count = 0;
     for (let i = 0; i < 30; i++) {
-      const dia = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+      const dia = formatarDataISO(new Date(Date.now() - i * 86_400_000));
       if (suplementos.every(s => logMap[s.id]?.[dia]?.tomado)) count++; else break;
     }
     return count;
@@ -108,7 +108,7 @@ export default function Suplementos() {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(Date.now() - i * 86_400_000);
       arr.push({
-        iso: d.toISOString().slice(0, 10),
+        iso: formatarDataISO(d),
         dia: d.toLocaleDateString('pt-BR', { weekday: 'short' }).slice(0, 1).toUpperCase(),
         num: d.getDate(),
       });

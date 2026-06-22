@@ -17,6 +17,21 @@ export function mesAno(date = new Date()) {
   return `${MESES[date.getMonth()]} ${date.getFullYear()}`;
 }
 
+/** Formata um objeto Date para YYYY-MM-DD usando o fuso local.
+ *  Substitui d.toISOString().slice(0,10), que usa UTC e avança
+ *  um dia após as 21h no Brasil (UTC-3). */
+export function formatarDataISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Data local de hoje no formato YYYY-MM-DD — sem conversão UTC. */
+export function dataHojeISO() {
+  return formatarDataISO(new Date());
+}
+
 /** "09/05/2026" */
 export function dataBR(value) {
   if (!value) return '—';

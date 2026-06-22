@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { useTheme } from '../../lib/theme.jsx';
-import { textoDias, dataConsultaBR, diasAte, linkCall, consultaEmBreve, gerarGoogleCalendarUrl, dataBR } from '../../lib/utils.js';
+import { textoDias, dataConsultaBR, diasAte, linkCall, consultaEmBreve, gerarGoogleCalendarUrl, dataBR, dataHojeISO, formatarDataISO } from '../../lib/utils.js';
 import { calcularFaseDoCiclo, FASES } from '../../lib/cicloUtils.js';
 import { podeAcessar } from '../../lib/modelos.js';
 import { semanaAtualDe, toggleJornadaMeta } from '../../lib/jornadaUtils.js';
@@ -49,8 +49,8 @@ export default function Inicio() {
     async function load() {
       if (!user) return;
       const agora  = new Date().toISOString();
-      const hoje   = new Date().toISOString().slice(0, 10);
-      const amanha = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+      const hoje   = dataHojeISO();
+      const amanha = formatarDataISO(new Date(Date.now() + 86_400_000));
       const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes, agAmRes, modulosRes, glicemiaHojeRes, rastreioIntestinoRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em, pdf_path')
           .eq('paciente_id', pacienteId).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
@@ -66,7 +66,7 @@ export default function Inicio() {
           .eq('paciente_id', pacienteId).eq('ativo', true).order('ordem'),
         supabase.from('habitos_logs').select('habito_id, valor, data')
           .eq('paciente_id', pacienteId)
-          .gte('data', new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)),
+          .gte('data', formatarDataISO(new Date(Date.now() - 30 * 86_400_000))),
         supabase.from('jornadas')
           .select('fase, nome_fase, objetivo_fase, consulta_numero, data_inicio_fase, duracao_semanas_prevista, metas_semana, proximo_marco, data_proximo_marco, evolucao_resumida')
           .eq('paciente_id', pacienteId)
@@ -170,7 +170,7 @@ export default function Inicio() {
       const todosLogs = logsHojeRes.data ?? [];
       let streakCount = 0;
       for (let i = 0; i < 30; i++) {
-        const dia = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+        const dia = formatarDataISO(new Date(Date.now() - i * 86_400_000));
         const todos = habitosLista.every(h => {
           const log = todosLogs.find(l => l.habito_id === h.id && l.data === dia);
           if (!log) return false;
@@ -215,9 +215,9 @@ export default function Inicio() {
     ? (new Date(proximaConsulta.data_hora) - Date.now()) / 3_600_000
     : 0;
   const podeRemarcar  = horasAteConsulta > 24;
-  const amanhaCons    = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const amanhaCons    = formatarDataISO(new Date(Date.now() + 86_400_000));
   const maxSugestao   = proximaConsulta
-    ? new Date(new Date(proximaConsulta.data_hora).getTime() + 7 * 86_400_000).toISOString().slice(0, 10)
+    ? formatarDataISO(new Date(new Date(proximaConsulta.data_hora).getTime() + 7 * 86_400_000))
     : '';
 
   async function confirmarPresenca() {
@@ -261,7 +261,7 @@ export default function Inicio() {
   }
 
   async function registrarSupl(suplId) {
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = dataHojeISO();
     setSuplLogsHojeIds(prev => new Set([...prev, suplId]));
     setSuplTomados(prev => prev + 1);
     await supabase.from('suplementos_logs').upsert(
@@ -283,7 +283,7 @@ export default function Inicio() {
   }
 
   async function setValorHabito(habito, valor) {
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = dataHojeISO();
 
     // Boolean toggle-off: passa 0 ao RPC (que faz delete em habitos_logs)
     const atual = habitosLogs[habito.id];
@@ -315,7 +315,7 @@ export default function Inicio() {
   const habitosCumpridos = habitos.filter(h => cumpriuHabito(h, habitosLogs[h.id])).length;
 
   // ── Calendário Hoje ──────────────────────────────────────────────
-  const calHoje       = new Date().toISOString().slice(0, 10);
+  const calHoje       = dataHojeISO();
   const infoCiclo     = cicloPeriodos.length > 0 ? calcularFaseDoCiclo(cicloPeriodos, calHoje) : null;
   const faseCiclo     = infoCiclo && infoCiclo.fase !== 'desconhecida' ? (FASES[infoCiclo.fase] ?? null) : null;
 

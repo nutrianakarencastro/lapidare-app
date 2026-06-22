@@ -5,9 +5,10 @@ import {
   classificar, metaLabel, REFEICOES_FIXAS, LABEL_REFEICAO, AVISO_HIPOGLICEMIA,
   salvarTimer, removerTimer, lerTimersHoje, timerVencido, timerEsperadoEm,
 } from '../../lib/glicemiaUtils.js';
+import { dataHojeISO } from '../../lib/utils.js';
 
 function hojeISO() {
-  return new Date().toISOString().slice(0, 10);
+  return dataHojeISO();
 }
 
 function addDias(iso, n) {
@@ -97,7 +98,7 @@ function LinhaRefeicao({ label, metaLbl, registro, inputVal, onInputChange, onSa
                 fontFamily: 'var(--font-sans)',
               }}
             >
-              {salvando ? '…' : 'OK'}
+              {salvando ? '…' : 'Salvar'}
             </button>
             {registro && (
               <button
