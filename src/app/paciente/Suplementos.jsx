@@ -15,6 +15,16 @@ export default function Suplementos() {
   const [farmacias,   setFarmacias]   = useState([]);
   // pdfUrls: { [pdf.id]: { url: string|null, erro: boolean } }
   const [pdfUrls,     setPdfUrls]     = useState({});
+  const [modoData,    setModoData]    = useState('hoje');
+  const [dataCustom,  setDataCustom]  = useState(HOJE());
+
+  const ontem        = formatarDataISO(new Date(Date.now() - 86_400_000));
+  const dataRegistro = modoData === 'hoje' ? HOJE()
+    : modoData === 'ontem' ? ontem
+    : dataCustom;
+  const labelDataSel = modoData === 'hoje' ? 'Hoje'
+    : modoData === 'ontem' ? 'Ontem'
+    : new Date(dataCustom + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
   async function carregar() {
     if (!user) return;
@@ -60,15 +70,13 @@ export default function Suplementos() {
     return () => { active = false; };
   }, [pdfs]);
 
-  // ── Toggle suplemento tomado (lógica original intacta) ───────────────────
   async function toggle(s) {
-    const hoje = HOJE();
-    const ja = logs.find(l => l.suplemento_id === s.id && l.data === hoje);
+    const ja = logs.find(l => l.suplemento_id === s.id && l.data === dataRegistro);
     if (ja) {
       await supabase.from('suplementos_logs').delete().eq('id', ja.id);
     } else {
       await supabase.from('suplementos_logs').insert({
-        suplemento_id: s.id, paciente_id: pacienteId, data: hoje, tomado: true,
+        suplemento_id: s.id, paciente_id: pacienteId, data: dataRegistro, tomado: true,
       });
     }
     carregar();
@@ -117,7 +125,7 @@ export default function Suplementos() {
   }, []);
 
   const hoje = HOJE();
-  const tomadosHoje = (suplementos ?? []).filter(s => logMap[s.id]?.[hoje]?.tomado).length;
+  const tomadosHoje = (suplementos ?? []).filter(s => logMap[s.id]?.[dataRegistro]?.tomado).length;
   const total = suplementos?.length ?? 0;
   const temManipulacao = pdfs.length > 0 || farmacias.length > 0;
 
@@ -311,7 +319,7 @@ export default function Suplementos() {
             borderRadius: 16, padding: 18, marginBottom: 14, textAlign: 'center',
           }}>
             <div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 500 }}>
-              Hoje
+              {labelDataSel}
             </div>
             <div style={{ fontSize: 36, fontWeight: 600, color: 'var(--ink)', lineHeight: 1, margin: '4px 0' }}>
               {tomadosHoje}<span style={{ fontSize: 18, color: 'var(--muted)', fontWeight: 400 }}>/{total}</span>
@@ -332,15 +340,58 @@ export default function Suplementos() {
             )}
           </div>
 
+          {/* Seletor de data */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[
+                { key: 'hoje',   label: 'Hoje'         },
+                { key: 'ontem',  label: 'Ontem'        },
+                { key: 'custom', label: 'Escolher data' },
+              ].map(op => (
+                <button
+                  key={op.key}
+                  onClick={() => setModoData(op.key)}
+                  style={{
+                    padding: '5px 14px', borderRadius: 99, border: 'none', cursor: 'pointer',
+                    fontSize: 12, fontWeight: modoData === op.key ? 600 : 400,
+                    fontFamily: 'var(--font-sans)',
+                    background: modoData === op.key ? 'var(--ink)' : 'var(--bg2)',
+                    color: modoData === op.key ? 'var(--paper)' : 'var(--muted)',
+                  }}
+                >
+                  {op.label}
+                </button>
+              ))}
+            </div>
+            {modoData === 'custom' && (
+              <input
+                type="date"
+                max={HOJE()}
+                value={dataCustom}
+                onChange={e => setDataCustom(e.target.value)}
+                style={{
+                  marginTop: 8, fontSize: 13, padding: '6px 10px',
+                  borderRadius: 8, border: '0.5px solid var(--hair)',
+                  fontFamily: 'var(--font-sans)', background: 'var(--paper)',
+                  color: 'var(--ink)',
+                }}
+              />
+            )}
+          </div>
+
           {/* Lista do dia */}
           <div style={{
             fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase',
             color: 'var(--muted)', fontWeight: 500, margin: '4px 4px 8px',
-          }}>Suplementos de hoje</div>
+          }}>
+            {modoData === 'hoje' ? 'Suplementos de hoje'
+              : modoData === 'ontem' ? 'Suplementos de ontem'
+              : `Suplementos de ${labelDataSel}`}
+          </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
             {suplementos.map(s => {
-              const tomado = !!logMap[s.id]?.[hoje]?.tomado;
+              const tomado = !!logMap[s.id]?.[dataRegistro]?.tomado;
               const objetivos = s.objetivo_clinico ?? [];
               return (
                 <div key={s.id} style={{ borderRadius: 12, overflow: 'hidden' }}>
@@ -376,6 +427,17 @@ export default function Suplementos() {
                         {s.dose    && <span>{s.dose}</span>}
                         {s.horario && <span>· {s.horario}</span>}
                       </div>
+                      {(s.horarios?.length > 0) && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                          {s.horarios.map(h => (
+                            <span key={h} style={{
+                              fontSize: 10, padding: '2px 7px', borderRadius: 99,
+                              background: 'var(--bg2)', border: '0.5px solid var(--hair)',
+                              color: 'var(--muted)',
+                            }}>{h.slice(0, 5)}</span>
+                          ))}
+                        </div>
+                      )}
                       {s.posologia && (
                         <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>
                           {s.posologia}

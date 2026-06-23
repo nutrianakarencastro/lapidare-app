@@ -235,6 +235,17 @@ const PERIODI_LABEL = {
 
 function SheetDiario({ inicial, onSalvar, onFechar, salvando }) {
   const [form, setForm] = useState({ ...FORM_DIARIO_VAZIO, ...inicial });
+  const [modoData,   setModoData]   = useState('hoje');
+  const [dataCustom, setDataCustom] = useState(dataHojeISO());
+
+  const dHoje  = dataHojeISO();
+  const dOntem = formatarDataISO(new Date(Date.now() - 86_400_000));
+  const dataRegistro = modoData === 'hoje' ? dHoje
+    : modoData === 'ontem' ? dOntem
+    : dataCustom;
+  const labelData = modoData === 'hoje' ? 'hoje'
+    : modoData === 'ontem' ? 'ontem'
+    : new Date(dataCustom + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
   function set(campo, valor) {
     setForm(f => ({ ...f, [campo]: valor }));
@@ -247,13 +258,53 @@ function SheetDiario({ inicial, onSalvar, onFechar, salvando }) {
       <div className="sheet" style={{ maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div className="grabber" />
         <div className="serif" style={{ fontSize: 20, marginBottom: 4 }}>Registro do dia</div>
+
+        {/* Seletor de data */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[
+              { key: 'hoje',   label: 'Hoje'         },
+              { key: 'ontem',  label: 'Ontem'        },
+              { key: 'custom', label: 'Escolher data' },
+            ].map(op => (
+              <button
+                key={op.key}
+                onClick={() => setModoData(op.key)}
+                style={{
+                  padding: '6px 14px', borderRadius: 99, border: 'none', cursor: 'pointer',
+                  fontSize: 12, fontWeight: modoData === op.key ? 600 : 400,
+                  fontFamily: 'var(--font-sans)',
+                  background: modoData === op.key ? 'var(--dark)' : 'var(--bg2)',
+                  color: modoData === op.key ? 'white' : 'var(--text3)',
+                }}
+              >
+                {op.label}
+              </button>
+            ))}
+          </div>
+          {modoData === 'custom' && (
+            <input
+              type="date"
+              max={dHoje}
+              value={dataCustom}
+              onChange={e => setDataCustom(e.target.value)}
+              style={{
+                marginTop: 8, fontSize: 13, padding: '6px 10px',
+                borderRadius: 8, border: '1px solid var(--border)',
+                fontFamily: 'var(--font-sans)', background: 'var(--bg2)',
+                color: 'var(--dark)',
+              }}
+            />
+          )}
+        </div>
+
         <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>
-          Como seu intestino se comportou hoje?
+          Como seu intestino se comportou {labelData}?
         </div>
 
         {/* Evacuou */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 8 }}>Você evacuou hoje?</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)', marginBottom: 8 }}>Você evacuou {labelData}?</div>
           <SimNao value={form.evacuou} onChange={v => set('evacuou', v)} />
         </div>
 
@@ -362,7 +413,7 @@ function SheetDiario({ inicial, onSalvar, onFechar, salvando }) {
         </div>
 
         <button
-          onClick={() => onSalvar(form)}
+          onClick={() => onSalvar(form, dataRegistro)}
           disabled={!podeEnviar || salvando}
           style={{
             width: '100%', padding: '14px', borderRadius: 12, border: 'none', cursor: podeEnviar ? 'pointer' : 'not-allowed',
@@ -539,18 +590,18 @@ export default function Intestino() {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  async function salvarDiario(form) {
+  async function salvarDiario(form, dataAlvo) {
     setSalvando(true);
     const payload = {
       paciente_id: pacienteId,
-      data: hoje(),
+      data: dataAlvo,
       tipo: 'diario',
       ...form,
       observacoes: form.observacoes?.trim() || null,
     };
-    const { error } = logHoje
-      ? await supabase.from('intestino_logs').update(payload).eq('id', logHoje.id)
-      : await supabase.from('intestino_logs').upsert(payload, { onConflict: 'paciente_id,data,tipo' });
+    const { error } = await supabase
+      .from('intestino_logs')
+      .upsert(payload, { onConflict: 'paciente_id,data,tipo' });
 
     setSalvando(false);
     if (error) { setAviso('Erro ao salvar. Tente novamente.'); return; }
