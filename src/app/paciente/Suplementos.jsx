@@ -70,13 +70,16 @@ export default function Suplementos() {
     return () => { active = false; };
   }, [pdfs]);
 
-  async function toggle(s) {
-    const ja = logs.find(l => l.suplemento_id === s.id && l.data === dataRegistro);
+  async function toggleDose(s, horario) {
+    const horKey = horario ?? '__base__';
+    const ja = logHorariosMap[s.id]?.[dataRegistro]?.[horKey];
     if (ja) {
       await supabase.from('suplementos_logs').delete().eq('id', ja.id);
     } else {
       await supabase.from('suplementos_logs').insert({
-        suplemento_id: s.id, paciente_id: pacienteId, data: dataRegistro, tomado: true,
+        suplemento_id: s.id, paciente_id: pacienteId,
+        data: dataRegistro, tomado: true,
+        horario: horario ?? null,
       });
     }
     carregar();
@@ -91,15 +94,33 @@ export default function Suplementos() {
     }
   }
 
-  // ── Métricas (lógica original) ───────────────────────────────────────────
-  const logMap = useMemo(() => {
+  // logHorariosMap: índice por [suplemento_id][data][horario_key]
+  // horario_key = valor TIME string ('17:30:00') ou '__base__' para sem horário
+  const logHorariosMap = useMemo(() => {
     const m = {};
     for (const l of logs) {
       if (!m[l.suplemento_id]) m[l.suplemento_id] = {};
-      m[l.suplemento_id][l.data] = l;
+      if (!m[l.suplemento_id][l.data]) m[l.suplemento_id][l.data] = {};
+      m[l.suplemento_id][l.data][l.horario ?? '__base__'] = l;
     }
     return m;
   }, [logs]);
+
+  // logMap: [suplemento_id][data].tomado = true somente quando TODOS os horários estão registrados
+  // Usado por streak e histórico 7 dias (dia = completo ou não)
+  const logMap = useMemo(() => {
+    const m = {};
+    for (const s of (suplementos ?? [])) {
+      m[s.id] = {};
+      for (const dia of Object.keys(logHorariosMap[s.id] ?? {})) {
+        const esperados = s.horarios?.length > 0 ? s.horarios : ['__base__'];
+        if (esperados.every(h => logHorariosMap[s.id][dia]?.[h]?.tomado)) {
+          m[s.id][dia] = { tomado: true };
+        }
+      }
+    }
+    return m;
+  }, [logHorariosMap, suplementos]);
 
   const streak = useMemo(() => {
     if (!suplementos || suplementos.length === 0) return 0;
@@ -125,8 +146,13 @@ export default function Suplementos() {
   }, []);
 
   const hoje = HOJE();
-  const tomadosHoje = (suplementos ?? []).filter(s => logMap[s.id]?.[dataRegistro]?.tomado).length;
-  const total = suplementos?.length ?? 0;
+  const total = (suplementos ?? []).reduce((acc, s) => acc + Math.max(1, s.horarios?.length ?? 0), 0);
+  const tomadosHoje = (suplementos ?? []).reduce((acc, s) => {
+    if (!s.horarios?.length) {
+      return acc + (logHorariosMap[s.id]?.[dataRegistro]?.['__base__']?.tomado ? 1 : 0);
+    }
+    return acc + s.horarios.filter(h => logHorariosMap[s.id]?.[dataRegistro]?.[h]?.tomado).length;
+  }, 0);
   const temManipulacao = pdfs.length > 0 || farmacias.length > 0;
 
   if (suplementos === null) {
@@ -391,109 +417,163 @@ export default function Suplementos() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
             {suplementos.map(s => {
-              const tomado = !!logMap[s.id]?.[dataRegistro]?.tomado;
-              const objetivos = s.objetivo_clinico ?? [];
-              return (
-                <div key={s.id} style={{ borderRadius: 12, overflow: 'hidden' }}>
-                  <button onClick={() => toggle(s)} style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: 14, width: '100%',
-                    background: tomado ? 'var(--green-soft, var(--bg-soft))' : 'var(--paper)',
-                    border: `1px solid ${tomado ? 'var(--green, var(--hair))' : 'var(--hair)'}`,
-                    borderBottom: (s.link_compra || objetivos.length > 0) ? 'none' : undefined,
-                    borderRadius: (s.link_compra || objetivos.length > 0) ? '12px 12px 0 0' : 12,
-                    cursor: 'pointer', textAlign: 'left',
-                    fontFamily: 'var(--font-sans)', transition: 'all .15s ease',
-                  }}>
-                    <div style={{
-                      width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                      background: tomado ? 'var(--green, var(--gold-deep))' : 'var(--bg-soft)',
-                      color: tomado ? 'var(--paper)' : 'var(--muted)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 16, border: tomado ? 'none' : '1.5px solid var(--hair)',
+              const objetivos   = s.objetivo_clinico ?? [];
+              const temHorarios = s.horarios?.length > 0;
+              const todosFeitos = !!logMap[s.id]?.[dataRegistro]?.tomado;
+
+              if (!temHorarios) {
+                // ── Sem horários: toggle único (comportamento original) ────────
+                const tomado = !!logHorariosMap[s.id]?.[dataRegistro]?.['__base__']?.tomado;
+                return (
+                  <div key={s.id} style={{ borderRadius: 12, overflow: 'hidden' }}>
+                    <button onClick={() => toggleDose(s, null)} style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: 14, width: '100%',
+                      background: tomado ? 'var(--green-soft, var(--bg-soft))' : 'var(--paper)',
+                      border: `1px solid ${tomado ? 'var(--green, var(--hair))' : 'var(--hair)'}`,
+                      borderBottom: (s.link_compra || s.cupom_desconto) ? 'none' : undefined,
+                      borderRadius: (s.link_compra || s.cupom_desconto) ? '12px 12px 0 0' : 12,
+                      cursor: 'pointer', textAlign: 'left',
+                      fontFamily: 'var(--font-sans)', transition: 'all .15s ease',
                     }}>
-                      {tomado ? <i className="ti ti-check" aria-hidden="true"></i> : null}
-                    </div>
+                      <div style={{
+                        width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                        background: tomado ? 'var(--green, var(--gold-deep))' : 'var(--bg-soft)',
+                        color: tomado ? 'var(--paper)' : 'var(--muted)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 16, border: tomado ? 'none' : '1.5px solid var(--hair)',
+                      }}>
+                        {tomado ? <i className="ti ti-check" aria-hidden="true"></i> : null}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize: 14, fontWeight: 500, color: 'var(--ink)',
+                          textDecoration: tomado ? 'line-through' : 'none',
+                          opacity: tomado ? 0.7 : 1,
+                        }}>{s.nome}</div>
+                        {s.marca && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{s.marca}</div>}
+                        <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                          {s.dose    && <span>{s.dose}</span>}
+                          {s.horario && <span>· {s.horario}</span>}
+                        </div>
+                        {s.posologia && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>{s.posologia}</div>}
+                        {objetivos.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                            {objetivos.map(id => (
+                              <span key={id} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 20, background: 'var(--gold-soft, var(--bg-soft))', color: 'var(--gold-deep)', fontWeight: 500 }}>
+                                {OBJETIVOS_CLINICOS.find(o => o.id === id)?.label ?? id}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <i className="ti ti-pill" style={{ fontSize: 18, color: 'var(--muted-2)', flexShrink: 0 }} aria-hidden="true"></i>
+                    </button>
+                    {(s.link_compra || s.cupom_desconto) && (
+                      <div style={{
+                        display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+                        padding: '8px 14px', background: 'var(--bg-soft)',
+                        border: `1px solid ${tomado ? 'var(--green, var(--hair))' : 'var(--hair)'}`,
+                        borderTop: 'none', borderRadius: '0 0 12px 12px',
+                      }}>
+                        {s.link_compra && (
+                          <a href={s.link_compra} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, background: 'var(--ink)', fontSize: 11, color: 'var(--paper)', textDecoration: 'none', fontFamily: 'var(--font-sans)', fontWeight: 500 }}>
+                            <i className="ti ti-shopping-cart" aria-hidden="true"></i>
+                            {s.marca ? `Comprar — ${s.marca}` : 'Comprar no site da marca'}
+                          </a>
+                        )}
+                        {s.cupom_desconto && (
+                          <button onClick={async e => { e.stopPropagation(); try { await navigator.clipboard.writeText(s.cupom_desconto); alert(`Cupom "${s.cupom_desconto}" copiado!`); } catch { alert(`Cupom: ${s.cupom_desconto}`); } }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '0.5px solid var(--hair)', fontSize: 11, fontFamily: 'var(--font-sans)', color: 'var(--gold-deep)', fontWeight: 500 }}>
+                            <i className="ti ti-tag" aria-hidden="true"></i>
+                            Cupom: {s.cupom_desconto}
+                            <i className="ti ti-copy" style={{ fontSize: 10, opacity: .6 }} aria-hidden="true"></i>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // ── Com horários: header de grupo + 1 toggle por horário ─────────
+              return (
+                <div key={s.id} style={{
+                  borderRadius: 12, overflow: 'hidden',
+                  border: `1px solid ${todosFeitos ? 'var(--green, var(--hair))' : 'var(--hair)'}`,
+                }}>
+                  {/* Header: nome, dose, posologia — sem toggle */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                    background: todosFeitos ? 'var(--green-soft, var(--bg-soft))' : 'var(--paper)',
+                  }}>
+                    <i className="ti ti-pill" style={{ fontSize: 18, color: 'var(--muted-2)', flexShrink: 0 }} aria-hidden="true"></i>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{
                         fontSize: 14, fontWeight: 500, color: 'var(--ink)',
-                        textDecoration: tomado ? 'line-through' : 'none',
-                        opacity: tomado ? 0.7 : 1,
+                        textDecoration: todosFeitos ? 'line-through' : 'none',
+                        opacity: todosFeitos ? 0.7 : 1,
                       }}>{s.nome}</div>
-                      {s.marca && (
-                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{s.marca}</div>
-                      )}
-                      <div style={{ fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
-                        {s.dose    && <span>{s.dose}</span>}
-                        {s.horario && <span>· {s.horario}</span>}
-                      </div>
-                      {(s.horarios?.length > 0) && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
-                          {s.horarios.map(h => (
-                            <span key={h} style={{
-                              fontSize: 10, padding: '2px 7px', borderRadius: 99,
-                              background: 'var(--bg2)', border: '0.5px solid var(--hair)',
-                              color: 'var(--muted)',
-                            }}>{h.slice(0, 5)}</span>
-                          ))}
-                        </div>
-                      )}
-                      {s.posologia && (
-                        <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 2 }}>
-                          {s.posologia}
-                        </div>
-                      )}
-                      {objetivos.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
-                          {objetivos.map(id => (
-                            <span key={id} style={{
-                              fontSize: 9, padding: '2px 7px', borderRadius: 20,
-                              background: 'var(--gold-soft, var(--bg-soft))',
-                              color: 'var(--gold-deep)', fontWeight: 500,
-                            }}>
-                              {OBJETIVOS_CLINICOS.find(o => o.id === id)?.label ?? id}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      {s.marca    && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{s.marca}</div>}
+                      {s.dose     && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{s.dose}</div>}
+                      {s.posologia && <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginTop: 1 }}>{s.posologia}</div>}
                     </div>
-                    <i className="ti ti-pill" style={{ fontSize: 18, color: 'var(--muted-2)', flexShrink: 0 }} aria-hidden="true"></i>
-                  </button>
+                  </div>
 
-                  {/* Rodapé do card: link de compra + cupom */}
+                  {/* 1 toggle por horário */}
+                  {s.horarios.map(h => {
+                    const tomadoH = !!logHorariosMap[s.id]?.[dataRegistro]?.[h]?.tomado;
+                    return (
+                      <button
+                        key={h}
+                        onClick={() => toggleDose(s, h)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 12,
+                          padding: '10px 14px', width: '100%', border: 'none',
+                          borderTop: '0.5px solid var(--hair)',
+                          background: tomadoH ? 'var(--green-soft, var(--bg-soft))' : 'var(--paper)',
+                          cursor: 'pointer', textAlign: 'left',
+                          fontFamily: 'var(--font-sans)', transition: 'background .15s ease',
+                        }}
+                      >
+                        <div style={{
+                          width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                          background: tomadoH ? 'var(--green, var(--gold-deep))' : 'var(--bg-soft)',
+                          color: tomadoH ? 'var(--paper)' : 'var(--muted)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 13, border: tomadoH ? 'none' : '1.5px solid var(--hair)',
+                        }}>
+                          {tomadoH ? <i className="ti ti-check" aria-hidden="true"></i> : null}
+                        </div>
+                        <span style={{
+                          fontSize: 14, fontWeight: 500,
+                          color: tomadoH ? 'var(--muted)' : 'var(--ink)',
+                          textDecoration: tomadoH ? 'line-through' : 'none',
+                        }}>
+                          {h.slice(0, 5)}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  {/* Rodapé: link de compra + cupom */}
                   {(s.link_compra || s.cupom_desconto) && (
                     <div style={{
                       display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
-                      padding: '8px 14px',
-                      background: 'var(--bg-soft)',
-                      border: `1px solid ${tomado ? 'var(--green, var(--hair))' : 'var(--hair)'}`,
-                      borderTop: 'none',
-                      borderRadius: '0 0 12px 12px',
+                      padding: '8px 14px', background: 'var(--bg-soft)',
+                      borderTop: '0.5px solid var(--hair)',
                     }}>
                       {s.link_compra && (
                         <a href={s.link_compra} target="_blank" rel="noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 5,
-                            padding: '5px 12px', borderRadius: 8,
-                            background: 'var(--ink)', fontSize: 11,
-                            color: 'var(--paper)', textDecoration: 'none',
-                            fontFamily: 'var(--font-sans)', fontWeight: 500,
-                          }}>
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, background: 'var(--ink)', fontSize: 11, color: 'var(--paper)', textDecoration: 'none', fontFamily: 'var(--font-sans)', fontWeight: 500 }}>
                           <i className="ti ti-shopping-cart" aria-hidden="true"></i>
                           {s.marca ? `Comprar — ${s.marca}` : 'Comprar no site da marca'}
                         </a>
                       )}
                       {s.cupom_desconto && (
                         <button onClick={async e => { e.stopPropagation(); try { await navigator.clipboard.writeText(s.cupom_desconto); alert(`Cupom "${s.cupom_desconto}" copiado!`); } catch { alert(`Cupom: ${s.cupom_desconto}`); } }}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 5,
-                            padding: '5px 12px', borderRadius: 8, cursor: 'pointer',
-                            background: 'transparent',
-                            border: '0.5px solid var(--hair)',
-                            fontSize: 11, fontFamily: 'var(--font-sans)',
-                            color: 'var(--gold-deep)', fontWeight: 500,
-                          }}>
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, cursor: 'pointer', background: 'transparent', border: '0.5px solid var(--hair)', fontSize: 11, fontFamily: 'var(--font-sans)', color: 'var(--gold-deep)', fontWeight: 500 }}>
                           <i className="ti ti-tag" aria-hidden="true"></i>
                           Cupom: {s.cupom_desconto}
                           <i className="ti ti-copy" style={{ fontSize: 10, opacity: .6 }} aria-hidden="true"></i>
@@ -527,18 +607,34 @@ export default function Suplementos() {
                 </div>
                 <div style={{ display: 'flex', gap: 4 }}>
                   {dias7.map(d => {
-                    const tomado = !!logMap[s.id]?.[d.iso]?.tomado;
-                    const isHoje = d.iso === hoje;
+                    // Suplemento sem horários: lógica original (completo ou vazio)
+                    // Suplemento com horários: 3 estados (completo / parcial / vazio)
+                    const temHorarios = s.horarios?.length > 0;
+                    let estadoDia;
+                    if (!temHorarios) {
+                      estadoDia = logMap[s.id]?.[d.iso]?.tomado ? 'completo' : 'vazio';
+                    } else {
+                      const n = s.horarios.filter(h => logHorariosMap[s.id]?.[d.iso]?.[h]?.tomado).length;
+                      estadoDia = n === s.horarios.length ? 'completo' : n > 0 ? 'parcial' : 'vazio';
+                    }
+                    const isHoje  = d.iso === hoje;
+                    const bg = estadoDia === 'completo' ? 'var(--green, var(--gold-deep))'
+                      : estadoDia === 'parcial'  ? 'var(--orange, #d97706)'
+                      : isHoje ? 'var(--bg-soft)' : 'transparent';
                     return (
                       <div key={d.iso} style={{
                         width: 22, height: 22, borderRadius: 6,
-                        background: tomado ? 'var(--green, var(--gold-deep))' : (isHoje ? 'var(--bg-soft)' : 'transparent'),
-                        border: tomado ? 'none' : '0.5px solid var(--hair)',
-                        color: tomado ? 'var(--paper)' : 'var(--muted-2)',
+                        background: bg,
+                        border: estadoDia === 'vazio' ? '0.5px solid var(--hair)' : 'none',
+                        color: estadoDia !== 'vazio' ? 'var(--paper)' : 'var(--muted-2)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 9, fontWeight: 500,
                       }} title={d.iso}>
-                        {tomado ? <i className="ti ti-check" style={{ fontSize: 11 }} aria-hidden="true"></i> : d.num}
+                        {estadoDia === 'completo'
+                          ? <i className="ti ti-check" style={{ fontSize: 11 }} aria-hidden="true"></i>
+                          : estadoDia === 'parcial'
+                          ? <span style={{ fontSize: 11, lineHeight: 1 }}>◐</span>
+                          : d.num}
                       </div>
                     );
                   })}

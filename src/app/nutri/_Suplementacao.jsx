@@ -197,7 +197,7 @@ export default function Suplementacao({ pacienteId, nutriId, pacienteNome }) {
     for (let i = 6; i >= 0; i--) {
       dias7.push(new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
     }
-    const esperado = ativos.length * dias7.length;
+    const esperado = ativos.reduce((acc, s) => acc + Math.max(1, s.horarios?.length ?? 0), 0) * dias7.length;
     const cumprido = logs.filter(l =>
       l.tomado && dias7.includes(l.data) && ativos.some(s => s.id === l.suplemento_id)
     ).length;
