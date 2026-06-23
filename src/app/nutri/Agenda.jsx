@@ -114,7 +114,7 @@ export default function Agenda() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-        <button className="btn" onClick={abrirNova} disabled={pacientes.length === 0}>
+        <button className="btn" onClick={() => abrirNova()} disabled={pacientes.length === 0}>
           <i className="ti ti-plus" style={{ fontSize: 15 }} aria-hidden="true"></i> Nova consulta
         </button>
       </div>
