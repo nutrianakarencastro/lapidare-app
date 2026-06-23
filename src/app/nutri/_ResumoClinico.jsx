@@ -7,10 +7,12 @@ import { calcularPerfilBiologico } from '../../lib/perfilBiologicoUtils.js';
 import { gerarPontosAtencao } from '../../lib/visaoProspectiva.js';
 import { gerarInsights }      from '../../lib/insightsBiologicos.js';
 import { sintetizarMemoria }  from '../../lib/memoriaViva.js';
-import { gerarSinais } from '../../lib/salaSituacaoUtils.js';
+import { gerarSinais, calcularComparacao14d, gerarLeituraClinica21 } from '../../lib/salaSituacaoUtils.js';
+import { calcularFaseDoCiclo } from '../../lib/cicloUtils.js';
 import { protocolosSugeridos } from '../../lib/protocolosContextuais.js';
 import { PROTOCOLOS_INDEX } from '../../data/protocolos/_index.js';
 import SalaSituacao from '../../components/SalaSituacao.jsx';
+import EvolucaoConsulta from '../../components/EvolucaoConsulta.jsx';
 
 // ── Jornada Clínica ───────────────────────────────────────────────────────────
 // Leitura automática derivada das consultas. Responde: "onde está no tratamento?"
@@ -224,6 +226,9 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
   const [confirmandoConclusao,  setConfirmandoConclusao]  = useState(null);
   const [motivoConclusao,       setMotivoConclusao]       = useState('');
   const [concluindo,            setConcluindo]            = useState(false);
+  const [comparacao14d,         setComparacao14d]         = useState(null);
+  const [periodosClinico,       setPeriodosClinico]       = useState([]);
+  const [estrategiasAtivas,     setEstrategiasAtivas]     = useState([]);
 
   useEffect(() => {
     let active = true;
@@ -299,6 +304,7 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
         periodos:      periodosRes.data  ?? [],
         intestinoLogs: intestinoRes.data ?? [],
       }));
+      setPeriodosClinico(periodosRes.data ?? []);
     }
     loadPerfil();
     return () => { active = false; };
@@ -470,6 +476,80 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
     return () => { active = false; };
   }, [pacienteId, nutriId]);
 
+  // ── Evolução 14d — Sprint Sala de Situação 2.0 ────────────────────────────
+  useEffect(() => {
+    let active = true;
+    async function loadComparacao() {
+      const c28str = (() => { const d = new Date(); d.setDate(d.getDate() - 28); return d.toISOString().slice(0, 10); })();
+
+      const [
+        sintomasRes,
+        intestinoRes,
+        habitosCountRes,
+        habitosLogsRes,
+        glicemiaRes,
+        dmgModRes,
+        intestinoModRes,
+        estrategiasRes,
+      ] = await Promise.all([
+        supabase.from('ciclo_sintomas_diarios')
+          .select('data, energia, humor, sono, compulsao, ansiedade, dor_pelvica, dor_cabeca, intestino')
+          .eq('paciente_id', pacienteId)
+          .gte('data', c28str),
+        supabase.from('intestino_logs')
+          .select('data, bristol')
+          .eq('paciente_id', pacienteId)
+          .eq('tipo', 'diario')
+          .gte('data', c28str),
+        supabase.from('habitos')
+          .select('id', { count: 'exact', head: true })
+          .eq('paciente_id', pacienteId)
+          .eq('ativo', true),
+        supabase.from('habitos_logs')
+          .select('data')
+          .eq('paciente_id', pacienteId)
+          .gte('data', c28str),
+        supabase.from('diario_glicemico')
+          .select('data, tipo_refeicao, valor_mg_dl, protocolo')
+          .eq('paciente_id', pacienteId)
+          .gte('data', c28str),
+        supabase.from('paciente_modulos')
+          .select('ativo')
+          .eq('paciente_id', pacienteId)
+          .eq('modulo', 'diario_glicemico_dmg')
+          .order('ativado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase.from('paciente_modulos')
+          .select('ativo')
+          .eq('paciente_id', pacienteId)
+          .eq('modulo', 'diario_intestinal')
+          .order('ativado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase.from('estrategias')
+          .select('titulo, categoria')
+          .eq('paciente_id', pacienteId)
+          .eq('status', 'ativa'),
+      ]);
+
+      if (!active) return;
+
+      setEstrategiasAtivas(estrategiasRes.data ?? []);
+      setComparacao14d(calcularComparacao14d({
+        sintomas28d:       sintomasRes.data  ?? [],
+        intestinoLogs28d:  intestinoRes.data  ?? [],
+        habitosLogs28d:    habitosLogsRes.data ?? [],
+        glicemia28d:       glicemiaRes.data   ?? [],
+        temHabitos:        (habitosCountRes.count ?? 0) > 0,
+        moduloDMGAtivo:    dmgModRes.data?.ativo    === true,
+        modIntestinoAtivo: intestinoModRes.data?.ativo === true,
+      }));
+    }
+    loadComparacao();
+    return () => { active = false; };
+  }, [pacienteId]);
+
   async function iniciarProtocolo(protocoloId) {
     if (iniciando.has(protocoloId)) return;
     setIniciando(s => new Set(s).add(protocoloId));
@@ -541,9 +621,22 @@ export default function ResumoClinico({ pacienteId, nutriId, onIrParaTab, catego
   });
   const visivelMemoria = memoriaExpand ? memoriaUnificada : memoriaUnificada.slice(0, 5);
 
+  const faseAtual = calcularFaseDoCiclo(periodosClinico, new Date()).fase ?? null;
+  const leituraClinica21 = comparacao14d ? gerarLeituraClinica21({
+    comparacao:        comparacao14d,
+    estrategiasAtivas: estrategiasAtivas,
+    faseAtual,
+    metas:             metas          ?? [],
+    jornadaAtual:      jornadaAtual   ?? null,
+    perfilBiologico:   perfilResult   ?? null,
+    consistencia:      consistencia   ?? null,
+    memoriaClinica:    memoriaClinica ?? [],
+  }) : null;
+
   return (
     <>
       <SalaSituacao sinais={sinaisSituacao} onIrParaTab={onIrParaTab} />
+      <EvolucaoConsulta dados={comparacao14d} leituraClinica21={leituraClinica21} />
 
       <BlocoJornadaClinica
         pacienteId={pacienteId}
