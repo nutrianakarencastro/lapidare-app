@@ -362,6 +362,9 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
   const [salvandoSang, setSalvandoSang] = useState(false);
   const setDS = (k, v) => setDetSang(d => ({ ...d, [k]: v }));
 
+  const [mostrarSeletorFim, setMostrarSeletorFim] = useState(false);
+  const [dataFimSel, setDataFimSel] = useState('');
+
   async function salvarSangramento() {
     setSalvandoSang(true);
     const tipo = tipoSang || 'nao';
@@ -421,10 +424,11 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
 
   const setD = (k, v) => setDetalhes(d => ({ ...d, [k]: v }));
 
-  async function marcarFim() {
-    if (!periodoExistente) return;
+  async function salvarFim() {
+    if (!periodoExistente || !dataFimSel) return;
+    if (dataFimSel > hoje || dataFimSel < periodoExistente.inicio) return;
     setBusy(true);
-    await supabase.from('ciclo_periodos').update({ fim: dia }).eq('id', periodoExistente.id);
+    await supabase.from('ciclo_periodos').update({ fim: dataFimSel }).eq('id', periodoExistente.id);
     setBusy(false);
     onSalvarPeriodo();
   }
@@ -467,7 +471,54 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
           <div style={{ marginBottom: 14 }} />
         )}
 
-        {mostrarSangramento ? (
+        {mostrarSeletorFim ? (
+          /* ── Seletor de data de fim da menstruação ── */
+          <div>
+            <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, marginBottom: 12 }}>
+              {periodoExistente?.fim ? 'Corrigir data de fim da menstruação' : 'Marcar fim da menstruação'}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>
+              Iniciada em {periodoExistente ? dataBRCurta(periodoExistente.inicio) : ''}
+            </div>
+            <input
+              type="date"
+              value={dataFimSel}
+              min={periodoExistente?.inicio ?? ''}
+              max={hoje}
+              onChange={e => setDataFimSel(e.target.value)}
+              style={{
+                width: '100%', padding: '11px 12px', borderRadius: 11, fontSize: 15,
+                border: '0.5px solid var(--hair)', background: 'var(--bg-soft)',
+                color: 'var(--ink)', fontFamily: 'var(--font-sans)', boxSizing: 'border-box',
+                marginBottom: 14,
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setMostrarSeletorFim(false)}
+                style={{
+                  flex: 1, padding: '11px 0', borderRadius: 11,
+                  background: 'var(--bg-soft)', color: 'var(--muted)',
+                  border: '0.5px solid var(--hair)', fontSize: 13, fontWeight: 500,
+                  cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                }}>
+                Voltar
+              </button>
+              <button onClick={salvarFim} disabled={busy || !dataFimSel}
+                style={{
+                  flex: 2, padding: '11px 0', borderRadius: 11,
+                  background: (busy || !dataFimSel) ? 'var(--muted-2)' : '#c4a882',
+                  color: '#fff', border: 'none',
+                  fontSize: 13, fontWeight: 500,
+                  cursor: (busy || !dataFimSel) ? 'default' : 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}>
+                <i className="ti ti-check" aria-hidden="true" />
+                {busy ? 'Salvando…' : 'Confirmar fim'}
+              </button>
+            </div>
+          </div>
+        ) : mostrarSangramento ? (
           /* ── Sangramento diário (qualquer dia) ── */
           <div>
             <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, marginBottom: 12 }}>
@@ -610,11 +661,15 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
                 cor="#c4616e"
               />
             )}
-            {ePeriodo && periodoExistente && !periodoExistente.fim && !futuro && (
+            {ePeriodo && periodoExistente && !futuro && (
               <BotaoSheet
-                icon="droplet-half-2" label="Marcar fim da menstruação"
-                sub={`Iniciada em ${dataBRCurta(periodoExistente.inicio)}`}
-                onClick={marcarFim} busy={busy}
+                icon="droplet-half-2"
+                label={periodoExistente.fim ? 'Corrigir data de fim' : 'Marcar fim da menstruação'}
+                sub={periodoExistente.fim
+                  ? `Fim registrado: ${dataBRCurta(periodoExistente.fim)}`
+                  : `Iniciada em ${dataBRCurta(periodoExistente.inicio)}`}
+                onClick={() => { setDataFimSel(periodoExistente.fim ?? hoje); setMostrarSeletorFim(true); }}
+                busy={busy}
                 cor="#c4a882"
               />
             )}
