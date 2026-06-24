@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { PROTOCOLOS_INDEX } from '../../data/protocolos/_index.js';
 import { parseProtocolo } from '../../lib/parseProtocolo.js';
+import { supabase } from '../../lib/supabase.js';
+import { useSession } from '../../lib/session.jsx';
 
 // Carrega todos os .md como texto puro em build-time (Vite import.meta.glob)
 const RAW_FILES = import.meta.glob(
@@ -36,10 +38,25 @@ const CAMADAS_ORDEM = [
   { chave: 'sabedoria',    label: 'Sabedoria Clínica' },
 ];
 
+const CATEGORIAS_OBS = [
+  { v: 'resposta_clinica', label: 'Resposta Clínica' },
+  { v: 'barreira',         label: 'Barreira'          },
+  { v: 'perfil',           label: 'Perfil'            },
+  { v: 'sequencia',        label: 'Sequência'         },
+  { v: 'adesao',           label: 'Adesão'            },
+];
+
+const ORIGENS_OBS = [
+  { v: 'consulta',          label: 'Consulta'          },
+  { v: 'atendimento',       label: 'Atendimento'       },
+  { v: 'analise_posterior', label: 'Análise posterior' },
+];
+
 /* ============================================================
    COMPONENTE PRINCIPAL
    ============================================================ */
 export default function Protocolos() {
+  const { user } = useSession();
   const [busca, setBusca] = useState('');
   const [categoriaSelecionada, setCategoriaSelecionada] = useState(null);
   const [protocoloAberto, setProtocoloAberto] = useState(null);
@@ -77,6 +94,7 @@ export default function Protocolos() {
         protocolo={protocoloAberto}
         camadas={parsed?.camadas ?? null}
         onVoltar={() => setProtocoloAberto(null)}
+        nutriId={user?.id}
       />
     );
   }
@@ -225,7 +243,7 @@ function ProtocoloCard({ protocolo, isLast, onAbrir }) {
 /* ============================================================
    TELA DE DETALHE
    ============================================================ */
-function ProtocoloDetalhe({ protocolo, camadas, onVoltar }) {
+function ProtocoloDetalhe({ protocolo, camadas, onVoltar, nutriId }) {
   return (
     <>
       <button
@@ -258,6 +276,10 @@ function ProtocoloDetalhe({ protocolo, camadas, onVoltar }) {
           />
         ))}
       </div>
+
+      {nutriId && (
+        <ObservacoesSection protocoloId={protocolo.id} nutriId={nutriId} />
+      )}
     </>
   );
 }
@@ -312,6 +334,233 @@ function CamadaSection({ label, numero, conteudo, defaultAberta, isLast }) {
               Conteúdo não encontrado nesta seção.
             </p>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   OBSERVAÇÕES CLÍNICAS
+   ============================================================ */
+function ObservacoesSection({ protocoloId, nutriId }) {
+  const [obs, setObs]               = useState([]);
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const [form, setForm]             = useState({ categoria: '', origem: '', observacao: '' });
+  const [salvando, setSalvando]     = useState(false);
+
+  async function carregar() {
+    const { data } = await supabase
+      .from('protocolo_observacoes')
+      .select('id, categoria, origem, observacao, created_at')
+      .eq('nutri_id', nutriId)
+      .eq('protocolo_id', protocoloId)
+      .order('created_at', { ascending: false });
+    setObs(data ?? []);
+  }
+
+  useEffect(() => { carregar(); }, [protocoloId, nutriId]);
+
+  async function salvar() {
+    if (!form.categoria || !form.origem || !form.observacao.trim()) return;
+    setSalvando(true);
+    await supabase.from('protocolo_observacoes').insert({
+      nutri_id:     nutriId,
+      protocolo_id: protocoloId,
+      categoria:    form.categoria,
+      origem:       form.origem,
+      observacao:   form.observacao.trim(),
+    });
+    setSalvando(false);
+    setForm({ categoria: '', origem: '', observacao: '' });
+    setMostrarForm(false);
+    await carregar();
+  }
+
+  async function excluir(id) {
+    await supabase.from('protocolo_observacoes').delete().eq('id', id);
+    await carregar();
+  }
+
+  const labelCat = v => CATEGORIAS_OBS.find(c => c.v === v)?.label ?? v;
+  const labelOri = v => ORIGENS_OBS.find(o => o.v === v)?.label ?? v;
+  const fmtData  = iso => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+  const formValido = form.categoria && form.origem && form.observacao.trim();
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dark)' }}>
+          Observações clínicas
+        </div>
+        {!mostrarForm && (
+          <button
+            onClick={() => setMostrarForm(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 12px', borderRadius: 999,
+              background: 'var(--dark)', color: 'var(--white)',
+              border: 'none', fontSize: 12, fontWeight: 500,
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <i className="ti ti-plus" style={{ fontSize: 13 }} aria-hidden="true" />
+            Nova
+          </button>
+        )}
+      </div>
+
+      {mostrarForm && (
+        <div className="card" style={{ padding: 16, marginBottom: 14 }}>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>
+              Categoria
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {CATEGORIAS_OBS.map(c => (
+                <button
+                  key={c.v}
+                  onClick={() => setForm(f => ({ ...f, categoria: c.v }))}
+                  style={{
+                    fontSize: 12, padding: '4px 11px', borderRadius: 999,
+                    border: '0.5px solid ' + (form.categoria === c.v ? 'var(--dark)' : 'var(--border)'),
+                    background: form.categoria === c.v ? 'var(--dark)' : 'var(--white)',
+                    color: form.categoria === c.v ? 'var(--white)' : 'var(--text2)',
+                    cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>
+              Origem
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {ORIGENS_OBS.map(o => (
+                <button
+                  key={o.v}
+                  onClick={() => setForm(f => ({ ...f, origem: o.v }))}
+                  style={{
+                    fontSize: 12, padding: '4px 11px', borderRadius: 999,
+                    border: '0.5px solid ' + (form.origem === o.v ? 'var(--dark)' : 'var(--border)'),
+                    background: form.origem === o.v ? 'var(--dark)' : 'var(--white)',
+                    color: form.origem === o.v ? 'var(--white)' : 'var(--text2)',
+                    cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 6 }}>
+              Observação
+            </div>
+            <textarea
+              value={form.observacao}
+              onChange={e => setForm(f => ({ ...f, observacao: e.target.value }))}
+              placeholder="Descreva a observação clínica…"
+              rows={3}
+              style={{
+                width: '100%', boxSizing: 'border-box', resize: 'vertical',
+                padding: '8px 10px', borderRadius: 8, fontSize: 13,
+                border: '0.5px solid var(--border)', fontFamily: 'var(--font-sans)',
+                color: 'var(--dark)', lineHeight: 1.6,
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => { setMostrarForm(false); setForm({ categoria: '', origem: '', observacao: '' }); }}
+              style={{
+                flex: 1, padding: '8px 0', borderRadius: 8,
+                background: 'var(--bg2)', color: 'var(--text3)',
+                border: '0.5px solid var(--border)', fontSize: 13, fontWeight: 500,
+                cursor: 'pointer', fontFamily: 'var(--font-sans)',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={salvar}
+              disabled={salvando || !formValido}
+              style={{
+                flex: 2, padding: '8px 0', borderRadius: 8,
+                background: (salvando || !formValido) ? 'var(--bg2)' : 'var(--dark)',
+                color: (salvando || !formValido) ? 'var(--text3)' : 'var(--white)',
+                border: 'none', fontSize: 13, fontWeight: 500,
+                cursor: (salvando || !formValido) ? 'default' : 'pointer',
+                fontFamily: 'var(--font-sans)',
+              }}
+            >
+              {salvando ? 'Salvando…' : 'Salvar observação'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {obs.length === 0 && !mostrarForm && (
+        <div className="card" style={{ padding: 16, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+          Nenhuma observação registrada para este protocolo.
+        </div>
+      )}
+
+      {obs.length > 0 && (
+        <div className="card" style={{ padding: 0 }}>
+          {obs.map((o, i) => (
+            <div
+              key={o.id}
+              style={{
+                padding: '12px 16px',
+                borderBottom: i < obs.length - 1 ? '0.5px solid var(--border)' : 'none',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                    <span style={{
+                      fontSize: 11, padding: '2px 8px', borderRadius: 999,
+                      background: 'var(--bg2)', color: 'var(--text2)',
+                      fontWeight: 600, border: '0.5px solid var(--border)',
+                    }}>
+                      {labelCat(o.categoria)}
+                    </span>
+                    <span style={{
+                      fontSize: 11, padding: '2px 8px', borderRadius: 999,
+                      background: 'var(--bg2)', color: 'var(--text3)',
+                      border: '0.5px solid var(--border)',
+                    }}>
+                      {labelOri(o.origem)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 4 }}>
+                    {o.observacao}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                    {fmtData(o.created_at)}
+                  </div>
+                </div>
+                <button
+                  onClick={() => excluir(o.id)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text3)', padding: 4, flexShrink: 0,
+                    fontSize: 15, lineHeight: 1,
+                  }}
+                  title="Excluir observação"
+                >
+                  <i className="ti ti-trash" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
