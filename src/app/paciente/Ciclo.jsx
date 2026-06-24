@@ -1482,6 +1482,8 @@ export default function Ciclo() {
   const [diaSel, setDiaSel]           = useState(null);
   const [diaSintoma, setDiaSintoma]   = useState(null);
   const [mostrarPerfil, setMostrarPerfil] = useState(false);
+  const [mostrarSeletorFimGlobal, setMostrarSeletorFimGlobal] = useState(false);
+  const [dataFimSelGlobal, setDataFimSelGlobal] = useState('');
 
   async function carregar() {
     if (!user) return;
@@ -1506,6 +1508,15 @@ export default function Ciclo() {
     await carregar();
   }
 
+  async function salvarFimAberto() {
+    const hoje = isoHoje();
+    if (!periodoAberto || !dataFimSelGlobal) return;
+    if (dataFimSelGlobal > hoje || dataFimSelGlobal < periodoAberto.inicio) return;
+    await supabase.from('ciclo_periodos').update({ fim: dataFimSelGlobal }).eq('id', periodoAberto.id);
+    setMostrarSeletorFimGlobal(false);
+    await carregar();
+  }
+
   function handleDiaTocado(dia) {
     setDiaSel(dia);
   }
@@ -1523,6 +1534,7 @@ export default function Ciclo() {
   const estadoReprodutivo    = perfil?.estado_reprodutivo ?? 'nenhum';
   const podeMarcarMenstruacao = !['ciclo_suprimido', 'nao_menstrua'].includes(situacaoCiclo);
   const sintomaDiaSel        = sintomas.find(s => s.data === diaSel);
+  const periodoAberto        = periodos.find(p => !p.fim) ?? null;
 
   if (mostrarPerfil) {
     return (
@@ -1570,6 +1582,82 @@ export default function Ciclo() {
           </div>
           <i className="ti ti-chevron-right" style={{ fontSize: 14, color: 'var(--muted)' }} aria-hidden="true" />
         </button>
+      )}
+
+      {/* card período em aberto */}
+      {periodoAberto && podeMarcarMenstruacao && (
+        <div style={{
+          margin: '0 0 0', padding: '12px 16px',
+          background: '#fdedef', borderBottom: '0.5px solid #f5c0c8',
+        }}>
+          {!mostrarSeletorFimGlobal ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#c4616e' }}>
+                  🩸 Menstruação em andamento
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                  Iniciada em {dataBRCurta(periodoAberto.inicio)}
+                </div>
+              </div>
+              <button
+                onClick={() => { setDataFimSelGlobal(isoHoje()); setMostrarSeletorFimGlobal(true); }}
+                style={{
+                  padding: '7px 14px', borderRadius: 10,
+                  background: '#c4616e', color: '#fff',
+                  border: 'none', fontSize: 12, fontWeight: 500,
+                  cursor: 'pointer', fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap', flexShrink: 0,
+                }}>
+                Registrar fim
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#c4616e', marginBottom: 8 }}>
+                Data de fim da menstruação
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>
+                Iniciada em {dataBRCurta(periodoAberto.inicio)}
+              </div>
+              <input
+                type="date"
+                value={dataFimSelGlobal}
+                min={periodoAberto.inicio}
+                max={isoHoje()}
+                onChange={e => setDataFimSelGlobal(e.target.value)}
+                style={{
+                  width: '100%', padding: '9px 12px', borderRadius: 10, fontSize: 14,
+                  border: '0.5px solid #f5c0c8', background: '#fff',
+                  color: 'var(--ink)', fontFamily: 'var(--font-sans)',
+                  boxSizing: 'border-box', marginBottom: 10,
+                }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setMostrarSeletorFimGlobal(false)}
+                  style={{
+                    flex: 1, padding: '9px 0', borderRadius: 10,
+                    background: 'rgba(0,0,0,.06)', color: 'var(--muted)',
+                    border: 'none', fontSize: 12, fontWeight: 500,
+                    cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                  }}>
+                  Cancelar
+                </button>
+                <button onClick={salvarFimAberto} disabled={!dataFimSelGlobal}
+                  style={{
+                    flex: 2, padding: '9px 0', borderRadius: 10,
+                    background: !dataFimSelGlobal ? 'var(--muted-2)' : '#c4616e',
+                    color: '#fff', border: 'none', fontSize: 12, fontWeight: 500,
+                    cursor: !dataFimSelGlobal ? 'default' : 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  }}>
+                  <i className="ti ti-check" aria-hidden="true" />
+                  Confirmar fim
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* tabs */}
