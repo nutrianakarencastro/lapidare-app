@@ -6,6 +6,13 @@ import { brl, dataBR, iniciais, statusParcela } from '../../lib/utils.js';
 import { calcularMapaVivo, dataInicioMapaVivo, EIXOS_ORDEM } from '../../lib/mapaUtils.js';
 import { EIXOS } from '../../lib/cicloUtils.js';
 
+function saudacao() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return 'Bom dia';
+  if (h >= 12 && h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
 const CONSULTAS_POR_PLANO = {
   trimestral:  6,
   semestral:   12,
@@ -453,7 +460,7 @@ export default function Visao() {
 
   return (
     <>
-      <div className="page-title">{semNome ? `Bom dia, ${semNome}` : 'Visão geral'}</div>
+      <div className="page-title">{semNome ? `${saudacao()}, ${semNome}.` : 'Visão geral'}</div>
       <div className="page-sub">O que está acontecendo no seu consultório hoje</div>
 
       {/* ─── STATS RÁPIDAS ─── */}

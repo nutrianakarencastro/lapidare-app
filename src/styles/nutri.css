@@ -102,7 +102,7 @@
 }
 .nutri-panel .nav-item:hover { background: var(--dark-shade); color: var(--dark-text); }
 .nutri-panel .nav-item.active {
-  background: var(--dark-shade); color: var(--dark-text);
+  background: var(--dark-shade); color: #ffffff;
   border-left-color: var(--amber);
 }
 .nutri-panel .nav-icon {
