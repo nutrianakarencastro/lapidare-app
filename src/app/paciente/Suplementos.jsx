@@ -17,14 +17,20 @@ export default function Suplementos() {
   const [pdfUrls,     setPdfUrls]     = useState({});
   const [modoData,    setModoData]    = useState('hoje');
   const [dataCustom,  setDataCustom]  = useState(HOJE());
+  const [agora,       setAgora]       = useState(() => new Date());
 
-  const ontem        = formatarDataISO(new Date(Date.now() - 86_400_000));
+  const ontem        = formatarDataISO(new Date(agora.getTime() - 86_400_000));
   const dataRegistro = modoData === 'hoje' ? HOJE()
     : modoData === 'ontem' ? ontem
     : dataCustom;
   const labelDataSel = modoData === 'hoje' ? 'Hoje'
     : modoData === 'ontem' ? 'Ontem'
     : new Date(dataCustom + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+  useEffect(() => {
+    const id = setInterval(() => setAgora(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   async function carregar() {
     if (!user) return;
@@ -122,6 +128,30 @@ export default function Suplementos() {
     return m;
   }, [logHorariosMap, suplementos]);
 
+  const timeline = useMemo(() => {
+    if (modoData !== 'hoje' || !suplementos?.length) return null;
+    const hojeDia = HOJE();
+    const hStr = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}:00`;
+    const doses = suplementos
+      .filter(s => s.horarios?.length > 0)
+      .flatMap(s => s.horarios.map(h => {
+        const tomado = !!logHorariosMap[s.id]?.[hojeDia]?.[h]?.tomado;
+        const status = tomado ? 'concluida' : h <= hStr ? 'atrasada' : 'futura';
+        return { s, h, status };
+      }))
+      .sort((a, b) => a.h.localeCompare(b.h));
+    const atrasadas  = doses.filter(d => d.status === 'atrasada');
+    const futuras    = doses.filter(d => d.status === 'futura');
+    const concluidas = doses.filter(d => d.status === 'concluida');
+    return {
+      atrasadas,
+      proxima:   futuras[0] ?? null,
+      futuras:   futuras.slice(1),
+      concluidas,
+      temDoses:  doses.length > 0,
+    };
+  }, [suplementos, logHorariosMap, agora, modoData]);
+
   const streak = useMemo(() => {
     if (!suplementos || suplementos.length === 0) return 0;
     let count = 0;
@@ -154,6 +184,17 @@ export default function Suplementos() {
     return acc + s.horarios.filter(h => logHorariosMap[s.id]?.[dataRegistro]?.[h]?.tomado).length;
   }, 0);
   const temManipulacao = pdfs.length > 0 || farmacias.length > 0;
+
+  const tempoAte = (h) => {
+    const [hh, mm] = h.split(':').map(Number);
+    const alvo = new Date(agora);
+    alvo.setHours(hh, mm, 0, 0);
+    const diffMs = alvo - agora;
+    if (diffMs <= 0) return null;
+    const hr = Math.floor(diffMs / 3_600_000);
+    const mn = Math.floor((diffMs % 3_600_000) / 60_000);
+    return hr > 0 ? `em ${hr}h ${mn}min` : `em ${mn}min`;
+  };
 
   if (suplementos === null) {
     return <div style={{ padding: 24, textAlign: 'center', color: 'var(--muted)' }}>Carregando…</div>;
@@ -404,6 +445,117 @@ export default function Suplementos() {
               />
             )}
           </div>
+
+          {/* Próxima Dose — timeline do dia (somente quando modoData = hoje) */}
+          {timeline?.temDoses && (
+            <div style={{ marginBottom: 12 }}>
+
+              {/* Atrasado */}
+              {timeline.atrasadas.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{
+                    fontSize: 9, letterSpacing: '.18em', textTransform: 'uppercase',
+                    color: 'var(--orange, #d97706)', fontWeight: 600, margin: '0 2px 6px',
+                  }}>
+                    ⚠ Atrasado
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {timeline.atrasadas.map(d => (
+                      <div key={`${d.s.id}-${d.h}`} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '9px 12px', borderRadius: 10,
+                        background: 'var(--bg-soft)',
+                        border: '0.5px solid var(--orange, #d97706)',
+                      }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--orange, #d97706)', minWidth: 38, flexShrink: 0 }}>
+                          {d.h.slice(0, 5)}
+                        </span>
+                        <span style={{ flex: 1, fontSize: 13, color: 'var(--ink)', fontWeight: 500, minWidth: 0 }}>
+                          {d.s.nome}
+                        </span>
+                        <button
+                          onClick={() => toggleDose(d.s, d.h)}
+                          style={{
+                            fontSize: 11, padding: '4px 12px', borderRadius: 20, flexShrink: 0,
+                            background: 'var(--orange, #d97706)', color: '#fff',
+                            border: 'none', cursor: 'pointer',
+                            fontFamily: 'var(--font-sans)', fontWeight: 500,
+                          }}
+                        >
+                          Registrar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Próxima Dose */}
+              {timeline.proxima && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{
+                    fontSize: 9, letterSpacing: '.18em', textTransform: 'uppercase',
+                    fontWeight: 600, margin: '0 2px 6px',
+                    display: 'flex', alignItems: 'center', gap: 6, color: 'var(--ink)',
+                  }}>
+                    ► Próxima dose
+                    {tempoAte(timeline.proxima.h) && (
+                      <span style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 400, letterSpacing: 0 }}>
+                        · {tempoAte(timeline.proxima.h)}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '9px 12px', borderRadius: 10,
+                    background: 'var(--paper)', border: '0.5px solid var(--hair)',
+                  }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)', minWidth: 38, flexShrink: 0 }}>
+                      {timeline.proxima.h.slice(0, 5)}
+                    </span>
+                    <span style={{ flex: 1, fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>
+                      {timeline.proxima.s.nome}
+                    </span>
+                  </div>
+                  {timeline.futuras.map(d => (
+                    <div key={`${d.s.id}-${d.h}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 12px' }}>
+                      <span style={{ fontSize: 12, color: 'var(--muted)', minWidth: 38, flexShrink: 0 }}>{d.h.slice(0, 5)}</span>
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>{d.s.nome}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Concluídas */}
+              {timeline.concluidas.length > 0 && (
+                <div style={{ marginBottom: 4 }}>
+                  <div style={{
+                    fontSize: 9, letterSpacing: '.18em', textTransform: 'uppercase',
+                    color: 'var(--green)', fontWeight: 600, margin: '0 2px 6px',
+                  }}>
+                    ✓ Concluídas
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {timeline.concluidas.map(d => (
+                      <div key={`${d.s.id}-${d.h}`} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '7px 12px', borderRadius: 10,
+                        background: 'var(--green-soft, var(--bg-soft))',
+                      }}>
+                        <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, minWidth: 38, flexShrink: 0 }}>
+                          {d.h.slice(0, 5)}
+                        </span>
+                        <span style={{ flex: 1, fontSize: 12, color: 'var(--muted)' }}>{d.s.nome}</span>
+                        <i className="ti ti-check" style={{ fontSize: 12, color: 'var(--green)', flexShrink: 0 }} aria-hidden="true"></i>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ height: '0.5px', background: 'var(--hair)', margin: '8px 0 12px' }} />
+            </div>
+          )}
 
           {/* Lista do dia */}
           <div style={{

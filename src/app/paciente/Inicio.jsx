@@ -39,7 +39,7 @@ export default function Inicio() {
   const [totalSupl,       setTotalSupl]       = useState(0);
   const [suplTomados,     setSuplTomados]     = useState(0);
   const [suplData,        setSuplData]        = useState([]);
-  const [suplLogsHojeIds, setSuplLogsHojeIds] = useState(new Set());
+  const [suplHorariosHojeMap, setSuplHorariosHojeMap] = useState(new Map());
   const [dmgModulo,    setDmgModulo]    = useState(null);
   const [glicemiaHoje, setGlicemiaHoje] = useState([]);
   const [rastreioIntestinalPendente, setRastreioIntestinalPendente] = useState(null);
@@ -89,7 +89,7 @@ export default function Inicio() {
           .eq('ativo', true)
           .order('ordem'),
         supabase.from('suplementos_logs')
-          .select('suplemento_id')
+          .select('suplemento_id, horario')
           .eq('paciente_id', pacienteId)
           .eq('data', hoje)
           .eq('tomado', true),
@@ -162,9 +162,20 @@ export default function Inicio() {
       const suplLista    = suplRes.data ?? [];
       const suplLogsList = suplLogsRes.data ?? [];
       setSuplData(suplLista);
-      setSuplLogsHojeIds(new Set(suplLogsList.map(l => l.suplemento_id)));
       setTotalSupl(suplLista.length);
-      setSuplTomados(suplLogsList.length);
+      // Mapa: suplId → Set de horários tomados hoje (null = sem horário)
+      const horMap = new Map();
+      for (const l of suplLogsList) {
+        if (!horMap.has(l.suplemento_id)) horMap.set(l.suplemento_id, new Set());
+        horMap.get(l.suplemento_id).add(l.horario ?? null);
+      }
+      setSuplHorariosHojeMap(horMap);
+      // suplTomados = suplementos com todas as doses do dia concluídas
+      setSuplTomados(suplLista.filter(s => {
+        const taken    = horMap.get(s.id) ?? new Set();
+        const expected = s.horarios?.length > 0 ? s.horarios : [null];
+        return expected.every(h => taken.has(h));
+      }).length);
 
       // Calcula streak (dias seguidos com todos cumpridos)
       const todosLogs = logsHojeRes.data ?? [];
@@ -713,37 +724,52 @@ export default function Inicio() {
               Suplementação de hoje
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-              {suplComHorario.filter(s => suplLogsHojeIds.has(s.id)).length} de {suplComHorario.length} registrados
+              {suplComHorario.filter(s => {
+                const taken = suplHorariosHojeMap.get(s.id) ?? new Set();
+                return (s.horarios ?? []).every(h => taken.has(h));
+              }).length} de {suplComHorario.length} completo{suplComHorario.length !== 1 ? 's' : ''}
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {suplComHorario.map(s => {
-              const tomado   = suplLogsHojeIds.has(s.id);
-              const horarios = (s.horarios ?? []).map(h => h.slice(0, 5)).join(' · ');
+              const taken     = suplHorariosHojeMap.get(s.id) ?? new Set();
+              const doneCount = (s.horarios ?? []).filter(h => taken.has(h)).length;
+              const totalDoses = (s.horarios ?? []).length;
+              const completo  = doneCount === totalDoses;
+              const parcial   = doneCount > 0 && !completo;
+              const horarios  = (s.horarios ?? []).map(h => h.slice(0, 5)).join(' · ');
               return (
                 <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>{s.nome}</div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{horarios}</div>
+                    {horarios && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{horarios}</div>}
                   </div>
-                  {tomado ? (
+                  {completo ? (
                     <span style={{
                       fontSize: 11, padding: '4px 10px', borderRadius: 20,
                       color: 'var(--green)', fontWeight: 500,
                       border: '0.5px solid var(--green)',
                     }}>
-                      Registrado ✓
+                      Completo ✓
+                    </span>
+                  ) : parcial ? (
+                    <span style={{
+                      fontSize: 11, padding: '4px 10px', borderRadius: 20,
+                      color: 'var(--orange, #d97706)', fontWeight: 500,
+                      border: '0.5px solid var(--orange, #d97706)',
+                    }}>
+                      {doneCount}/{totalDoses} doses
                     </span>
                   ) : (
                     <button
-                      onClick={() => registrarSupl(s.id)}
+                      onClick={() => navigate('/paciente/suplementos')}
                       style={{
                         fontSize: 11, padding: '4px 12px', borderRadius: 20,
                         background: 'var(--gold-deep)', color: '#fff',
                         border: 'none', cursor: 'pointer',
                         fontFamily: 'var(--font-sans)', fontWeight: 500,
                       }}>
-                      Registrar
+                      Ver doses
                     </button>
                   )}
                 </div>
