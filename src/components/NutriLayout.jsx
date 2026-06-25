@@ -20,9 +20,10 @@ const NAV_CONFIG = [
   {
     group: 'Recursos Clínicos',
     items: [
-      { id: 'biblioteca',    path: '/nutri/biblioteca',    label: 'Biblioteca Clínica', icon: 'book-2' },
-      { id: 'protocolos',    path: '/nutri/protocolos',    label: 'Protocolos',         icon: 'clipboard-heart' },
-      { id: 'alem-nutricao', path: '/nutri/alem-nutricao', label: 'Além da Nutrição',   icon: 'star' },
+      { id: 'biblioteca',      path: '/nutri/biblioteca',      label: 'Biblioteca Clínica', icon: 'book-2'           },
+      { id: 'protocolos',      path: '/nutri/protocolos',      label: 'Protocolos',         icon: 'clipboard-heart'  },
+      { id: 'memoria-clinica', path: '/nutri/memoria-clinica', label: 'Memória Clínica',    icon: 'brain'            },
+      { id: 'alem-nutricao',   path: '/nutri/alem-nutricao',   label: 'Além da Nutrição',   icon: 'star'             },
     ],
   },
   {

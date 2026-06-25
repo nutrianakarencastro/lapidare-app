@@ -29,6 +29,7 @@ import Previsibilidade from './app/nutri/Previsibilidade.jsx';
 import Financeiro from './app/nutri/Financeiro.jsx';
 import Biblioteca from './app/nutri/Biblioteca.jsx';
 import Protocolos from './app/nutri/Protocolos.jsx';
+import MemoriaClinica from './app/nutri/MemoriaClinica.jsx';
 import Personalizacao from './app/nutri/Personalizacao.jsx';
 
 import Inicio from './app/paciente/Inicio.jsx';
@@ -90,6 +91,7 @@ export default function App() {
             <Route path="/nutri/financeiro" element={<Financeiro />} />
             <Route path="/nutri/biblioteca" element={<Biblioteca />} />
             <Route path="/nutri/protocolos" element={<Protocolos />} />
+            <Route path="/nutri/memoria-clinica" element={<MemoriaClinica />} />
             <Route path="/nutri/personalizacao"  element={<Personalizacao />} />
             <Route path="/nutri/alem-nutricao"  element={<AlemNutricaoNutri />} />
           </Route>
