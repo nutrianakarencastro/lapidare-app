@@ -233,8 +233,8 @@ const PERIODI_LABEL = {
   sob_demanda: 'Sob demanda',
 };
 
-function SheetDiario({ inicial, onSalvar, onFechar, salvando }) {
-  const [form, setForm] = useState({ ...FORM_DIARIO_VAZIO, ...inicial });
+function SheetDiario({ logs, onSalvar, onFechar, salvando }) {
+  const [form, setForm] = useState({ ...FORM_DIARIO_VAZIO });
   const [modoData,   setModoData]   = useState('hoje');
   const [dataCustom, setDataCustom] = useState(dataHojeISO());
 
@@ -246,6 +246,20 @@ function SheetDiario({ inicial, onSalvar, onFechar, salvando }) {
   const labelData = modoData === 'hoje' ? 'hoje'
     : modoData === 'ontem' ? 'ontem'
     : new Date(dataCustom + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+  // Quando a data muda: carrega o log existente (filtrando campos técnicos)
+  // ou limpa o formulário. Depende de [dataRegistro, logs] para reagir a
+  // mudanças de data e a recargas de dados após um save.
+  useEffect(() => {
+    const log = logs?.find(l => l.data === dataRegistro && l.tipo === 'diario');
+    const campos = { ...FORM_DIARIO_VAZIO };
+    if (log) {
+      for (const k of Object.keys(campos)) {
+        if (log[k] !== undefined) campos[k] = log[k];
+      }
+    }
+    setForm(campos);
+  }, [dataRegistro, logs]);
 
   function set(campo, valor) {
     setForm(f => ({ ...f, [campo]: valor }));
@@ -955,7 +969,7 @@ export default function Intestino() {
       {/* Sheets */}
       {sheet === 'diario' && !modoSomenteRastreio && (
         <SheetDiario
-          inicial={logHoje ?? {}}
+          logs={logs}
           onSalvar={salvarDiario}
           onFechar={() => setSheet(null)}
           salvando={salvando}
