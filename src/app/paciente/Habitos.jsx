@@ -10,6 +10,8 @@ export default function Habitos() {
   const pacienteId = profile?.id;
   const [habitos, setHabitos] = useState(null);
   const [logs, setLogs] = useState([]);
+  const [modoData,   setModoData]   = useState('hoje');
+  const [dataCustom, setDataCustom] = useState(dataHojeISO());
 
   async function carregar() {
     if (!user) return;
@@ -37,8 +39,7 @@ export default function Habitos() {
   }, [logs]);
 
   async function setValor(habito, valor) {
-    const hoje = HOJE();
-    const atual = logMap[habito.id]?.[hoje];
+    const atual = logMap[habito.id]?.[dataRegistro];
 
     // Boolean toggle-off → passa 0 ao RPC (que faz delete em habitos_logs)
     const finalValor = (habito.tipo === 'boolean' && atual !== undefined && atual === valor) ? 0 : valor;
@@ -47,7 +48,7 @@ export default function Habitos() {
     await supabase.rpc('paciente_marcar_habito_e_meta', {
       p_habito_id: habito.id,
       p_valor:     finalValor,
-      p_data:      hoje,
+      p_data:      dataRegistro,
     });
     carregar();
   }
@@ -61,8 +62,16 @@ export default function Habitos() {
   }
 
   const hoje = HOJE();
+  const dOntem = formatarDataISO(new Date(Date.now() - 86_400_000));
+  const dataRegistro = modoData === 'hoje'  ? hoje
+    : modoData === 'ontem' ? dOntem
+    : dataCustom;
+  const labelData = modoData === 'hoje'  ? 'hoje'
+    : modoData === 'ontem' ? 'ontem'
+    : new Date(dataCustom + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
   const total = habitos?.length ?? 0;
-  const cumpridos = (habitos ?? []).filter(h => cumpriu(h, logMap[h.id]?.[hoje])).length;
+  const cumpridos = (habitos ?? []).filter(h => cumpriu(h, logMap[h.id]?.[dataRegistro])).length;
 
   // Streak (dias seguidos com TUDO cumprido)
   const streak = useMemo(() => {
@@ -107,6 +116,45 @@ export default function Habitos() {
 
   return (
     <div style={{ padding: '0 16px' }}>
+      {/* Seletor de data */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {[
+            { key: 'hoje',   label: 'Hoje'         },
+            { key: 'ontem',  label: 'Ontem'        },
+            { key: 'custom', label: 'Escolher data' },
+          ].map(op => (
+            <button
+              key={op.key}
+              onClick={() => setModoData(op.key)}
+              style={{
+                padding: '6px 14px', borderRadius: 99, border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: modoData === op.key ? 600 : 400,
+                fontFamily: 'var(--font-sans)',
+                background: modoData === op.key ? 'var(--ink)' : 'var(--bg-soft)',
+                color: modoData === op.key ? 'var(--white, #fff)' : 'var(--muted)',
+              }}
+            >
+              {op.label}
+            </button>
+          ))}
+        </div>
+        {modoData === 'custom' && (
+          <input
+            type="date"
+            max={hoje}
+            value={dataCustom}
+            onChange={e => setDataCustom(e.target.value)}
+            style={{
+              marginTop: 8, fontSize: 13, padding: '6px 10px',
+              borderRadius: 8, border: '1px solid var(--hair)',
+              fontFamily: 'var(--font-sans)', background: 'var(--bg-soft)',
+              color: 'var(--ink)',
+            }}
+          />
+        )}
+      </div>
+
       {/* Card resumo */}
       <div style={{
         background: 'linear-gradient(135deg, var(--gold-soft, var(--bg-soft)), var(--white))',
@@ -116,7 +164,7 @@ export default function Habitos() {
         textAlign: 'center',
       }}>
         <div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 500 }}>
-          Hoje
+          {modoData === 'hoje' ? 'Hoje' : labelData}
         </div>
         <div style={{ fontSize: 36, fontWeight: 600, color: 'var(--ink)', lineHeight: 1, margin: '4px 0' }}>
           {cumpridos}<span style={{ fontSize: 18, color: 'var(--muted)', fontWeight: 400 }}>/{total}</span>
@@ -142,11 +190,11 @@ export default function Habitos() {
       <div style={{
         fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase',
         color: 'var(--muted)', fontWeight: 500, margin: '4px 4px 8px',
-      }}>Hábitos de hoje</div>
+      }}>Hábitos de {labelData}</div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
         {habitos.map(h => {
-          const valor = logMap[h.id]?.[hoje];
+          const valor = logMap[h.id]?.[dataRegistro];
           const ok = cumpriu(h, valor);
           return (
             <div key={h.id} style={{
