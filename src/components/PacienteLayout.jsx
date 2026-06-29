@@ -67,6 +67,46 @@ export default function PacienteLayout() {
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
   const [modulosEspeciaisAtivos, setModulosEspeciaisAtivos] = useState(new Set());
+  const [pendenciaBadge, setPendenciaBadge] = useState(false);
+
+  // Verifica pendências a cada navegação para manter o badge atualizado.
+  // Usa apenas dois selects leves; não marca nada como lido.
+  useEffect(() => {
+    if (!profile?.id) return;
+    let active = true;
+    const pacienteId = profile.id;
+    const temAcessoCheckin = podeAcessar(profile.acesso_utera, 'checkin');
+
+    Promise.all([
+      supabase
+        .from('checkin_envios')
+        .select('feedback_lido_em, feedback_atualizado_em')
+        .eq('paciente_id', pacienteId)
+        .not('feedback', 'is', null)
+        .order('feedback_atualizado_em', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      temAcessoCheckin
+        ? supabase
+            .from('checkin_envios')
+            .select('id', { count: 'exact', head: true })
+            .eq('paciente_id', pacienteId)
+            .is('respondido_em', null)
+        : Promise.resolve({ count: 0 }),
+    ]).then(([feedbackRes, checkinRes]) => {
+      if (!active) return;
+      const fb = feedbackRes.data;
+      const temFeedbackNaoLido = !!fb && (
+        !fb.feedback_lido_em ||
+        (fb.feedback_atualizado_em &&
+         new Date(fb.feedback_atualizado_em) > new Date(fb.feedback_lido_em))
+      );
+      const temCheckinPendente = (checkinRes.count ?? 0) > 0;
+      setPendenciaBadge(temFeedbackNaoLido || temCheckinPendente);
+    });
+
+    return () => { active = false; };
+  }, [profile, location.pathname]);
 
   useEffect(() => {
     if (!profile) return;
@@ -145,7 +185,17 @@ export default function PacienteLayout() {
               className={({ isActive }) => 'tab' + (isActive ? ' active' : '')}
               role="tab"
             >
-              <i className={`ti ti-${t.icon}`} aria-hidden="true"></i>
+              <span style={{ position: 'relative', display: 'inline-flex' }}>
+                <i className={`ti ti-${t.icon}`} aria-hidden="true"></i>
+                {t.id === 'inicio' && pendenciaBadge && (
+                  <span style={{
+                    position: 'absolute', top: -3, right: -5,
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: '#c4616e', border: '2px solid var(--bg)',
+                    pointerEvents: 'none',
+                  }} />
+                )}
+              </span>
               <span>{t.label}</span>
             </NavLink>
           );
