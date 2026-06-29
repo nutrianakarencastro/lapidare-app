@@ -233,10 +233,15 @@ const PERIODI_LABEL = {
   sob_demanda: 'Sob demanda',
 };
 
-function SheetDiario({ logs, onSalvar, onFechar, salvando }) {
+function SheetDiario({ logs, onSalvar, onFechar, salvando, dataInicial }) {
   const [form, setForm] = useState({ ...FORM_DIARIO_VAZIO });
-  const [modoData,   setModoData]   = useState('hoje');
-  const [dataCustom, setDataCustom] = useState(dataHojeISO());
+  const [modoData, setModoData] = useState(() => {
+    if (!dataInicial) return 'hoje';
+    const dh = dataHojeISO();
+    const do_ = formatarDataISO(new Date(Date.now() - 86_400_000));
+    return dataInicial === dh ? 'hoje' : dataInicial === do_ ? 'ontem' : 'custom';
+  });
+  const [dataCustom, setDataCustom] = useState(dataInicial ?? dataHojeISO());
 
   const dHoje  = dataHojeISO();
   const dOntem = formatarDataISO(new Date(Date.now() - 86_400_000));
@@ -560,6 +565,7 @@ export default function Intestino() {
   const [aviso, setAviso] = useState(null);
   const [rastreioEnviado, setRastreioEnviado] = useState(false);
   const [moduloDiario, setModuloDiario] = useState(null);
+  const [sheetDataInicial, setSheetDataInicial] = useState(null);
 
   const dataInicio30 = (() => {
     const d = new Date();
@@ -672,6 +678,30 @@ export default function Intestino() {
 
   const temAcessoIntestino  = podeAcessar(profile?.acesso_utera, 'intestino');
   const modoDiarioRecorrente = !!moduloDiario;
+
+  // ── Linha do tempo ────────────────────────────────────────────────────────
+  const logPorData = Object.fromEntries(diarios.map(l => [l.data, l]));
+
+  const ultimos7Dias = Array.from({ length: 7 }, (_, i) =>
+    formatarDataISO(new Date(Date.now() - (6 - i) * 86_400_000))
+  );
+
+  const mesAtual = dataHojeISO().slice(0, 7);
+  const diasEvacuouMes = diarios.filter(l => l.data.startsWith(mesAtual) && l.evacuou).length;
+
+  // Sequência atual: conta registros consecutivos com mesmo padrão (evacuou ou não),
+  // sem inferir constipação em dias sem registro.
+  const sequenciaAtual = (() => {
+    const sorted = [...diarios].sort((a, b) => b.data.localeCompare(a.data));
+    if (!sorted.length) return null;
+    const padrao = sorted[0].evacuou;
+    let count = 0;
+    for (const l of sorted) {
+      if (l.evacuou === padrao) count++;
+      else break;
+    }
+    return { evacuando: padrao, count };
+  })();
   const modoSomenteRastreio  = !temAcessoIntestino && !modoDiarioRecorrente && !!solicitacaoPendente;
 
   // Tier essencial sem módulo que acabou de responder rastreio → tela de confirmação
@@ -849,6 +879,54 @@ export default function Intestino() {
         <i className="ti ti-chevron-right" style={{ opacity: 0.6 }} aria-hidden="true" />
       </button>}
 
+      {/* Linha do tempo — 7 dias */}
+      {!modoSomenteRastreio && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{
+            fontSize: 10, letterSpacing: '.18em', textTransform: 'uppercase',
+            color: 'var(--text3)', fontWeight: 500, marginBottom: 10,
+          }}>Últimos 7 dias</div>
+          <div className="card" style={{ padding: '14px 16px' }}>
+            <TimelineIntestinal
+              dias7={ultimos7Dias}
+              logPorData={logPorData}
+              onDiaClick={iso => { setSheetDataInicial(iso); setSheet('diario'); }}
+            />
+            {/* Legenda */}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10, marginBottom: 10 }}>
+              {[
+                { cor: '#7ea85a', label: 'Evacuou bem' },
+                { cor: '#c4a882', label: 'Com alteração' },
+                { cor: '#8c7b6b', label: 'Não evacuou' },
+              ].map(({ cor, label }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: cor, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>{label}</span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: 9, height: 9, borderRadius: '50%', border: '1.5px solid var(--border)', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>Sem registro</span>
+              </div>
+            </div>
+            {/* Indicador de sequência */}
+            {sequenciaAtual && (
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 2 }}>
+                {sequenciaAtual.evacuando
+                  ? `${sequenciaAtual.count} dia${sequenciaAtual.count !== 1 ? 's' : ''} seguido${sequenciaAtual.count !== 1 ? 's' : ''} evacuando`
+                  : `${sequenciaAtual.count} dia${sequenciaAtual.count !== 1 ? 's' : ''} registrado${sequenciaAtual.count !== 1 ? 's' : ''} sem evacuação`}
+              </div>
+            )}
+            {/* Resumo mensal */}
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+              Este mês:{' '}
+              <span style={{ fontWeight: 600, color: 'var(--dark)' }}>{diasEvacuouMes}</span>
+              {` dia${diasEvacuouMes !== 1 ? 's' : ''} com evacuação`}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Resumo: sem dados */}
       {!modoSomenteRastreio && !diarios.length && (
         <div className="card empty-card">
@@ -971,8 +1049,9 @@ export default function Intestino() {
         <SheetDiario
           logs={logs}
           onSalvar={salvarDiario}
-          onFechar={() => setSheet(null)}
+          onFechar={() => { setSheet(null); setSheetDataInicial(null); }}
           salvando={salvando}
+          dataInicial={sheetDataInicial}
         />
       )}
       {sheet === 'rastreio' && (
@@ -982,6 +1061,60 @@ export default function Intestino() {
           salvando={salvando}
         />
       )}
+    </div>
+  );
+}
+
+function TimelineIntestinal({ dias7, logPorData, onDiaClick }) {
+  const hoje = dataHojeISO();
+
+  function tipoBolinha(log) {
+    if (!log) return 'vazio';
+    if (!log.evacuou) return 'cinza';
+    const alterado =
+      (log.bristol && (log.bristol <= 2 || log.bristol >= 6)) ||
+      log.esforco ||
+      (log.dor_abdominal ?? 0) >= 2 ||
+      log.urgencia ||
+      log.esvaziamento_incompleto;
+    return alterado ? 'ambar' : 'verde';
+  }
+
+  const COR   = { verde: '#7ea85a', ambar: '#c4a882', cinza: '#8c7b6b', vazio: 'transparent' };
+  const BORDA = { verde: '#7ea85a', ambar: '#c4a882', cinza: '#8c7b6b', vazio: 'var(--border)' };
+
+  return (
+    <div style={{ display: 'flex', gap: 4, justifyContent: 'space-between' }}>
+      {dias7.map(iso => {
+        const log   = logPorData[iso];
+        const tipo  = tipoBolinha(log);
+        const eHoje = iso === hoje;
+        const d     = new Date(iso + 'T12:00:00');
+        const diaSem = d.toLocaleDateString('pt-BR', { weekday: 'short' })
+          .replace('.', '').slice(0, 3);
+        const dNum  = d.getDate();
+
+        return (
+          <div key={iso} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <button
+              onClick={() => onDiaClick(iso)}
+              title={iso}
+              style={{
+                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                background: COR[tipo],
+                border: `2px solid ${BORDA[tipo]}`,
+                outline: eHoje ? '2.5px solid var(--dark)' : 'none',
+                outlineOffset: 2,
+                cursor: 'pointer', padding: 0,
+              }}
+            />
+            <div style={{ fontSize: 9, color: eHoje ? 'var(--dark)' : 'var(--text3)', fontWeight: eHoje ? 700 : 400, textTransform: 'uppercase' }}>
+              {diaSem}
+            </div>
+            <div style={{ fontSize: 9, color: 'var(--text4)' }}>{dNum}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
