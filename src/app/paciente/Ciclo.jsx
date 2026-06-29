@@ -364,6 +364,7 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
 
   const [mostrarSeletorFim, setMostrarSeletorFim] = useState(false);
   const [dataFimSel, setDataFimSel] = useState('');
+  const [confirmRemover, setConfirmRemover] = useState(false);
 
   async function salvarSangramento() {
     setSalvandoSang(true);
@@ -435,7 +436,6 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
 
   async function removerPeriodo() {
     if (!periodoExistente) return;
-    if (!window.confirm('Remover este período?')) return;
     setBusy(true);
     await supabase.from('ciclo_periodos').delete().eq('id', periodoExistente.id);
     setBusy(false);
@@ -471,7 +471,46 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
           <div style={{ marginBottom: 14 }} />
         )}
 
-        {mostrarSeletorFim ? (
+        {confirmRemover ? (
+          /* ── Confirmação de remoção de período ── */
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--red)', marginBottom: 10 }}>
+              Remover período menstrual?
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.6, marginBottom: 20 }}>
+              Esta ação removerá o período menstrual registrado e poderá recalcular o ciclo atual,
+              modificando associações com registros anteriores. Os dados do período não poderão
+              ser recuperados automaticamente.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setConfirmRemover(false)}
+                style={{
+                  flex: 1, padding: '11px 0', borderRadius: 11,
+                  background: 'var(--bg-soft)', color: 'var(--muted)',
+                  border: '0.5px solid var(--hair)', fontSize: 13, fontWeight: 500,
+                  cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={removerPeriodo}
+                disabled={busy}
+                style={{
+                  flex: 2, padding: '11px 0', borderRadius: 11,
+                  background: busy ? 'var(--muted-2)' : 'var(--red)',
+                  color: '#fff', border: 'none',
+                  fontSize: 13, fontWeight: 500,
+                  cursor: busy ? 'default' : 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                }}
+              >
+                {busy ? 'Removendo…' : 'Continuar'}
+              </button>
+            </div>
+          </div>
+        ) : mostrarSeletorFim ? (
           /* ── Seletor de data de fim da menstruação ── */
           <div>
             <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, marginBottom: 12 }}>
@@ -693,7 +732,7 @@ function ModalDia({ dia, periodos, sintomaDia, onFechar, onSalvarPeriodo, onAbri
               />
             )}
             {ePeriodo && (
-              <button onClick={removerPeriodo} disabled={busy}
+              <button onClick={() => setConfirmRemover(true)} disabled={busy}
                 style={{
                   width: '100%', padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
                   background: 'var(--red-soft)', color: 'var(--red)',
