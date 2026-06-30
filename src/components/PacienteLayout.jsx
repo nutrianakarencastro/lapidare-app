@@ -93,7 +93,12 @@ export default function PacienteLayout() {
             .eq('paciente_id', pacienteId)
             .is('respondido_em', null)
         : Promise.resolve({ count: 0 }),
-    ]).then(([feedbackRes, checkinRes]) => {
+      supabase
+        .from('intestino_rastreio_solicitacoes')
+        .select('id', { count: 'exact', head: true })
+        .eq('paciente_id', pacienteId)
+        .is('respondido_em', null),
+    ]).then(([feedbackRes, checkinRes, rastreioRes]) => {
       if (!active) return;
       const fb = feedbackRes.data;
       const temFeedbackNaoLido = !!fb && (
@@ -101,8 +106,9 @@ export default function PacienteLayout() {
         (fb.feedback_atualizado_em &&
          new Date(fb.feedback_atualizado_em) > new Date(fb.feedback_lido_em))
       );
-      const temCheckinPendente = (checkinRes.count ?? 0) > 0;
-      setPendenciaBadge(temFeedbackNaoLido || temCheckinPendente);
+      const temCheckinPendente  = (checkinRes.count  ?? 0) > 0;
+      const temRastreioPendente = (rastreioRes.count ?? 0) > 0;
+      setPendenciaBadge(temFeedbackNaoLido || temCheckinPendente || temRastreioPendente);
     });
 
     return () => { active = false; };

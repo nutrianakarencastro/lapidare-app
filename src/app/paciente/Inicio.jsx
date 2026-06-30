@@ -47,7 +47,7 @@ export default function Inicio() {
   useEffect(() => {
     let active = true;
     async function load() {
-      if (!user) return;
+      if (!user || !pacienteId) return;
       const agora  = new Date().toISOString();
       const hoje   = dataHojeISO();
       const amanha = formatarDataISO(new Date(Date.now() + 86_400_000));
@@ -197,7 +197,7 @@ export default function Inicio() {
     }
     load();
     return () => { active = false; };
-  }, [user]);
+  }, [user, pacienteId]);
 
   // Marca a consulta como visualizada na primeira vez que o card aparece
   useEffect(() => {
