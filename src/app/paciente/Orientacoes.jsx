@@ -16,6 +16,8 @@ export default function OrientacoesPaciente() {
   const [pdfUrls,     setPdfUrls]     = useState({});
   const [audioUrls,   setAudioUrls]   = useState({});
   const [thumbUrls,   setThumbUrls]   = useState({});
+  const [pdfErrors,   setPdfErrors]   = useState({});
+  const [audioErrors, setAudioErrors] = useState({});
 
   async function carregar() {
     if (!user) return;
@@ -77,34 +79,58 @@ export default function OrientacoesPaciente() {
 
   useEffect(() => { carregar(); }, [user]);
 
+  async function gerarUrlPdf(at) {
+    const o = at.orientacao;
+    if (!o?.pdf_path) return false;
+    setPdfErrors(prev => { const n = { ...prev }; delete n[at.id]; return n; });
+    const { data, error } = await supabase.storage
+      .from('orientacoes').createSignedUrl(o.pdf_path, 300);
+    if (data?.signedUrl) {
+      setPdfUrls(prev => ({ ...prev, [at.id]: data.signedUrl }));
+      return true;
+    }
+    setPdfErrors(prev => ({ ...prev, [at.id]: error?.message ?? 'Não foi possível carregar' }));
+    return false;
+  }
+
+  async function gerarUrlAudio(at) {
+    const o = at.orientacao;
+    if (!o?.audio_path) return false;
+    setAudioErrors(prev => { const n = { ...prev }; delete n[at.id]; return n; });
+    const { data, error } = await supabase.storage
+      .from('orientacoes').createSignedUrl(o.audio_path, 300);
+    if (data?.signedUrl) {
+      setAudioUrls(prev => ({ ...prev, [at.id]: data.signedUrl }));
+      return true;
+    }
+    setAudioErrors(prev => ({ ...prev, [at.id]: error?.message ?? 'Não foi possível carregar' }));
+    return false;
+  }
+
   async function abrirFechar(at) {
     const novaAberta = abertaId === at.id ? null : at.id;
     setAbertaId(novaAberta);
     if (!novaAberta) return;
 
-    // Marcar como visualizada via RPC
-    if (at.status === 'nao_visualizada') {
+    const o = at.orientacao;
+    if (!o) return;
+
+    // Gera URLs antes de marcar como visualizada.
+    // Considera URL já existente em estado (reabrir item fechado).
+    let urlGerada = (o.pdf_path && !!pdfUrls[at.id]) || (o.audio_path && !!audioUrls[at.id]);
+    if (o.pdf_path   && !pdfUrls[at.id])   urlGerada = (await gerarUrlPdf(at))   || urlGerada;
+    if (o.audio_path && !audioUrls[at.id]) urlGerada = (await gerarUrlAudio(at)) || urlGerada;
+
+    // Só marca como "Visto" se o conteúdo abriu corretamente, ou se não precisa de URL
+    // (vídeo externo ou item sem mídia — apenas descrição/texto).
+    const temConteudoSemUrl = !!o.video_url || (!o.pdf_path && !o.audio_path);
+    if (at.status === 'nao_visualizada' && (urlGerada || temConteudoSemUrl)) {
       await supabase.rpc('marcar_orientacao_vista', { p_atribuicao_id: at.id });
       setAtribuicoes(prev => prev.map(a =>
         a.id === at.id
           ? { ...a, status: 'visualizada', visto_pela_paciente_em: new Date().toISOString() }
           : a
       ));
-    }
-
-    const o = at.orientacao;
-    if (!o) return;
-
-    if (o.pdf_path && !pdfUrls[at.id]) {
-      const { data } = await supabase.storage
-        .from('orientacoes').createSignedUrl(o.pdf_path, 300);
-      if (data?.signedUrl) setPdfUrls(prev => ({ ...prev, [at.id]: data.signedUrl }));
-    }
-
-    if (o.audio_path && !audioUrls[at.id]) {
-      const { data } = await supabase.storage
-        .from('orientacoes').createSignedUrl(o.audio_path, 300);
-      if (data?.signedUrl) setAudioUrls(prev => ({ ...prev, [at.id]: data.signedUrl }));
     }
   }
 
@@ -265,6 +291,27 @@ export default function OrientacoesPaciente() {
                         <i className="ti ti-external-link"
                            style={{ fontSize: 14, color: 'var(--muted)', flexShrink: 0 }} aria-hidden="true" />
                       </a>
+                    ) : pdfErrors[at.id] ? (
+                      <div style={{
+                        padding: '10px 12px', borderRadius: 10,
+                        background: '#fff5f5', border: '0.5px solid #f5c0c0',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                      }}>
+                        <i className="ti ti-alert-circle"
+                           style={{ fontSize: 18, color: '#e05252', flexShrink: 0 }} aria-hidden="true" />
+                        <span style={{ flex: 1, fontSize: 12, color: '#e05252' }}>
+                          Não foi possível carregar este arquivo
+                        </span>
+                        <button onClick={() => gerarUrlPdf(at)}
+                          style={{
+                            fontSize: 11, padding: '4px 10px', borderRadius: 8,
+                            border: '0.5px solid #e05252', background: 'none',
+                            color: '#e05252', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                            flexShrink: 0,
+                          }}>
+                          Tentar novamente
+                        </button>
+                      </div>
                     ) : (
                       <div style={{ padding: '8px 12px', borderRadius: 10,
                         background: 'var(--bg-soft)', fontSize: 12, color: 'var(--muted)' }}>
@@ -315,6 +362,27 @@ export default function OrientacoesPaciente() {
                         <audio controls style={{ width: '100%' }} src={audioUrls[at.id]}>
                           Seu navegador não suporta áudio.
                         </audio>
+                      </div>
+                    ) : audioErrors[at.id] ? (
+                      <div style={{
+                        padding: '10px 12px', borderRadius: 10,
+                        background: '#f5f3ff', border: '0.5px solid #ddd6fe',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                      }}>
+                        <i className="ti ti-alert-circle"
+                           style={{ fontSize: 18, color: '#7c3aed', flexShrink: 0 }} aria-hidden="true" />
+                        <span style={{ flex: 1, fontSize: 12, color: '#7c3aed' }}>
+                          Não foi possível carregar este arquivo
+                        </span>
+                        <button onClick={() => gerarUrlAudio(at)}
+                          style={{
+                            fontSize: 11, padding: '4px 10px', borderRadius: 8,
+                            border: '0.5px solid #7c3aed', background: 'none',
+                            color: '#7c3aed', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                            flexShrink: 0,
+                          }}>
+                          Tentar novamente
+                        </button>
                       </div>
                     ) : (
                       <div style={{ padding: '8px 12px', borderRadius: 10,
