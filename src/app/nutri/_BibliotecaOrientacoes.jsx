@@ -10,11 +10,6 @@ const inpSt = {
 };
 const taSt = { ...inpSt, resize: 'vertical', minHeight: 64 };
 
-const STATUS_PILL = {
-  nao_visualizada: { label: 'Não visualizada', bg: '#f3f4f6', color: '#6b7280' },
-  visualizada:     { label: 'Visualizada',     bg: '#dbeafe', color: '#1d4ed8' },
-  concluida:       { label: 'Concluída',        bg: '#dcfce7', color: '#166534' },
-};
 
 function formVazio() {
   return { titulo: '', descricao: '', categoria: '', subcategoria: '', tags: '', favorita: false, video_url: '', objetivos_relacionados: '', sintomas_relacionados: '' };
@@ -93,9 +88,12 @@ function FormOrientacao({ nutriId, editando, onSalvo, onCancelar }) {
     return false;
   }
 
-  async function uploadArquivo(file, path) {
-    const { error } = await supabase.storage.from('orientacoes').upload(path, file, { upsert: true });
-    return error ? null : path;
+  async function uploadArquivo(arquivo, caminho) {
+    const { error } = await supabase.storage
+      .from('orientacoes')
+      .upload(caminho, arquivo, { upsert: true });
+
+    return error ? null : caminho;
   }
 
   async function salvar() {
@@ -130,7 +128,8 @@ function FormOrientacao({ nutriId, editando, onSalvo, onCancelar }) {
     if (pdfFile) {
       if (editando?.pdf_path) await supabase.storage.from('orientacoes').remove([editando.pdf_path]);
       const p = await uploadArquivo(pdfFile, `${nutriId}/${targetId}/pdf.pdf`);
-      if (p) { updates.pdf_path = p; updates.pdf_nome = pdfFile.name; }
+      if (!p) { setSalvando(false); setFeedback({ tipo: 'erro', msg: 'Falha ao enviar o PDF. Verifique o arquivo e tente novamente.' }); return; }
+      updates.pdf_path = p; updates.pdf_nome = pdfFile.name;
     } else if (removendoPdf && editando?.pdf_path) {
       await supabase.storage.from('orientacoes').remove([editando.pdf_path]);
       updates.pdf_path = null; updates.pdf_nome = null;
@@ -140,7 +139,8 @@ function FormOrientacao({ nutriId, editando, onSalvo, onCancelar }) {
       if (editando?.audio_path) await supabase.storage.from('orientacoes').remove([editando.audio_path]);
       const ext = audioFile.name.split('.').pop().toLowerCase() || 'mp3';
       const p = await uploadArquivo(audioFile, `${nutriId}/${targetId}/audio.${ext}`);
-      if (p) { updates.audio_path = p; updates.audio_nome = audioFile.name; }
+      if (!p) { setSalvando(false); setFeedback({ tipo: 'erro', msg: 'Falha ao enviar o áudio. Verifique o arquivo e tente novamente.' }); return; }
+      updates.audio_path = p; updates.audio_nome = audioFile.name;
     } else if (removendoAudio && editando?.audio_path) {
       await supabase.storage.from('orientacoes').remove([editando.audio_path]);
       updates.audio_path = null; updates.audio_nome = null;
@@ -237,7 +237,7 @@ function FormOrientacao({ nutriId, editando, onSalvo, onCancelar }) {
               </button>
             </div>
           ) : (
-            <input key={fileKeys.audio} type="file" accept="audio/*"
+            <input key={fileKeys.audio} type="file" accept="audio/mpeg,audio/mp4,audio/wav,audio/ogg,.mp3,.m4a,.mp4,.wav,.ogg"
               style={{ fontSize: 12 }}
               onChange={e => { setAudioFile(e.target.files[0] ?? null); setRemovendoAudio(false); }} />
           )}
