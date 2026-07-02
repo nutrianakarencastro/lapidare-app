@@ -11,14 +11,11 @@ export default function Login({ context = 'generic' }) {
   const { session, role, loading: sessionLoading } = useSession();
   const tema = useTheme();
 
-  const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
-  const [nome, setNome] = useState('');
-  const [crn, setCrn] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [erro, setErro] = useState(null);
-  const [aviso, setAviso] = useState(location.state?.aviso ?? null);
+  const [email,  setEmail]  = useState('');
+  const [senha,  setSenha]  = useState('');
+  const [busy,   setBusy]   = useState(false);
+  const [erro,   setErro]   = useState(null);
+  const aviso = location.state?.aviso ?? null;
 
   // Sessão existe mas o role não é o esperado neste contexto — mostra aviso em vez de redirecionar
   const isWrongRole = (
@@ -71,41 +68,15 @@ export default function Login({ context = 'generic' }) {
     }
   }
 
-  async function handleSignUp(e) {
-    e.preventDefault();
-    setErro(null);
-    setAviso(null);
-    if (!nome.trim()) return setErro('Informe o nome completo.');
-    setBusy(true);
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password: senha,
-        options: { data: { role: 'nutri', nome: nome.trim(), crn: crn.trim() } },
-      });
-      setBusy(false);
-      if (error) return setErro(mensagemAmigavel(error));
-      if (!data.session) {
-        setAviso('Conta criada. Verifique seu email para confirmar e depois faça login.');
-        setMode('signin');
-      }
-    } catch (err) {
-      setBusy(false);
-      setErro(mensagemAmigavel(err));
-    }
-  }
-
   // ─── Títulos e subtítulos por contexto ─────────────────────────────────────
 
   const titulo = context === 'nutri'    ? 'Entrar como nutricionista'
     : context === 'paciente' ? 'Entrar no seu app'
-    : mode === 'signin'      ? 'Entrar'
-    : 'Criar conta';
+    : 'Entrar';
 
   const subtitulo = context === 'nutri'    ? 'Acesse seu painel'
     : context === 'paciente' ? 'App da paciente'
-    : mode === 'signin'      ? (tema.mensagem_login ?? 'Acesse seu painel ou app')
-    : 'Cadastro de nutricionista';
+    : (tema.mensagem_login ?? 'Acesse seu painel');
 
   // ─── Tela de aviso: sessão de role incompatível ────────────────────────────
 
@@ -192,54 +163,17 @@ export default function Login({ context = 'generic' }) {
           </div>
         ) : (
           <>
-            {/* Tabs Entrar / Criar conta — ocultas para context=paciente */}
-            {context !== 'paciente' && (
-              <div style={{
-                display: 'flex', gap: 2, background: 'var(--bg-deep)',
-                borderRadius: 10, padding: 3, marginBottom: 18,
-              }}>
-                {[
-                  { id: 'signin', label: 'Entrar' },
-                  { id: 'signup', label: 'Criar conta' },
-                ].map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => { setMode(t.id); setErro(null); setAviso(null); }}
-                    style={{
-                      flex: 1, padding: '7px 4px', fontSize: 12, fontWeight: 500,
-                      borderRadius: 8,
-                      color: mode === t.id ? 'var(--ink)' : 'var(--muted)',
-                      background: mode === t.id ? 'var(--paper)' : 'transparent',
-                      boxShadow: mode === t.id ? 'var(--shadow-sm)' : 'none',
-                      transition: 'all .2s',
-                    }}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <form onSubmit={context === 'paciente' || mode === 'signin' ? handleSignIn : handleSignUp}>
-              {mode === 'signup' && context !== 'paciente' && (
-                <>
-                  <Field label="Nome completo" value={nome} onChange={setNome} required autoFocus />
-                  <Field label="CRN" value={crn} onChange={setCrn} placeholder="opcional" />
-                </>
-              )}
-              <Field label="Email" type="email" value={email} onChange={setEmail} required
-                autoFocus={mode === 'signin' || context === 'paciente'} />
+            <form onSubmit={handleSignIn}>
+              <Field label="Email" type="email" value={email} onChange={setEmail} required autoFocus />
               <Field label="Senha" type="password" value={senha} onChange={setSenha} required minLength={6} />
 
-              {/* Link "Esqueci minha senha" — apenas em signin */}
-              {(mode === 'signin' || context === 'paciente') && (
-                <div style={{ textAlign: 'right', marginTop: -6, marginBottom: 14 }}>
-                  <Link to="/auth/esqueci-senha" style={{
-                    fontSize: 12, color: 'var(--muted)', textDecoration: 'none',
-                  }}>
-                    Esqueci minha senha
-                  </Link>
-                </div>
-              )}
+              <div style={{ textAlign: 'right', marginTop: -6, marginBottom: 14 }}>
+                <Link to="/auth/esqueci-senha" style={{
+                  fontSize: 12, color: 'var(--muted)', textDecoration: 'none',
+                }}>
+                  Esqueci minha senha
+                </Link>
+              </div>
 
               {erro && (
                 <div style={{
@@ -263,9 +197,10 @@ export default function Login({ context = 'generic' }) {
                 width: '100%', padding: '11px 18px',
                 background: 'var(--ink)', color: 'var(--bg-soft)',
                 borderRadius: 12, fontSize: 13, fontWeight: 500,
+                border: 'none', cursor: 'pointer',
                 opacity: busy ? .6 : 1, transition: 'opacity .15s',
               }}>
-                {busy ? '...' : (mode === 'signin' || context === 'paciente' ? 'Entrar' : 'Criar conta de nutri')}
+                {busy ? '...' : 'Entrar'}
               </button>
             </form>
 
