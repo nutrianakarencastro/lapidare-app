@@ -77,6 +77,10 @@ export default function PacienteLayout() {
     const pacienteId = profile.id;
     const temAcessoCheckin = podeAcessar(profile.acesso_utera, 'checkin');
 
+    const hojeISO = new Date().toISOString().slice(0, 10);
+    const n = new Date();
+    const hAtual = `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}:00`;
+
     Promise.all([
       supabase
         .from('checkin_envios')
@@ -100,7 +104,19 @@ export default function PacienteLayout() {
         .eq('paciente_id', pacienteId)
         .is('respondido_em', null)
         .is('cancelado_em', null),
-    ]).then(([feedbackRes, checkinRes, rastreioRes]) => {
+      supabase
+        .from('suplementos')
+        .select('id, horarios')
+        .eq('paciente_id', pacienteId)
+        .eq('ativo', true)
+        .not('horarios', 'eq', '{}'),
+      supabase
+        .from('suplementos_logs')
+        .select('suplemento_id, horario')
+        .eq('paciente_id', pacienteId)
+        .eq('data', hojeISO)
+        .eq('tomado', true),
+    ]).then(([feedbackRes, checkinRes, rastreioRes, suplRes, suplLogsRes]) => {
       if (!active) return;
       const fb = feedbackRes.data;
       const feedbackTimestamp = fb?.feedback_atualizado_em ?? fb?.feedback_em;
@@ -110,7 +126,18 @@ export default function PacienteLayout() {
       );
       const temCheckinPendente  = (checkinRes.count  ?? 0) > 0;
       const temRastreioPendente = (rastreioRes.count ?? 0) > 0;
-      setPendenciaBadge(temFeedbackNaoLido || temCheckinPendente || temRastreioPendente);
+
+      const suplLista = suplRes.data ?? [];
+      const logMap = new Map();
+      for (const l of suplLogsRes.data ?? []) {
+        if (!logMap.has(l.suplemento_id)) logMap.set(l.suplemento_id, new Set());
+        logMap.get(l.suplemento_id).add(l.horario);
+      }
+      const temDoseAtrasada = suplLista.some(s =>
+        (s.horarios ?? []).some(h => h <= hAtual && !(logMap.get(s.id)?.has(h)))
+      );
+
+      setPendenciaBadge(temFeedbackNaoLido || temCheckinPendente || temRastreioPendente || temDoseAtrasada);
     });
 
     return () => { active = false; };

@@ -354,6 +354,15 @@ export default function Inicio() {
 
   const suplComHorario = suplData.filter(s => s.horarios?.length > 0);
 
+  const temDoseAtrasada = (() => {
+    if (!suplComHorario.length) return false;
+    const n = new Date();
+    const hAtual = `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}:00`;
+    return suplComHorario.some(s =>
+      (s.horarios ?? []).some(h => h <= hAtual && !(suplHorariosHojeMap.get(s.id)?.has(h)))
+    );
+  })();
+
   // DMG — valores derivados para o card na tela Início
   const dmgProtocolo       = dmgModulo?.config?.protocolo ?? '1h';
   const dmgTimers          = dmgModulo ? lerTimersHoje() : [];
@@ -712,18 +721,29 @@ export default function Inicio() {
         <div style={{
           margin: '0 16px 14px', padding: 16,
           background: 'var(--paper)',
-          border: '0.5px solid var(--hair)',
+          border: `0.5px solid ${temDoseAtrasada ? 'var(--orange, #d97706)' : 'var(--hair)'}`,
           borderRadius: 16,
         }}>
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             marginBottom: 12,
           }}>
-            <div style={{
-              fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
-              color: 'var(--muted)', fontWeight: 500,
-            }}>
-              Suplementação de hoje
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{
+                fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
+                color: 'var(--muted)', fontWeight: 500,
+              }}>
+                Suplementação de hoje
+              </div>
+              {temDoseAtrasada && (
+                <span style={{
+                  fontSize: 9, padding: '1px 6px', borderRadius: 99, fontWeight: 600,
+                  background: 'var(--orange-bg, #fff7ed)', color: 'var(--orange, #d97706)',
+                  letterSpacing: '.04em', textTransform: 'uppercase',
+                }}>
+                  Dose pendente
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted)' }}>
               {suplComHorario.filter(s => {
