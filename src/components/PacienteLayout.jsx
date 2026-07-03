@@ -98,7 +98,8 @@ export default function PacienteLayout() {
         .from('intestino_rastreio_solicitacoes')
         .select('id', { count: 'exact', head: true })
         .eq('paciente_id', pacienteId)
-        .is('respondido_em', null),
+        .is('respondido_em', null)
+        .is('cancelado_em', null),
     ]).then(([feedbackRes, checkinRes, rastreioRes]) => {
       if (!active) return;
       const fb = feedbackRes.data;

@@ -585,6 +585,7 @@ export default function Intestino() {
         .select('*')
         .eq('paciente_id', pacienteId)
         .is('respondido_em', null)
+        .is('cancelado_em', null)
         .order('solicitado_em', { ascending: false })
         .limit(1)
         .maybeSingle(),

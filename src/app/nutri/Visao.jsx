@@ -128,7 +128,7 @@ export default function Visao() {
         supabase.from('exames_pedidos').select('id, titulo, categoria, paciente_id')
           .eq('nutri_id', user.id).eq('status', 'recebido').is('avaliacao_id', null),
         supabase.from('intestino_rastreio_solicitacoes').select('id, paciente_id, solicitado_em')
-          .eq('nutri_id', user.id).is('respondido_em', null),
+          .eq('nutri_id', user.id).is('respondido_em', null).is('cancelado_em', null),
         supabase.from('documentos').select('id, titulo, tipo, paciente_id')
           .eq('nutri_id', user.id).eq('status', 'enviado'),
         supabase.from('checkin_envios')

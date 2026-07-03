@@ -121,6 +121,22 @@ export default function IntestinoNutri({ pacienteId, nutriId }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  async function encerrarPendenciasRastreio() {
+    const agora = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('intestino_rastreio_solicitacoes')
+      .update({ cancelado_em: agora, cancelado_por: nutriId })
+      .eq('paciente_id', pacienteId)
+      .is('respondido_em', null)
+      .is('cancelado_em', null)
+      .select('id');
+    if (error) { setAviso('Erro ao encerrar pendência. Tente novamente.'); return; }
+    if (!data?.length) { setAviso('Nenhuma pendência ativa encontrada.'); return; }
+    await carregar();
+    setAviso('Pendência encerrada.');
+    setTimeout(() => setAviso(null), 3000);
+  }
+
   async function solicitarRastreio() {
     setSolicitandoRastreio(true);
     const { error } = await supabase.from('intestino_rastreio_solicitacoes').insert({
@@ -148,7 +164,7 @@ export default function IntestinoNutri({ pacienteId, nutriId }) {
   const sinais    = detectarSinaisAtencao(logs);
   const tendencias = calcularTendenciasClinicas(diarios, sintomasDiarios);
 
-  const pendente = historico.find(h => !h.respondido_em);
+  const pendente = historico.find(h => !h.respondido_em && !h.cancelado_em);
 
   return (
     <div style={{ paddingBottom: 32 }}>
@@ -424,8 +440,22 @@ export default function IntestinoNutri({ pacienteId, nutriId }) {
                 </div>
                 {h.respondido_em ? (
                   <span style={{ fontSize: 11, color: '#7ea85a', fontWeight: 600 }}>Respondido ✓</span>
+                ) : h.cancelado_em ? (
+                  <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600 }}>Encerrado</span>
                 ) : (
-                  <span style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 600 }}>Pendente</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, color: 'var(--amber)', fontWeight: 600 }}>Pendente</span>
+                    <button
+                      onClick={() => encerrarPendenciasRastreio()}
+                      style={{
+                        fontSize: 11, padding: '2px 8px', borderRadius: 6,
+                        border: '0.5px solid var(--border)', background: 'none',
+                        cursor: 'pointer', color: 'var(--text3)',
+                        fontFamily: 'var(--font-sans)',
+                      }}>
+                      Encerrar pendência
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
