@@ -80,10 +80,10 @@ export default function PacienteLayout() {
     Promise.all([
       supabase
         .from('checkin_envios')
-        .select('feedback_lido_em, feedback_atualizado_em')
+        .select('feedback_lido_em, feedback_em, feedback_atualizado_em')
         .eq('paciente_id', pacienteId)
         .not('feedback', 'is', null)
-        .order('feedback_atualizado_em', { ascending: false })
+        .order('feedback_em', { ascending: false })
         .limit(1)
         .maybeSingle(),
       temAcessoCheckin
@@ -92,6 +92,7 @@ export default function PacienteLayout() {
             .select('id', { count: 'exact', head: true })
             .eq('paciente_id', pacienteId)
             .is('respondido_em', null)
+            .is('cancelado_em', null)
         : Promise.resolve({ count: 0 }),
       supabase
         .from('intestino_rastreio_solicitacoes')
@@ -101,10 +102,10 @@ export default function PacienteLayout() {
     ]).then(([feedbackRes, checkinRes, rastreioRes]) => {
       if (!active) return;
       const fb = feedbackRes.data;
+      const feedbackTimestamp = fb?.feedback_atualizado_em ?? fb?.feedback_em;
       const temFeedbackNaoLido = !!fb && (
         !fb.feedback_lido_em ||
-        (fb.feedback_atualizado_em &&
-         new Date(fb.feedback_atualizado_em) > new Date(fb.feedback_lido_em))
+        (feedbackTimestamp && new Date(feedbackTimestamp) > new Date(fb.feedback_lido_em))
       );
       const temCheckinPendente  = (checkinRes.count  ?? 0) > 0;
       const temRastreioPendente = (rastreioRes.count ?? 0) > 0;

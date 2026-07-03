@@ -37,7 +37,7 @@ export default function Checkins() {
     const [pacRes, envRes, tplRes, agRes] = await Promise.all([
       supabase.from('pacientes').select('id, nome').eq('nutri_id', user.id).order('nome'),
       supabase.from('checkin_envios')
-        .select('id, paciente_id, perguntas, enviado_em, respondido_em, respostas, lembrete_enviado_em, feedback, feedback_em, feedback_atualizado_em, feedback_lido_em, paciente:pacientes(id, nome)')
+        .select('id, paciente_id, perguntas, enviado_em, respondido_em, cancelado_em, respostas, lembrete_enviado_em, feedback, feedback_em, feedback_atualizado_em, feedback_lido_em, paciente:pacientes(id, nome)')
         .eq('nutri_id', user.id)
         .order('enviado_em', { ascending: false }),
       supabase.from('checkin_templates').select('*').eq('nutri_id', user.id)
@@ -97,7 +97,9 @@ export default function Checkins() {
   const statusPorPaciente = useMemo(() => {
     const m = {};
     for (const p of pacientes) {
-      m[p.id] = envios.find(e => e.paciente_id === p.id);
+      m[p.id] =
+        envios.find(e => e.paciente_id === p.id && !e.cancelado_em && !e.respondido_em) ||
+        envios.find(e => e.paciente_id === p.id && !e.cancelado_em);
     }
     return m;
   }, [pacientes, envios]);
@@ -134,6 +136,22 @@ export default function Checkins() {
       .eq('id', envio.id);
     if (error) return mostraToast('Erro: ' + error.message);
     mostraToast(`Lembrete enviado para ${envio.paciente?.nome?.split(' ')[0] ?? 'paciente'}`);
+    carregar();
+  }
+
+  async function cancelarCheckin(pacienteId) {
+    const agora = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('checkin_envios')
+      .update({ cancelado_em: agora, cancelado_por: user.id })
+      .eq('nutri_id', user.id)
+      .eq('paciente_id', pacienteId)
+      .is('respondido_em', null)
+      .is('cancelado_em', null)
+      .select('id');
+    if (error) return mostraToast('Erro: ' + error.message);
+    if (!data?.length) return mostraToast('Nenhum check-in pendente encontrado.');
+    mostraToast('Check-in(s) cancelado(s).');
     carregar();
   }
 
@@ -275,6 +293,12 @@ export default function Checkins() {
                               <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', color: 'var(--orange)', borderColor: 'var(--orange)' }}
                                 onClick={() => enviarLembrete(ult)}>
                                 <i className="ti ti-bell" aria-hidden="true"></i> Lembrete
+                              </button>
+                            )}
+                            {ult && !respondeu && (
+                              <button className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', color: 'var(--text3)', borderColor: 'var(--border)' }}
+                                onClick={() => cancelarCheckin(p.id)}>
+                                <i className="ti ti-x" aria-hidden="true"></i> Encerrar pendência
                               </button>
                             )}
                             <SelecionarEnviarTemplate

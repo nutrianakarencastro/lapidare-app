@@ -60,7 +60,7 @@ export default function Inicio() {
           .eq('paciente_id', pacienteId).eq('status', 'agendada')
           .gte('data_hora', agora).order('data_hora', { ascending: true }).limit(1).maybeSingle(),
         supabase.from('checkin_envios').select('id, enviado_em, lembrete_enviado_em, nome, tipo')
-          .eq('paciente_id', pacienteId).is('respondido_em', null)
+          .eq('paciente_id', pacienteId).is('respondido_em', null).is('cancelado_em', null)
           .order('enviado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('habitos').select('id, nome, emoji, tipo, meta, unidade, ordem')
           .eq('paciente_id', pacienteId).eq('ativo', true).order('ordem'),
@@ -115,6 +115,7 @@ export default function Inicio() {
           .eq('data', hoje),
         supabase.from('intestino_rastreio_solicitacoes')
           .select('id, solicitado_em')
+          .eq('paciente_id', pacienteId)
           .is('respondido_em', null)
           .order('solicitado_em', { ascending: false })
           .limit(1)

@@ -99,7 +99,7 @@ export default function Visao() {
           .lte('vencimento', dataDomingo)
           .order('vencimento'),
         supabase.from('checkin_envios').select('id, enviado_em, paciente:pacientes(id, nome)')
-          .eq('nutri_id', user.id).is('respondido_em', null)
+          .eq('nutri_id', user.id).is('respondido_em', null).is('cancelado_em', null)
           .order('enviado_em'),
         supabase.from('parcelas').select('valor, data_pgto')
           .eq('nutri_id', user.id).eq('status', 'pago')

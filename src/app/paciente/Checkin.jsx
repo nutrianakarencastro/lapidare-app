@@ -27,7 +27,10 @@ export default function Checkin() {
       (envio.feedback_atualizado_em &&
        new Date(envio.feedback_atualizado_em) > new Date(envio.feedback_lido_em));
     if (precisaMarcar) {
-      supabase.rpc('marcar_feedback_lido', { p_envio_id: envio.id }); // fire-and-forget
+      (async () => {
+        const { error } = await supabase.rpc('marcar_feedback_lido', { p_envio_id: envio.id });
+        if (error) console.warn('[notif] marcar_feedback_lido falhou:', error.message);
+      })();
     }
   }, [envio?.id, envio?.feedback_atualizado_em]);
 
