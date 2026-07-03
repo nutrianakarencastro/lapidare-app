@@ -101,8 +101,13 @@
   text-align: left;
 }
 .nutri-panel .nav-item:hover { background: var(--dark-shade); color: var(--dark-text); }
+.nutri-panel .nav-item.active,
+.nutri-panel .nav-item.active span,
+.nutri-panel .nav-item.active i {
+  color: #ffffff !important;
+}
 .nutri-panel .nav-item.active {
-  background: var(--dark-shade); color: #ffffff;
+  background: var(--dark-shade);
   border-left-color: var(--amber);
 }
 .nutri-panel .nav-icon {
