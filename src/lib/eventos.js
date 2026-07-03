@@ -100,6 +100,42 @@ export async function marcarEventoLido(eventoId) {
 }
 
 /**
+ * Cria um evento de feedback enviado pela nutri.
+ * Deve ser chamado apenas no primeiro envio — edições não geram novo evento.
+ * Best-effort: falhas são registradas como warning, nunca propagadas.
+ *
+ * @param {object} params
+ * @param {string} params.pacienteId  — pacientes.id (UUID interno)
+ * @param {string} params.envioId     — checkin_envios.id
+ * @param {string} params.nutriId     — auth.uid() da nutri
+ * @returns {Promise<string|null>} ID do evento criado, ou null se falhar
+ */
+export async function criarEventoFeedback({ pacienteId, envioId, nutriId }) {
+  if (!pacienteId || !envioId || !nutriId) {
+    console.warn('[Útera] Motor de Eventos — criarEventoFeedback: parâmetros incompletos', {
+      pacienteId, envioId, nutriId,
+    })
+    return null
+  }
+
+  return criarEvento({
+    pacienteId,
+    categoria:        'comunicacao',
+    tipo:             'feedback_enviado',
+    origem:           'checkins',
+    titulo:           'Novo feedback da sua nutricionista',
+    autorTipo:        'nutri',
+    autorId:          nutriId,
+    destinatarioTipo: 'paciente',
+    destinatarioId:   pacienteId,
+    referenciaTipo:   'checkin_envio',
+    referenciaId:     envioId,
+    metadata:         { checkin_envio_id: envioId },
+    dedupKey:         `feedback_enviado:checkin_envio:${envioId}:${pacienteId}`,
+  })
+}
+
+/**
  * Encerra um evento (remove da lista de pendências).
  * Idempotente: ignorado se o evento já estiver encerrado ou cancelado.
  * Best-effort: falhas são registradas como warning, nunca propagadas.

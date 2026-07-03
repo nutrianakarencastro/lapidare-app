@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
+import { criarEventoFeedback } from '../../lib/eventos.js';
 import { dataBR, iniciais } from '../../lib/utils.js';
 import {
   TEMPLATE_PADRAO,
@@ -434,7 +435,7 @@ export default function Checkins() {
 
       {/* Modais */}
       {verRespostas && (
-        <RespostasModal envio={verRespostas} onClose={() => setVerRespostas(null)} onFeedbackSalvo={carregar} />
+        <RespostasModal envio={verRespostas} onClose={() => setVerRespostas(null)} onFeedbackSalvo={carregar} nutriId={user.id} />
       )}
       {editorTemplate !== null && (
         <TemplateEditor
@@ -1046,7 +1047,7 @@ function AgendamentoEditor({ agendamento, templates, pacientes, nutriId, onClose
 /* ============================================================
    MODAIS
    ============================================================ */
-function RespostasModal({ envio, onClose, onFeedbackSalvo }) {
+function RespostasModal({ envio, onClose, onFeedbackSalvo, nutriId }) {
   const respostas = envio.respostas ?? {};
   const pacienteNome = envio.paciente?.nome ?? '—';
 
@@ -1074,6 +1075,7 @@ function RespostasModal({ envio, onClose, onFeedbackSalvo }) {
     if (!feedbackText.trim()) return;
     setErroFeedback(null);
     setSalvando(true);
+    const deveCriarEvento = !feedbackEm;
     const agora = new Date().toISOString();
     const updates = { feedback: feedbackText.trim(), feedback_atualizado_em: agora };
     if (!feedbackEm) updates.feedback_em = agora;
@@ -1083,6 +1085,13 @@ function RespostasModal({ envio, onClose, onFeedbackSalvo }) {
       .eq('id', envio.id);
     setSalvando(false);
     if (error) { setErroFeedback(error.message); return; }
+    if (deveCriarEvento) {
+      await criarEventoFeedback({
+        pacienteId: envio.paciente.id,
+        envioId:    envio.id,
+        nutriId,
+      });
+    }
     if (!feedbackEm) setFeedbackEm(agora);
     setFeedbackAtualizadoEm(agora);
     setEditando(false);
