@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
+import { marcarEventoLido } from '../../lib/eventos.js';
 import { podeAcessar } from '../../lib/modelos.js';
 import BloqueioModelo from '../../components/BloqueioModelo.jsx';
 import { respostasIniciais } from '../../lib/checkinDefault.js';
@@ -30,6 +31,20 @@ export default function Checkin() {
       (async () => {
         const { error } = await supabase.rpc('marcar_feedback_lido', { p_envio_id: envio.id });
         if (error) console.warn('[notif] marcar_feedback_lido falhou:', error.message);
+
+        const { data: evento, error: erroEvento } = await supabase
+          .from('eventos')
+          .select('id')
+          .eq('referencia_tipo', 'checkin_envio')
+          .eq('referencia_id', envio.id)
+          .eq('destinatario_tipo', 'paciente')
+          .eq('status', 'ativo')
+          .maybeSingle();
+        if (erroEvento) {
+          console.warn('[Útera] Motor de Eventos — falha ao buscar evento de feedback', erroEvento.message);
+        } else if (evento) {
+          await marcarEventoLido(evento.id);
+        }
       })();
     }
   }, [envio?.id, envio?.feedback_atualizado_em]);
