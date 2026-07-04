@@ -1,7 +1,7 @@
 # Estado Atual do Projeto — Útera 3.0
 
 > Documento de continuidade para migração de contexto entre conversas.
-> Atualizado após a conclusão da Fase B1 do Motor de Eventos.
+> Atualizado após a conclusão da Fase B2 do Motor de Eventos e a consolidação da arquitetura da Fase C.
 > Data de referência: julho de 2026.
 
 ---
@@ -95,8 +95,8 @@ auth.users (Supabase Auth)
 | Hábitos | Estável |
 | Ciclo hormonal | Estável |
 | Módulos especiais | Estável |
-| Motor de Eventos | Fase A e B1 concluídas (ver §6) |
-| Central de Eventos | Não iniciada (Fase C) |
+| Motor de Eventos | Fases A, B1 e B2 concluídas (ver §6) |
+| Central de Eventos | Arquitetura consolidada em `CENTRAL_EVENTOS_ARQUITETURA_V1.md`; implementação da Fase C pendente |
 | Badges | Ainda consomem queries diretas às tabelas clínicas |
 
 ---
@@ -146,6 +146,17 @@ auth.users (Supabase Auth)
 - Evento gerado apenas no primeiro envio de feedback (`!feedbackEm` capturado antes do update)
 - Edições posteriores não geram novo evento
 - Dedup por `feedback_enviado:checkin_envio:{envioId}:{pacienteId}`
+
+**Fase B2 — Fechamento do ciclo do feedback (concluída)**
+- Ao carregar `Checkin.jsx` (visão da paciente), o evento `feedback_enviado` correspondente é marcado como lido via `marcarEventoLido(eventoId)`
+- Ciclo `criado → ativo → lido` fechado ponta a ponta com evento real
+- Primeira transição de estado observada em produção
+
+**Fase C — Arquitetura consolidada, implementação pendente**
+- Especificação em `CENTRAL_EVENTOS_ARQUITETURA_V1.md`
+- Introduz a **Camada de Interpretação** entre o Motor de Eventos e as superfícies visíveis, composta por três componentes: Catálogo de Tipos, Motor de Atenção e Event Resolver
+- Primeira superfície a implementar: Central da paciente integrada ao Início
+- Princípio permanente: arquitetura conceitual é estável; implementação é incremental
 
 ### Schema da tabela `eventos`
 
@@ -199,9 +210,12 @@ criado_em:        2026-07-03
 
 ---
 
-## 8. Convenções do Motor de Eventos
+## 8. Convenções e Arquitetura Oficial
 
-A especificação completa está em `MOTOR_EVENTOS_CONVENCOES_V1.md` na raiz do projeto.
+Dois documentos vivem na raiz do projeto e são leitura obrigatória antes de qualquer implementação:
+
+- `MOTOR_EVENTOS_CONVENCOES_V1.md` — convenções do Motor de Eventos (tabela `eventos`, RPCs, Event Builder, tipos, categorias, dedup, encerramento de acionáveis).
+- `CENTRAL_EVENTOS_ARQUITETURA_V1.md` — arquitetura da Fase C: Camada de Interpretação (Catálogo, Motor de Atenção, Event Resolver), responsabilidades das superfícies, MVP da Central da paciente.
 
 **Resumo das convenções críticas:**
 
@@ -260,8 +274,9 @@ supabase/
     2026-07-03_rastreio_cancelamento.sql
     ... (migrations anteriores)
 
-MOTOR_EVENTOS_CONVENCOES_V1.md  ← especificação oficial do Motor de Eventos
-ESTADO_ATUAL_DO_PROJETO_3.0.md  ← este documento
+MOTOR_EVENTOS_CONVENCOES_V1.md    ← especificação oficial do Motor de Eventos
+CENTRAL_EVENTOS_ARQUITETURA_V1.md ← arquitetura oficial da Fase C (Central de Eventos)
+ESTADO_ATUAL_DO_PROJETO_3.0.md    ← este documento
 ```
 
 ---
@@ -270,10 +285,11 @@ ESTADO_ATUAL_DO_PROJETO_3.0.md  ← este documento
 
 - Branch: `main`
 - Sincronizado com `origin/main`
-- Último commit: `feat: integrate feedback with eventos engine`
-- Commits da sprint atual (Motor de Eventos):
-  - `feat: add eventos engine fase a` — infraestrutura
-  - `feat: integrate feedback with eventos engine` — Fase B1 + convenções
+- Árvore limpa
+- Commits da sprint Motor de Eventos:
+  - `feat: add eventos engine fase a` — infraestrutura (Fase A)
+  - `feat: integrate feedback with eventos engine` — Fase B1
+  - Fase B2 concluída (ciclo `criado → ativo → lido` fechado)
 
 ---
 
@@ -282,33 +298,37 @@ ESTADO_ATUAL_DO_PROJETO_3.0.md  ← este documento
 ```
 Fase A  ✅  Infraestrutura (tabela, RLS, RPCs, Event Builder)
 Fase B1 ✅  Integração com Feedback (primeiro evento real)
+Fase B2 ✅  Marcação como lido ao abrir feedback (ciclo criado → ativo → lido fechado)
 ────────────────────────────────────────────────────
-Fase B2 ◀── PRÓXIMA SPRINT
-        Marcar evento como lido quando a paciente abre
-        o feedback na tela de check-in (Checkin.jsx)
+Fase C  ◀── PRÓXIMA SPRINT
+        Central de Eventos — implementação da arquitetura consolidada
+        em CENTRAL_EVENTOS_ARQUITETURA_V1.md.
+        Escopo MVP: Catálogo de Tipos, Motor de Atenção, Event Resolver
+        e Central da paciente integrada ao Início.
 ────────────────────────────────────────────────────
-Fase C      Central de Eventos (interface de listagem)
-Fase D      Badges consumindo exclusivamente Motor de Eventos
-Fase E      Push Notifications
-Fase F      E-mail
-Fase G      WhatsApp
+Fase D      Badges consumindo Catálogo + Motor de Atenção
+Fase E      Push Notifications (nova superfície da Camada de Interpretação)
+Fase F      E-mail (execução server-side com Motor de Atenção portável)
+Fase G      WhatsApp (canal restritivo por política declarada no Catálogo)
 ```
 
-### Detalhamento da Fase B2
+### Detalhamento da Fase C — próxima sprint
 
-**Objetivo:** fechar o ciclo do evento `feedback_enviado` — quando a paciente visualiza o feedback, o evento deve ser marcado como lido.
+**Objetivo:** entregar a primeira superfície da Camada de Interpretação — a Central da paciente — implementando os três componentes de interpretação em versão mínima.
 
-**Onde implementar:** `src/app/paciente/Checkin.jsx`
+**Documento oficial:** `CENTRAL_EVENTOS_ARQUITETURA_V1.md` — leitura obrigatória antes de codificar.
 
-**O que já existe no arquivo:**
-```javascript
-// Checkin.jsx já tem este useEffect que marca o feedback como lido no banco:
-const { error } = await supabase.rpc('marcar_feedback_lido', { p_envio_id: envio.id });
-```
+**Componentes a criar (todos no frontend, puros e portáveis):**
 
-**O que falta:** chamar `marcarEventoLido(eventoId)` do Event Builder nesse mesmo ponto. O desafio é ter o `eventoId` disponível — será necessário buscar o evento correspondente ao `checkin_envio` ou passar o ID de outra forma.
+1. **Catálogo de Tipos** (`src/lib/catalogoTipos.js`) — fonte única de verdade declarativa de metadados de tipo. Registro inicial: `feedback_enviado` completo (natureza, categoria, origem, título, verbo se acionável, peso, schema de metadata).
+2. **Motor de Atenção** (`src/lib/attentionEngine.js`) — função pura que recebe eventos + contexto e retorna eventos classificados em buckets e ordenados. Comportamento fail-safe para tipos desconhecidos.
+3. **Event Resolver** (`src/lib/eventResolver.js`) — mapa `referencia_tipo` → destino de navegação (apenas rotas ou identificadores canônicos, nunca componentes React). Entrada inicial: `checkin_envio`.
 
-**Abordagem sugerida (a validar):** ao carregar o check-in respondido com feedback, buscar o evento ativo de tipo `feedback_enviado` com `referencia_id = envio.id` e chamar `marcarEventoLido()` se encontrado.
+**Ajuste no Event Builder existente:** `criarEventoFeedback` passa a consumir o Catálogo em vez de hardcodar `categoria`, `tipo`, `origem` e `titulo`. Refactor pequeno, sem mudança comportamental.
+
+**Superfície:** Central da paciente integrada ao Início. Estratégia de atualização V1: `refetch on mount`.
+
+**Fora do MVP da Fase C:** badges (Fase D), realtime, filtros complexos, silenciamento, agrupamento, marcação manual como lido, coordenação inter-canal.
 
 ---
 
@@ -318,5 +338,6 @@ Ao iniciar nova conversa, priorizar:
 
 1. Ler este documento para entender o estado atual
 2. Ler `MOTOR_EVENTOS_CONVENCOES_V1.md` para entender as convenções do Motor de Eventos
-3. Confirmar com a nutricionista o escopo exato antes de implementar
-4. A próxima sprint é a **Fase B2** — marcar evento como lido ao abrir o feedback na tela da paciente
+3. Ler `CENTRAL_EVENTOS_ARQUITETURA_V1.md` para entender a arquitetura da Fase C
+4. Confirmar com a nutricionista o escopo exato antes de implementar
+5. A próxima sprint é a **implementação da Fase C** — Camada de Interpretação (Catálogo, Motor de Atenção, Event Resolver) e Central da paciente integrada ao Início

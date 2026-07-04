@@ -124,16 +124,20 @@ criado_em
 O Event Builder é a única camada autorizada a criar eventos. Suas responsabilidades:
 
 - Expor funções específicas por domínio (`criarEventoFeedback`, `criarEventoCheckin`, etc.);
-- Montar todos os campos do evento internamente — o módulo chamador fornece apenas os dados do negócio;
-- Construir a `dedup_key` correta para cada tipo de evento;
+- **Consumir o Catálogo de Tipos** para obter os metadados canônicos de cada tipo (`tipo`, `categoria`, `origem`, `titulo`, `natureza`, `verbo`, `peso`, `metadata_schema`);
+- Receber do módulo chamador apenas os dados de negócio da instância;
+- Construir a `dedup_key` correta para cada tipo de evento, seguindo o formato canônico definido em §13;
 - Delegar para `criarEvento()` com tratamento de erro best-effort;
 - Validar parâmetros obrigatórios antes de chamar a RPC (guard com `console.warn`).
 
 O Event Builder **não deve**:
 
+- Hardcodar `tipo`, `categoria`, `origem` ou `titulo` — esses metadados vivem no Catálogo;
 - Conter lógica clínica ou de negócio além do mapeamento para o formato de evento;
 - Fazer queries diretamente ao banco (apenas chama RPCs);
 - Lançar exceções para o módulo chamador.
+
+**Relação com o Catálogo:** o Catálogo de Tipos é a fonte única de verdade dos metadados canônicos de cada tipo de evento. O Event Builder é a única camada autorizada a instanciar eventos com esses metadados. Descrição (Catálogo) e instanciação (Event Builder) são camadas distintas — a segunda depende da primeira.
 
 ---
 
@@ -269,6 +273,8 @@ exame_publicado:exame:3fa2c110-...:c081ef62-...
 
 O título é o texto principal que a paciente ou a nutri vê no evento. Deve ser claro, direto e orientado ao destinatário.
 
+**Fonte de verdade:** os títulos canônicos vivem no **Catálogo de Tipos**. Esta seção documenta as convenções que orientam a definição de cada título; a tabela abaixo é reflexo do Catálogo, não fonte independente.
+
 **Princípios:**
 - Escrito na perspectiva do destinatário (segunda pessoa ou terceira);
 - Curto — máximo de 60 caracteres;
@@ -276,7 +282,7 @@ O título é o texto principal que a paciente ou a nutri vê no evento. Deve ser
 - Sem variáveis dinâmicas no título (datas, nomes) — usar `descricao` ou `metadata` para isso;
 - Consistente: o mesmo `tipo` sempre tem o mesmo título.
 
-**Títulos definidos:**
+**Títulos vigentes (reflexo do Catálogo):**
 
 | Tipo | Título |
 |---|---|
@@ -390,23 +396,62 @@ if (deveCriarEvento) {
 
 ```javascript
 // src/lib/eventos.js
+import { CATALOGO } from './eventoTiposCatalog'
+
 export async function criarEventoFeedback({ pacienteId, envioId, nutriId }) {
   if (!pacienteId || !envioId || !nutriId) {
     console.warn('[Útera] Motor de Eventos — criarEventoFeedback: parâmetros incompletos', ...)
     return null
   }
+  const tipoDef = CATALOGO.feedback_enviado
   return criarEvento({
     pacienteId,
-    categoria: 'comunicacao', tipo: 'feedback_enviado', origem: 'checkins',
-    titulo: 'Novo feedback da sua nutricionista',
+    categoria: tipoDef.categoria,
+    tipo:      tipoDef.tipo,
+    origem:    tipoDef.origem,
+    titulo:    tipoDef.titulo,
     autorTipo: 'nutri', autorId: nutriId,
     destinatarioTipo: 'paciente', destinatarioId: pacienteId,
     referenciaTipo: 'checkin_envio', referenciaId: envioId,
     metadata: { checkin_envio_id: envioId },
-    dedupKey: `feedback_enviado:checkin_envio:${envioId}:${pacienteId}`,
+    dedupKey: `${tipoDef.tipo}:checkin_envio:${envioId}:${pacienteId}`,
   })
 }
 ```
+
+O Event Builder consome o Catálogo para obter os metadados canônicos do tipo. A função específica é responsável apenas pelo mapeamento dos dados de negócio (`pacienteId`, `envioId`, `nutriId`) e pela construção da `dedup_key`. Metadados declarativos (`tipo`, `categoria`, `origem`, `titulo`, `natureza`, `verbo`, `peso`) nunca são hardcoded.
+
+---
+
+## 18. Padrão de encerramento de eventos acionáveis
+
+Eventos declarados no Catálogo como **acionáveis** têm ciclo de vida `ativo → encerrado`. O fechamento não ocorre por leitura — ocorre quando a ação clínica correspondente é concluída no módulo de origem.
+
+### Responsabilidade
+
+O módulo clínico responsável pela ação clínica é quem chama `encerrarEvento(id)` do Event Builder, imediatamente após confirmar o sucesso da operação principal — mesmo padrão best-effort da criação (§17).
+
+### Ponto de integração
+
+O ponto exato é análogo ao de criação: **após confirmação de sucesso da operação clínica**. Falhas na chamada de encerramento nunca devem impedir a operação principal.
+
+### Como o módulo obtém o `id` do evento
+
+Duas estratégias válidas:
+
+1. **Passagem direta** — quando o usuário chega ao módulo pela Central, a Central passa o `eventoId` como contexto de navegação; o módulo o usa diretamente ao concluir a ação.
+2. **Busca por referência** — quando o usuário chega ao módulo por outros caminhos, o módulo consulta a tabela `eventos` filtrando por `referencia_tipo`, `referencia_id` e `status IN ('ativo', 'lido')`, e chama `encerrarEvento` no resultado.
+
+Ambas devem coexistir. A Central é caminho primário mas não único.
+
+### Escopo
+
+- Eventos **informativos** não requerem encerramento — fecham pela leitura (`ativo → lido`, estado final).
+- Eventos **acionáveis** requerem chamada explícita a `encerrarEvento` no módulo clínico. Sem ela, o evento permanece no bucket `requer_acao` para consumidores da Camada de Interpretação, mesmo após a ação clínica ter sido concluída.
+
+### Registro
+
+Cada tipo acionável do Catálogo deve documentar qual módulo clínico é responsável pelo seu encerramento e em que ponto do fluxo essa chamada ocorre. Isso segue a mesma convenção que §17 estabelece para criação.
 
 ---
 
@@ -416,15 +461,18 @@ export async function criarEventoFeedback({ pacienteId, envioId, nutriId }) {
 
 - **Fase A** — Infraestrutura base: tabela `eventos`, índices, RLS, RPCs (`criar_evento`, `marcar_evento_lido`, `encerrar_evento`) e Event Builder (`src/lib/eventos.js`).
 - **Fase B1** — Integração com Feedback: geração de evento `feedback_enviado` ao salvar o primeiro feedback de um check-in.
+- **Fase B2** — Marcação como lido ao abrir o feedback na tela da paciente. Ciclo `criado → ativo → lido` fechado ponta a ponta.
+
+### Em especificação
+
+- **Fase C** — Central de Eventos: arquitetura consolidada em `CENTRAL_EVENTOS_ARQUITETURA_V1.md`. Introduz a Camada de Interpretação (Catálogo de Tipos, Motor de Atenção, Event Resolver) entre o Motor de Eventos e as superfícies visíveis. Primeira superfície: Central da paciente integrada ao Início.
 
 ### Próximas fases
 
-- **B2** — Marcar evento como lido quando a paciente abre o feedback na tela de check-in.
-- **C** — Central de Eventos: interface que lista e organiza os eventos do sistema para a nutri e, futuramente, para a paciente.
-- **D** — Badges consumindo exclusivamente o Motor de Eventos, substituindo as queries diretas às tabelas clínicas.
-- **E** — Push Notifications: novo consumidor do Motor de Eventos, sem alterações nos módulos clínicos.
-- **F** — E-mail: canal adicional, consumindo os mesmos eventos.
-- **G** — WhatsApp: canal adicional, consumindo os mesmos eventos.
+- **D** — Badges consumindo Catálogo + Motor de Atenção, substituindo queries diretas às tabelas clínicas.
+- **E** — Push Notifications: nova superfície consumindo a Camada de Interpretação.
+- **F** — E-mail: digest e individual, execução server-side reutilizando o Motor de Atenção portável.
+- **G** — WhatsApp: canal restritivo com política declarada no Catálogo por tipo.
 
 > Este roadmap é documentação arquitetural, não um plano de sprint. As fases serão detalhadas e priorizadas conforme o Útera evolui.
 
