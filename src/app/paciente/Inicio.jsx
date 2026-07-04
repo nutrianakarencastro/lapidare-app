@@ -11,6 +11,14 @@ import {
   classificar, LABEL_CURTO, REFEICOES_FIXAS,
   lerTimersHoje, timerVencido, timerEsperadoEm,
 } from '../../lib/glicemiaUtils.js';
+import { classificarEventos, BUCKETS } from '../../lib/attentionEngine.js';
+import { resolverNavegacao } from '../../lib/eventResolver.js';
+
+// Mapa origem → ícone tabler. Vive na superfície (não no Catálogo)
+// por decisão arquitetural — Catálogo não carrega dependências visuais.
+const ICONE_POR_ORIGEM = {
+  checkins: 'ti-clipboard-text',
+};
 
 export default function Inicio() {
   const tema = useTheme();
@@ -43,6 +51,7 @@ export default function Inicio() {
   const [dmgModulo,    setDmgModulo]    = useState(null);
   const [glicemiaHoje, setGlicemiaHoje] = useState([]);
   const [rastreioIntestinalPendente, setRastreioIntestinalPendente] = useState(null);
+  const [centralEventos, setCentralEventos] = useState([]);
 
   useEffect(() => {
     let active = true;
@@ -51,7 +60,7 @@ export default function Inicio() {
       const agora  = new Date().toISOString();
       const hoje   = dataHojeISO();
       const amanha = formatarDataISO(new Date(Date.now() + 86_400_000));
-      const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes, agAmRes, modulosRes, glicemiaHojeRes, rastreioIntestinoRes] = await Promise.all([
+      const [planoRes, comprasRes, consultaRes, checkinRes, habitosRes, logsHojeRes, jornadaRes, feedbackRes, cicloRes, suplRes, suplLogsRes, examesRes, orientacoesRes, agAmRes, modulosRes, glicemiaHojeRes, rastreioIntestinoRes, eventosRes] = await Promise.all([
         supabase.from('planos').select('dados, publicado_em, pdf_path')
           .eq('paciente_id', pacienteId).order('publicado_em', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('listas_compras').select('dados, publicado_em')
@@ -121,6 +130,13 @@ export default function Inicio() {
           .order('solicitado_em', { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase.from('eventos')
+          .select('id, tipo, origem, titulo, referencia_tipo, referencia_id, destinatario_tipo, destinatario_id, status, criado_em')
+          .eq('destinatario_tipo', 'paciente')
+          .eq('destinatario_id', pacienteId)
+          .in('status', ['ativo', 'lido'])
+          .order('criado_em', { ascending: false })
+          .limit(20),
       ]);
       if (!active) return;
       setPlano(planoRes.data?.dados ?? null);
@@ -143,6 +159,14 @@ export default function Inicio() {
       setDmgModulo(dmg);
       setGlicemiaHoje(glicemiaHojeRes.data ?? []);
       setRastreioIntestinalPendente(rastreioIntestinoRes.data ?? null);
+
+      // Central "Merece sua atenção" — passa eventos pelo Motor de Atenção.
+      // A superfície apenas apresenta; toda política vive na Camada de Interpretação.
+      setCentralEventos(classificarEventos(eventosRes.data ?? [], {
+        destinatarioTipo: 'paciente',
+        destinatarioId:   pacienteId,
+        superficie:       'central-inicio-paciente',
+      }));
 
       const habitosLista = habitosRes.data ?? [];
       const logsHoje = {};
@@ -326,6 +350,12 @@ export default function Inicio() {
   }
 
   const habitosCumpridos = habitos.filter(h => cumpriuHabito(h, habitosLogs[h.id])).length;
+
+  // Central "Merece sua atenção" — MVP mostra apenas o que ainda demanda foco.
+  // Eventos em bucket `visto` ficam fora desta superfície na V1 (decisão D2.A).
+  const centralEventosAtivos = centralEventos.filter(
+    e => e.bucket === BUCKETS.NOVIDADE || e.bucket === BUCKETS.REQUER_ACAO
+  );
 
   // ── Calendário Hoje ──────────────────────────────────────────────
   const calHoje       = dataHojeISO();
@@ -533,6 +563,69 @@ export default function Inicio() {
           }}>
             <i className="ti ti-droplet" style={{ fontSize: 13 }} aria-hidden="true" />
             Registrar glicemia
+          </div>
+        </div>
+      )}
+
+      {/* Central "Merece sua atenção" — primeira superfície da Camada de Interpretação.
+          Renderiza apenas o que o Motor de Atenção classifica como novidade ou requer_acao.
+          Convive temporariamente com o card feedbackPendente logo abaixo (D1.C). */}
+      {centralEventosAtivos.length > 0 && (
+        <div style={{ margin: '0 16px 14px' }}>
+          <div style={{
+            fontSize: 9, letterSpacing: '.22em', textTransform: 'uppercase',
+            color: 'var(--muted)', fontWeight: 500, marginBottom: 8,
+            paddingLeft: 4,
+          }}>
+            Merece sua atenção
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {centralEventosAtivos.map(evento => {
+              const destino     = resolverNavegacao(evento);
+              const clicavel    = destino.disponivel;
+              const acionavel   = evento.bucket === BUCKETS.REQUER_ACAO;
+              const iconeClasse = ICONE_POR_ORIGEM[evento.origem] ?? 'ti-info-circle';
+              return (
+                <div
+                  key={evento.id}
+                  onClick={clicavel ? () => navigate(destino.rota) : undefined}
+                  style={{
+                    padding: '12px 14px',
+                    background: 'var(--paper)',
+                    border: `0.5px solid ${acionavel ? 'var(--gold-deep)' : 'var(--hair)'}`,
+                    borderRadius: 12,
+                    cursor: clicavel ? 'pointer' : 'default',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                  }}
+                >
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                    background: 'var(--bg-soft)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <i className={`ti ${iconeClasse}`}
+                       style={{ fontSize: 16, color: 'var(--gold-deep)' }}
+                       aria-hidden="true" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13, color: 'var(--ink)', fontWeight: 500,
+                      lineHeight: 1.2, marginBottom: 2,
+                    }}>
+                      {evento.titulo}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      {dataBR(evento.criado_em)}
+                    </div>
+                  </div>
+                  {clicavel && (
+                    <i className="ti ti-chevron-right"
+                       style={{ fontSize: 16, color: 'var(--muted)', flexShrink: 0 }}
+                       aria-hidden="true" />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
