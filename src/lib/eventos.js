@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { getTipoDef } from './catalogoTipos'
 
 /**
  * Motor de Eventos do Útera — Event Builder
@@ -6,11 +7,11 @@ import { supabase } from './supabase'
  * Camada única de criação e gestão de eventos.
  * Todos os módulos devem usar estas funções — nunca chamar as RPCs diretamente.
  *
- * Valores esperados:
+ * Metadados canônicos (tipo, categoria, origem, título, natureza, verbo, peso)
+ * vivem no Catálogo de Tipos (src/lib/catalogoTipos.js) — nunca hardcoded aqui.
  *
- *   categoria   → 'comunicacao' | 'saude' | 'conteudo' | 'jornada' | 'sistema'
- *   origem      → 'feedbacks' | 'checkins' | 'orientacoes' | 'biblioteca' |
- *                 'exames' | 'jornada' | 'consulta' | 'suplementacao'
+ * Valores esperados nos campos livres do evento:
+ *
  *   autor_tipo  → 'nutri' | 'paciente' | 'sistema' | 'ia'
  *   dest._tipo  → 'nutri' | 'paciente'
  *
@@ -118,12 +119,20 @@ export async function criarEventoFeedback({ pacienteId, envioId, nutriId }) {
     return null
   }
 
+  const tipoDef = getTipoDef('feedback_enviado')
+  if (!tipoDef) {
+    console.warn('[Útera] Motor de Eventos — criarEventoFeedback: tipo ausente no Catálogo', {
+      tipo: 'feedback_enviado',
+    })
+    return null
+  }
+
   return criarEvento({
     pacienteId,
-    categoria:        'comunicacao',
-    tipo:             'feedback_enviado',
-    origem:           'checkins',
-    titulo:           'Novo feedback da sua nutricionista',
+    categoria:        tipoDef.categoria,
+    tipo:             tipoDef.tipo,
+    origem:           tipoDef.origem,
+    titulo:           tipoDef.titulo,
     autorTipo:        'nutri',
     autorId:          nutriId,
     destinatarioTipo: 'paciente',
@@ -131,7 +140,7 @@ export async function criarEventoFeedback({ pacienteId, envioId, nutriId }) {
     referenciaTipo:   'checkin_envio',
     referenciaId:     envioId,
     metadata:         { checkin_envio_id: envioId },
-    dedupKey:         `feedback_enviado:checkin_envio:${envioId}:${pacienteId}`,
+    dedupKey:         `${tipoDef.tipo}:checkin_envio:${envioId}:${pacienteId}`,
   })
 }
 
