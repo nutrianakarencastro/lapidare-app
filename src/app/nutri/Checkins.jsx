@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase.js';
 import { useSession } from '../../lib/session.jsx';
 import { criarEventoFeedback } from '../../lib/eventos.js';
+import { reagirAEventoCriado } from '../../lib/emissao.js';
 import { dataBR, iniciais } from '../../lib/utils.js';
 import {
   TEMPLATE_PADRAO,
@@ -1086,11 +1087,14 @@ function RespostasModal({ envio, onClose, onFeedbackSalvo, nutriId }) {
     setSalvando(false);
     if (error) { setErroFeedback(error.message); return; }
     if (deveCriarEvento) {
-      await criarEventoFeedback({
+      const eventoId = await criarEventoFeedback({
         pacienteId: envio.paciente.id,
         envioId:    envio.id,
         nutriId,
       });
+      if (eventoId) {
+        await reagirAEventoCriado(eventoId, 'feedback_enviado');
+      }
     }
     if (!feedbackEm) setFeedbackEm(agora);
     setFeedbackAtualizadoEm(agora);

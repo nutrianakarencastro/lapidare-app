@@ -29,7 +29,20 @@
  *     natureza:       string  — 'informativo' | 'acionavel'
  *     verbo?:         string  — verbo de ação (apenas para acionáveis; ex: 'Responder')
  *     metadataSchema: object  — forma esperada do metadata (documental)
+ *     superficies?:   object  — projeções por superfície emissiva (V2)
  *   }
+ *
+ * Superfícies emissivas (V2 — ARQUITETURA_DA_ATENCAO_V2.md §6):
+ *
+ *   superficies: {
+ *     push?:     { titulo, corpo }
+ *     email?:    { assunto, preview, corpo }         — não implementado no MVP V2.1
+ *     whatsapp?: { template, variaveis }             — não implementado no MVP V2.1
+ *   }
+ *
+ * Ausência de uma chave em `superficies` significa que o tipo NÃO é elegível
+ * para aquela superfície. Central e Badge são superfícies observacionais
+ * implícitas para todo tipo — não precisam ser declaradas aqui.
  */
 
 export const CATALOGO = {
@@ -41,6 +54,12 @@ export const CATALOGO = {
     natureza:  'informativo',
     metadataSchema: {
       checkin_envio_id: 'uuid',
+    },
+    superficies: {
+      push: {
+        titulo: 'Novo feedback',
+        corpo:  'Sua nutricionista respondeu seu check-in.',
+      },
     },
   },
 }
@@ -54,4 +73,20 @@ export const CATALOGO = {
  */
 export function getTipoDef(tipo) {
   return CATALOGO[tipo]
+}
+
+/**
+ * Retorna a projeção de conteúdo declarada para uma dada superfície
+ * emissiva, ou null se o tipo não for elegível para ela.
+ *
+ * Nunca lança. Sem side effects.
+ *
+ * @param {string} tipo
+ * @param {string} superficie — 'push' | 'email' | 'whatsapp'
+ * @returns {object|null}
+ */
+export function getProjecaoSuperficie(tipo, superficie) {
+  const def = getTipoDef(tipo)
+  if (!def || !def.superficies) return null
+  return def.superficies[superficie] ?? null
 }

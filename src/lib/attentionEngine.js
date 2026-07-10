@@ -90,3 +90,42 @@ function decidirClassificacao(evento) {
   }
   return { bucket: BUCKETS.NOVIDADE, destaque: 'medio' }
 }
+
+/**
+ * Resolve, para um tipo de evento, quais superfícies emissivas devem
+ * receber emissão e com qual payload.
+ *
+ * Puramente declarativo: consulta o Catálogo e devolve o conjunto de
+ * intenções de emissão. Não faz IO, não lança, não grava nada.
+ *
+ * V2.1 — Preferências de Atenção ainda não são consultadas. Toda
+ * projeção declarada no Catálogo gera intenção de emissão. O opt-in
+ * explícito por paciente entra na próxima sprint, junto com a UI
+ * de preferências e o Adapter Push real.
+ *
+ * Especificado em:
+ *   - ARQUITETURA_DA_ATENCAO_V2.md §§ 5, 11
+ *
+ * @param {object} tipoDef — do Catálogo (obtido via getTipoDef)
+ * @param {object} [contexto] — reservado para futura consulta de Preferências
+ * @returns {Array<{superficie: string, payload: object}>}
+ */
+export function resolverEmissoes(tipoDef, contexto = {}) {
+  // Reservado — próximas sprints consumirão preferências, quiet hours,
+  // frequência, coordenação cross-superfície (Arquitetura V2 §10).
+  void contexto
+
+  if (!tipoDef || !tipoDef.superficies) return []
+
+  const emissoes = []
+  const projPush = tipoDef.superficies.push
+  if (projPush) {
+    emissoes.push({
+      superficie: 'push',
+      payload:    { titulo: projPush.titulo, corpo: projPush.corpo },
+    })
+  }
+  // email e whatsapp: entram quando o Catálogo declarar suas projeções.
+
+  return emissoes
+}
