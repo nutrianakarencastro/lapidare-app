@@ -130,6 +130,14 @@ O Event Builder é a única camada autorizada a criar eventos. Suas responsabili
 - Delegar para `criarEvento()` com tratamento de erro best-effort;
 - Validar parâmetros obrigatórios antes de chamar a RPC (guard com `console.warn`).
 
+**Campos declarativos do Catálogo introduzidos pela Arquitetura da Atenção V2** (não persistidos em `eventos` — vivem no Catálogo, consultados por camadas superiores):
+
+- `superficies` — declara projeções de conteúdo por superfície emissiva (push, email, whatsapp). Consumido pela Camada de Emissão via Motor de Atenção. Sem consumidor no Event Builder.
+- `categoria_atencao` — declara a categoria de opt-in do tipo (`comunicacao_clinica | lembretes | rastreios | reconhecimento | …`). Ortogonal à `categoria` clínica desta seção (§9). Consumido por Preferências de Atenção. Sem consumidor no Event Builder.
+- `prioridade` — declaração orientativa (`alta | media | baixa`) para uso futuro do Motor de Atenção (ordem, agrupamento, quiet hours, digest). Sem consumidor atual.
+
+Esses campos são vocabulário do Catálogo. **A tabela `eventos` não os armazena.** A camada que precisa deles consulta `getTipoDef(evento.tipo)` para lê-los quando necessário.
+
 O Event Builder **não deve**:
 
 - Hardcodar `tipo`, `categoria`, `origem` ou `titulo` — esses metadados vivem no Catálogo;
@@ -166,7 +174,7 @@ O Event Builder **não deve**:
 
 ## 9. Padrão para `categoria`
 
-A categoria agrupa eventos por área temática. Usada para filtros macro e agrupamentos na Central de Eventos.
+A categoria agrupa eventos por área temática **do domínio clínico**. Usada para filtros macro e agrupamentos na Central de Eventos.
 
 | Valor | Quando usar |
 |---|---|
@@ -175,6 +183,8 @@ A categoria agrupa eventos por área temática. Usada para filtros macro e agrup
 | `conteudo` | Material disponibilizado à paciente (orientações, podcasts, ebooks, narrativas) |
 | `jornada` | Progressão da jornada clínica da paciente |
 | `sistema` | Alertas e avisos gerados automaticamente pelo sistema |
+
+**Nota — distinção com `categoria_atencao` (V2).** Esta `categoria` é do dado clínico e permanece a mesma desde a V1. A Arquitetura da Atenção V2 introduziu um segundo eixo declarativo no Catálogo, `categoria_atencao`, que classifica o tipo pelo **eixo de opt-in visto pela paciente** (`comunicacao_clinica`, `lembretes`, `rastreios`, `reconhecimento`, …). Os dois eixos coexistem sem substituição — um mesmo tipo pode ter `categoria='saude'` e `categoria_atencao='lembretes'` (por exemplo, `suplemento_horario`). Detalhes em `ARQUITETURA_DA_ATENCAO_V2.md` §7 e Apêndice A.
 
 ---
 

@@ -181,8 +181,19 @@ Preferências de Atenção é o modelo de dados novo introduzido na V2. Ele carr
 
 **O que Preferências de Atenção descreve:**
 
-- Por paciente, para cada superfície emissiva declarável, um estado de habilitação (`ligada` | `desligada`).
-- Reservado para fases futuras: granularidade por categoria, por horário (quiet hours), por frequência.
+- Por paciente, por **categoria de atenção** (vocabulário definido no Catálogo — ver Apêndice A), para cada superfície emissiva declarável, um estado de habilitação (`ligada` | `desligada`).
+- Reservado para fases futuras: granularidade por horário (quiet hours), por frequência, por remetente.
+
+**Granularidade do modelo — por categoria de atenção, não por tipo.**
+
+A tabela `preferencias_atencao` tem chave lógica composta `(paciente_id, categoria_atencao)`. A paciente consente ou dispensa uma **categoria** inteira — não um tipo específico. Assim, quando novos tipos são adicionados ao Catálogo dentro de uma categoria já autorizada, eles herdam automaticamente o consentimento existente; quando surge uma categoria nova, ela nasce desligada e exige opt-in próprio.
+
+Essa granularidade evita dois problemas simétricos:
+
+- **Excesso de configuração:** obrigar a paciente a autorizar tipo-a-tipo (feedback, material, orientação, documento…) transformaria a tela de Preferências em painel de auditoria. A paciente não pensa em `feedback_enviado` — pensa em "comunicação da minha nutri".
+- **Consentimento genérico enganoso:** reduzir tudo a um switch único ("push do Útera on/off") faz com que uma autorização dada hoje para receber feedback seja silenciosamente reinterpretada, no futuro, como autorização para receber lembretes, suplementos e rastreios — interrupções qualitativamente diferentes. A paciente teria consentido com algo que não conhecia.
+
+Categoria de atenção é o nível certo de granularidade: agrupa o suficiente para ser inteligível para a paciente e específico o bastante para preservar o contrato de opt-in ao longo da evolução do sistema.
 
 **O que Preferências de Atenção não é:**
 
@@ -199,9 +210,9 @@ Essa formulação é o que preserva a coerência do eixo: mesmo a preferência d
 
 **Default no MVP — decisão arquitetural permanente.**
 
-Toda superfície emissiva nasce **desligada** para toda paciente. O opt-in é explícito e obrigatório: nenhuma superfície emissiva pode ser ativada sem consentimento consciente da paciente. Silêncio é o comportamento default do sistema — coerente com o princípio "silêncio é resultado válido" da Fase C, agora elevado ao nível de superfície emissiva.
+Toda superfície emissiva nasce **desligada** para toda paciente, em **todas as categorias de atenção**. O opt-in é explícito, obrigatório e por-categoria: nenhuma superfície emissiva pode ser ativada sem consentimento consciente da paciente sobre a categoria específica. Silêncio é o comportamento default do sistema — coerente com o princípio "silêncio é resultado válido" da Fase C, agora elevado ao nível de superfície emissiva e de categoria.
 
-Esta é decisão de arquitetura, não de configuração de produto. Nenhuma implementação futura da V2 pode inverter esse default sem revisar este documento. Push, E-mail e WhatsApp permanecem intrinsecamente opt-in — nunca opt-out — enquanto a Arquitetura da Atenção do Útera existir.
+Esta é decisão de arquitetura, não de configuração de produto. Nenhuma implementação futura da V2 pode inverter esse default sem revisar este documento. Push, E-mail e WhatsApp permanecem intrinsecamente opt-in — nunca opt-out — enquanto a Arquitetura da Atenção do Útera existir. Categorias novas que passarem a existir no Catálogo entram automaticamente desligadas para toda paciente e exigem consentimento próprio.
 
 ---
 
@@ -287,6 +298,9 @@ Toda vez que uma decisão pareça exigir código imperativo dentro do Motor de A
 - Quiet hours não é um `if` no motor — é um campo declarativo em Preferências.
 - Fallback push → email não é um `if` no motor — é uma declaração no Catálogo por tipo, ou uma política declarativa separada.
 - Frequência máxima não é um `if` no motor — é uma declaração no Catálogo ou uma tabela de contagem consultada declarativamente.
+- Agrupamento entre tipos afins não é um `if` no motor — é um campo `chave_agrupamento` declarativo no Catálogo.
+- Ordem de exibição, agrupamento de push e comportamento sob quiet hours não são cálculos — leem uma propriedade declarativa `prioridade` do Catálogo (valores canônicos: `alta | media | baixa`).
+- Escopo de opt-in não é um `if` no motor — é a propriedade declarativa `categoria_atencao` do Catálogo cruzada com a linha correspondente de Preferências de Atenção.
 
 Quando não houver como declarar, e a decisão for genuinamente imperativa, isso deve virar **uma discussão arquitetural** — não uma linha de código escondida no motor.
 
@@ -558,3 +572,231 @@ O ganho arquitetural não vem de código. Vem de disciplina:
 - Silêncio continua sendo resultado válido.
 
 Quando esse documento for a referência sob a qual o primeiro Push do Útera for construído, a implementação será consequência natural — como foi a Central na V1.
+
+---
+
+# Apêndice A — Vocabulário planejado de eventos e sequência de sprints
+
+Este apêndice consolida o roadmap de eventos que a Arquitetura da Atenção V2 vai acomodar, distinguindo os que nascem de ações humanas dos que dependem de condições temporais. É documento vivo — cada sprint concreta a fatia correspondente e o apêndice permanece como referência do que ainda está por vir.
+
+**Nada aqui está implementado além de `feedback_enviado`.** Este apêndice descreve intenção arquitetural, não estado corrente.
+
+**Disciplina permanente do Catálogo:** o `catalogoTipos.js` reflete apenas capacidades implementadas — tipos com consumidor real no código. Este apêndice registra também capacidades planejadas: tipos que virão, categorias reservadas, políticas declarativas antecipadas. O momento em que uma linha deste apêndice entra no Catálogo é o momento em que a sprint correspondente começa.
+
+---
+
+## A.1 Duas naturezas de origem dos eventos
+
+Todo evento em `eventos` nasce em um de dois modos:
+
+**Acontecimentos imediatos.**
+Uma ação humana no ato — nutri clica em salvar, atribui um material, publica uma orientação; ou uma paciente completa uma resposta. O evento é criado dentro do fluxo dessa ação, síncrono à operação clínica, pelos módulos clínicos existentes.
+
+**Acontecimentos temporais.**
+Uma condição de horário, prazo ou recorrência — chegou 8h, a consulta é amanhã, o check-in vence em duas horas, o rastreio do dia ainda não foi preenchido. Ninguém clicou; o tempo passou. Estes exigem um novo produtor: o **Scheduler**.
+
+Esta distinção é do produtor, não do consumidor. Uma vez que o evento existe em `eventos`, a Camada de Interpretação e as superfícies não distinguem sua origem — atenção é atenção.
+
+---
+
+## A.2 Scheduler como novo produtor temporal
+
+O Scheduler é a próxima capacidade arquitetural a ser introduzida. Ele:
+
+- **Vive fora da Arquitetura da Atenção** — é módulo produtor, comparável aos módulos clínicos.
+- **Só cria eventos.** Consulta `criar_evento` como qualquer outro módulo. Nunca conhece `evento_entregas`, nunca conhece Adapters, nunca conhece superfícies.
+- **É best-effort e idempotente.** Roda em cadência regular; se executar duas vezes na mesma janela, `dedup_key` derivada de `(tipo, referência, janela_temporal)` garante uma única linha em `eventos`.
+- **Fluxo canônico:**
+
+```
+Configuração temporal
+    ↓
+Scheduler (Edge Function em cron)
+    ↓
+Motor de Eventos (RPC criar_evento)
+    ↓
+[eventos]
+    ↓
+Motor de Atenção
+    ↓
+Superfícies (Central, Badge, Push, ...)
+```
+
+- **Introdução em sprint própria** (V2.5) — mesmo peso arquitetural que a V2.1 teve para introduzir a Camada de Emissão. Cada capacidade arquitetural nova é validada com um único consumidor concreto antes de ser expandida.
+
+---
+
+## A.3 Vocabulário canônico do Catálogo — categorias de atenção e prioridade
+
+O Catálogo, além dos campos herdados da V1 (`categoria` clínica, `origem`, `titulo`, `natureza`, `metadataSchema`) e da V2.1 (`superficies`), passa a declarar por tipo duas novas propriedades:
+
+- **`categoria_atencao`** — a que categoria de atenção o tipo pertence, para efeito de Preferências de Atenção (§7 do corpo principal). É o eixo de opt-in visto pela paciente.
+- **`prioridade`** — orientação declarativa sobre relevância relativa. Valores canônicos: `alta | media | baixa`.
+
+Essas propriedades vivem no Catálogo — não em `eventos`, não em `evento_entregas`. São vocabulário, não estado.
+
+**Distinção categoria clínica × categoria de atenção.**
+
+O Útera opera com dois eixos de classificação, ortogonais e coexistentes:
+
+- **`categoria` (herdada da V1)** — classifica o evento no domínio clínico (`comunicacao | saude | conteudo | jornada | sistema`). Usada por telas clínicas, relatórios, filtros de dado clínico. Não determina opt-in.
+- **`categoria_atencao` (V2)** — classifica o evento no domínio da atenção (`comunicacao_clinica | lembretes | rastreios | reconhecimento | …`). Determina opt-in. É o eixo consumido por Preferências de Atenção.
+
+Um mesmo tipo pode ter categoria clínica `'saude'` e categoria de atenção `'lembretes'`. Um `suplemento_horario` exemplifica: dado clínico é saúde; o tipo de atenção que ele solicita da paciente é lembrete.
+
+**Vocabulário planejado de categorias de atenção.**
+
+| Categoria | Descrição | Estado |
+|---|---|---|
+| `comunicacao_clinica` | Mensagens diretas da nutri para a paciente — feedback e, no futuro, materiais, orientações e documentos. | Ativa a partir da V2.2 |
+| `lembretes` | Avisos sobre consultas, check-ins e outros compromissos. | Reservada — primeiro tipo entra na V2.4 (`checkin_disponivel`). |
+| `rastreios` | Convites diários para registrar ciclo, intestino e hábitos. | Reservada — primeiros tipos entram na V2.8. |
+| `reconhecimento` | Marcos, evoluções e conquistas ao longo da jornada. **Única categoria que recompensa em vez de cobrar**; regras de emissão qualitativamente distintas (mais raras, mais ricas) quando entrar. | Categoria futura — registrada nesta documentação, **ainda não presente no Catálogo**. Entra quando surgir o primeiro tipo real dela. |
+
+O mapa `CATEGORIAS_ATENCAO` do `catalogoTipos.js` contém, em cada sprint, apenas as categorias que já têm pelo menos um tipo declarado. Categorias futuras vivem neste apêndice, não no código.
+
+**Prioridade — reservada para consumo futuro.**
+
+`prioridade` é declarada agora para evitar migração de Catálogo depois. Nenhum código do MVP a consome. Usos previstos (não implementados):
+
+- Ordem de exibição intra-bucket na Central.
+- Agrupamento de push (só combinar itens de prioridade próxima).
+- Comportamento sob quiet hours (baixa é silenciada à noite; alta atravessa).
+- Digest de e-mail (baixa e média agrupam por dia; alta chega no ato).
+
+Sugestões de prioridade por tipo aparecem nos blocos da §A.4. São sugestões — a decisão final vive no Catálogo quando o tipo entra em uma sprint.
+
+---
+
+## A.4 Matriz de tipos de evento
+
+Cada bloco descreve um tipo do vocabulário planejado. Todos usam o mesmo Catálogo declarativo. Central e Badge são superfícies observacionais implícitas para todo tipo; Push é a superfície emissiva declarada explicitamente por `superficies.push` no Catálogo.
+
+### Comunicação nutri → paciente
+
+**`feedback_enviado`** — *implementado*
+- **Origem:** nutri salva feedback pela primeira vez em `checkin_envios`.
+- **Categoria clínica:** `comunicacao`.
+- **Categoria de Atenção:** `comunicacao_clinica`.
+- **Natureza:** informativo.
+- **Prioridade:** `media`.
+- **Disparo:** imediato.
+- **Encerra:** paciente abre `Checkin.jsx` (`marcar_evento_lido`).
+- **Push texto:** *"Novo feedback / Sua nutricionista respondeu seu check-in."*
+- **Risco de excesso:** baixo.
+- **Sprint:** **V2.2** — primeiro Push real conectado à infraestrutura da V2.1.
+
+### Publicações e atribuições
+
+**`material_atribuido`**, **`orientacao_publicada`**, **`documento_atualizado`**
+- **Origem:** ações da nutri de atribuir, publicar ou atualizar conteúdo.
+- **Categoria clínica:** `conteudo` (materiais / orientações) ou `jornada` (documentos).
+- **Categoria de Atenção:** `comunicacao_clinica` (herdam o mesmo opt-in de `feedback_enviado`).
+- **Natureza:** informativo.
+- **Prioridade sugerida:** `baixa` (conteúdo assíncrono, não bloqueia).
+- **Disparo:** imediato.
+- **Encerra:** paciente abre o conteúdo.
+- **Risco de excesso:** médio para atribuições em lote → mitigação via dedup por sessão (`lote_id` na metadata) e agrupamento declarativo no Catálogo.
+- **Sprint:** **V2.3**.
+
+### Check-ins
+
+**`checkin_disponivel`** — imediato
+- **Origem:** `INSERT INTO checkin_envios` (via `checkinScheduler.js` existente ou envio manual).
+- **Categoria clínica:** `saude`.
+- **Categoria de Atenção:** `lembretes` — primeira introdução da categoria; entra desligada por default e exige opt-in próprio.
+- **Natureza:** acionável.
+- **Prioridade sugerida:** `media`.
+- **Encerra:** paciente responde o check-in.
+- **Sprint:** **V2.4**.
+
+**`checkin_lembrete_pendente`** — temporal
+- **Origem:** Scheduler detecta envio sem resposta antes do vencimento.
+- **Categoria clínica:** `saude`.
+- **Categoria de Atenção:** `lembretes`.
+- **Natureza:** acionável.
+- **Prioridade sugerida:** `alta` (prazo próximo).
+- **Disparo:** uma vez por envio, N horas antes de vencer.
+- **Encerra:** paciente responde ou envio vence.
+- **Sprint:** **V2.6** (depende do Scheduler).
+
+### Consultas
+
+**`consulta_lembrete`** — temporal
+- **Origem:** Scheduler varre consultas próximas.
+- **Categoria clínica:** `jornada`.
+- **Categoria de Atenção:** `lembretes`.
+- **Natureza:** informativo.
+- **Prioridade sugerida:** `alta` (compromisso marcado).
+- **Disparo:** D-1 dia; opcionalmente D-1 hora.
+- **Encerra:** horário da consulta passa.
+- **Push texto (D-1):** *"Consulta amanhã / Amanhã às HH:MM com sua nutri."*
+- **Sprint:** **V2.6** — primeiro validador do Scheduler junto com `checkin_lembrete_pendente`.
+
+### Suplementos
+
+**`suplemento_horario`** — temporal recorrente
+- **Origem:** Scheduler cruza `plano_suplementacao` com horários configurados.
+- **Categoria clínica:** `saude`.
+- **Categoria de Atenção:** `lembretes` (herda o mesmo opt-in de check-ins e consultas).
+- **Natureza:** acionável.
+- **Prioridade sugerida:** `media`.
+- **Disparo:** todo dia, nos horários configurados pela paciente.
+- **Encerra:** paciente registra tomada ou janela expira.
+- **Agregação obrigatória:** **um evento por horário, nunca por suplemento.** Metadata carrega a lista de suplementos daquele horário.
+- **Risco de excesso:** crítico sem agregação. Ver §A.6.
+- **Sprint:** **V2.7**.
+
+### Rastreios diários
+
+**`rastreio_lembrete_ciclo`**, **`rastreio_lembrete_intestino`**, **`rastreio_lembrete_habitos`** — temporais recorrentes
+- **Origem:** Scheduler diário, no horário configurado pela paciente.
+- **Categoria clínica:** `saude`.
+- **Categoria de Atenção:** `rastreios` — primeira introdução da categoria; entra desligada por default e exige opt-in próprio.
+- **Natureza:** acionável.
+- **Prioridade sugerida:** `baixa` (não bloqueia nada).
+- **Encerra:** paciente registra o dia, ou o dia vira.
+- **Agrupamento:** três tipos distintos no Catálogo, com `chave_agrupamento` compartilhada — o Motor de Atenção pode consolidar em uma única emissão push quando coincidirem na mesma janela, preservando vocabulário rico e evitando excesso.
+- **Sprint:** **V2.8**.
+
+---
+
+## A.5 Sequência aprovada de sprints da V2
+
+| Sprint | Escopo | Introduz capacidade nova? |
+|---|---|---|
+| **V2.0** | Documento arquitetural | Fundação conceitual |
+| **V2.1** | Infraestrutura de emissão (`evento_entregas` + RPC + Catálogo estendido) | Camada de Emissão |
+| **V2.2** | Primeiro Push real com `feedback_enviado` | Preferências de Atenção por categoria (`comunicacao_clinica`) + Adapter Push + Service Worker + Prompt educativo |
+| **V2.3** | `material_atribuido`, `orientacao_publicada`, `documento_atualizado` (todos em `comunicacao_clinica`) | Atualizações imediatas herdando opt-in existente |
+| **V2.4** | `checkin_disponivel` | Primeira introdução da categoria `lembretes` — opt-in próprio |
+| **V2.5** | **Scheduler** como produtor temporal | Novo módulo produtor |
+| **V2.6** | `consulta_lembrete` + `checkin_lembrete_pendente` | Primeiros consumidores temporais |
+| **V2.7** | `suplemento_horario` com agregação por horário | Política de agregação declarativa |
+| **V2.8** | Rastreios diários (ciclo, intestino, hábitos) com agrupamento no Motor de Atenção | Primeira introdução da categoria `rastreios` + consolidação cross-tipo |
+
+Cada sprint é validada com o mínimo de consumidores capaz de provar a arquitetura da capacidade que introduz — o mesmo princípio que fez a V2.1 usar só `feedback_enviado`.
+
+**Nota sobre a categoria `reconhecimento`:** não tem sprint prevista neste roadmap. Entrará quando o Útera decidir explicitamente introduzir marcos e conquistas como parte da experiência. É a única categoria do vocabulário arquitetural cujo momento de entrada é dirigido por produto, não por infraestrutura.
+
+---
+
+## A.6 Riscos transversais reconhecidos
+
+- **Suplementos sem agregação são inaceitáveis.** 5 suplementos × 3 horários = 15 pushes/dia — inviável. A V2.7 é obrigada a implementar agregação por horário desde o primeiro dia.
+- **Rastreios diários coincidentes.** Três pushes/dia é ruído; o Motor de Atenção deve consolidar via `chave_agrupamento` declarativa no Catálogo (opção adotada).
+- **Fuso horário.** MVP assume BRT (America/Sao_Paulo). Múltiplos fusos ficam para depois.
+- **Cadência do cron.** `every 5 minutes` cobre a maioria dos casos; suplementos com precisão de minuto exigem `every 1 minute` com custo maior. Decisão da V2.7.
+- **Idempotência do Scheduler.** Cron rodando duas vezes na mesma janela não pode gerar dois eventos. `dedup_key` derivada da janela temporal é a garantia.
+- **Encerramento de eventos temporais.** Um `suplemento_horario` das 8h não faz sentido às 14h. Auto-encerramento após janela evita poluição da Central. Decisão da V2.7.
+- **Emissão da categoria `reconhecimento`.** Quando entrar, a categoria terá regras qualitativamente distintas das demais (mais rara, mais rica, possivelmente com imagem, potencialmente noturna). Não pode simplesmente reusar a política de `comunicacao_clinica` — a Sprint que a introduzir precisa desenhar sua própria política declarativa.
+
+---
+
+## A.7 Nota sobre este apêndice
+
+Este apêndice **não** modifica o corpo principal do documento (§§ 1–18). Ele estende o vocabulário de eventos e o roadmap concreto que a Arquitetura da Atenção V2 vai processar, mantendo o corpo principal como referência arquitetural estável.
+
+Novos tipos futuros — não previstos aqui — devem ser adicionados a este apêndice antes de qualquer implementação, na mesma disciplina que a V2.1 seguiu para adicionar `feedback_enviado` ao Catálogo.
+
+Novas categorias de atenção seguem a mesma disciplina: entram primeiro no §A.3 deste apêndice como reservadas, e só migram para o Catálogo (`CATEGORIAS_ATENCAO` em `catalogoTipos.js`) no momento em que a sprint correspondente traz o primeiro tipo consumidor.
