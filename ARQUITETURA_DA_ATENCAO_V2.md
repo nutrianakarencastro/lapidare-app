@@ -277,6 +277,30 @@ Push Adapter, E-mail Adapter, WhatsApp Adapter. Cada um é implementação de um
 
 Adapters de canal vivem no servidor (edge functions Supabase, workers dedicados ou serviços externos). O frontend não conhece adapters. Adapters não conhecem o frontend.
 
+**Fronteira entre disparo e execução — princípio arquitetural.**
+
+Quando a emissão exige um gatilho ativo do backend (trigger, cron, webhook, worker), o gatilho é tão agnóstico ao conteúdo quanto o Adapter é. Este é princípio permanente da V2 e complementa a regra anterior sobre o Adapter ser dumb.
+
+**O disparo carrega apenas identificadores** — no MVP V2.2, `entrega_id` e `evento_id`. Nunca:
+
+- título;
+- corpo;
+- rota, deep link ou URL de destino;
+- categoria de atenção;
+- idioma, plataforma ou detalhes de projeção;
+- qualquer dado clínico associado ao evento.
+
+Todo o conteúdo permanece congelado em `evento_entregas.payload` no momento em que o Motor de Atenção resolveu a emissão. É o Adapter — no ato de processar — que consulta e materializa.
+
+Essa fronteira preserva quatro propriedades:
+
+- **Substituibilidade do disparo.** Hoje `AFTER INSERT` trigger + `pg_net`; amanhã Worker agendado; depois talvez webhook ou outro mecanismo. A interface é a mesma: "há uma nova entrega pendente com este id — processe-a". Nenhum outro dado atravessa.
+- **Idempotência.** O mesmo `entrega_id` pode ser processado múltiplas vezes (retry, redisparo, race) sem duplicação, porque a fonte de verdade é sempre `evento_entregas`, não o payload do disparo.
+- **Auditoria sem vazamento.** Logs do disparo (`net.http_response`, logs de cron, logs de webhook) aparecem em telemetria sem carregar título ou corpo do que seria enviado à paciente.
+- **Separação de responsabilidades.** Banco produz estado (linhas em `evento_entregas`). Execução materializa (Adapter lê e envia). O disparo é apenas a ponte — e a ponte não conhece a carga.
+
+Todo mecanismo de emissão que a V2 vier a adotar precisa respeitar essa fronteira. Se um dia surgir a tentação de "colocar título no body do disparo para poupar uma consulta", isso é sinal de que a fronteira está sendo violada — e a economia é ilusória frente à quebra do princípio.
+
 ---
 
 ## 10. Disciplina anti-imperativa do Motor de Atenção
@@ -767,10 +791,10 @@ Cada bloco descreve um tipo do vocabulário planejado. Todos usam o mesmo Catál
 |---|---|---|
 | **V2.0** | Documento arquitetural | Fundação conceitual |
 | **V2.1** | Infraestrutura de emissão (`evento_entregas` + RPC + Catálogo estendido) | Camada de Emissão |
-| **V2.2** | Primeiro Push real com `feedback_enviado` | Preferências de Atenção por categoria (`comunicacao_clinica`) + Adapter Push + Service Worker + Prompt educativo |
+| **V2.2** | Primeiro Push real com `feedback_enviado` | Preferências de Atenção por categoria (`comunicacao_clinica`) + Adapter Push + Service Worker + Prompt educativo + emissão imediata via trigger (decisão de validação de produto — ver nota abaixo) |
 | **V2.3** | `material_atribuido`, `orientacao_publicada`, `documento_atualizado` (todos em `comunicacao_clinica`) | Atualizações imediatas herdando opt-in existente |
 | **V2.4** | `checkin_disponivel` | Primeira introdução da categoria `lembretes` — opt-in próprio |
-| **V2.5** | **Scheduler** como produtor temporal | Novo módulo produtor |
+| **V2.5** | **Scheduler** como produtor temporal + migração da emissão Push para Worker agendado | Novo módulo produtor + convergência do disparo do Adapter para o mesmo cron |
 | **V2.6** | `consulta_lembrete` + `checkin_lembrete_pendente` | Primeiros consumidores temporais |
 | **V2.7** | `suplemento_horario` com agregação por horário | Política de agregação declarativa |
 | **V2.8** | Rastreios diários (ciclo, intestino, hábitos) com agrupamento no Motor de Atenção | Primeira introdução da categoria `rastreios` + consolidação cross-tipo |
@@ -778,6 +802,8 @@ Cada bloco descreve um tipo do vocabulário planejado. Todos usam o mesmo Catál
 Cada sprint é validada com o mínimo de consumidores capaz de provar a arquitetura da capacidade que introduz — o mesmo princípio que fez a V2.1 usar só `feedback_enviado`.
 
 **Nota sobre a categoria `reconhecimento`:** não tem sprint prevista neste roadmap. Entrará quando o Útera decidir explicitamente introduzir marcos e conquistas como parte da experiência. É a única categoria do vocabulário arquitetural cujo momento de entrada é dirigido por produto, não por infraestrutura.
+
+**Nota sobre a emissão da V2.2 → V2.5.** A V2.2 adota emissão imediata via trigger `AFTER INSERT ON evento_entregas` (com `pg_net.http_post` chamando a Edge Function `push-adapter`) por **decisão de validação de produto**, não por decisão arquitetural. A hipótese sendo validada é que a paciente percebe valor imediato quando a nutri responde ao check-in; a sensação de imediatismo faz parte da experiência que estamos verificando na primeira prova real de Push do Útera. A análise técnica pura favorece um Worker agendado — que separa completamente banco de rede, escala melhor sob volume, permite retries naturais e observabilidade concentrada. Por isso a V2.5 executa **duas mudanças** simultâneas: introduz o Scheduler como produtor temporal (fazendo os primeiros consumidores da V2.6 possíveis) **e** migra a emissão do Push do modo trigger imediato para o modo Worker agendado, reaproveitando a mesma infraestrutura de cron. A migração é invisível para a paciente e transparente para o Motor de Atenção — só o mecanismo de disparo muda; a interface e o Adapter permanecem idênticos. O risco de cristalização de expectativa de latência (paciente acostumada a push em 2s recebendo em ~1min após a migração) é reconhecido e mitigado pelo timing: a V2.5 vem cedo no roadmap, antes que a expectativa endureça.
 
 ---
 
